@@ -1,9 +1,17 @@
+import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { AppShell } from "@/components/layout/AppShell";
 
-export default function MainLayout({
+export default async function MainLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
-  return <AppShell>{children}</AppShell>;
+  const session = await auth();
+  if (!session?.user?.restaurantName) redirect("/login");
+
+  return (
+    <AppShell restaurantName={session.user.restaurantName}>{children}</AppShell>
+  );
 }
