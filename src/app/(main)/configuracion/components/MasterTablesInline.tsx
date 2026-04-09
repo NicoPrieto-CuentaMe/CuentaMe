@@ -14,9 +14,10 @@ import {
 import { insumoCategorias, platoCategorias, proveedorCategorias } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
 import {
+  checkInsumoEnUso,
   deleteDish,
+  deleteInsumo,
   deleteSupplier,
-  deleteSupply,
   updateInsumo,
   updatePlato,
   updateProveedor,
@@ -367,6 +368,86 @@ type ProveedorRow = Pick<Proveedor, "id" | "nombre" | "telefono" | "categoria">;
 type InsumoRow = Pick<Insumo, "id" | "nombre" | "unidadBase" | "categoria">;
 type PlatoRow = Pick<Plato, "id" | "nombre" | "categoria" | "precioVenta" | "active">;
 
+type DeleteInsumoModalState =
+  | { phase: "checking"; id: string; nombre: string }
+  | { phase: "ready"; id: string; nombre: string; platoNames: string[] };
+
+function DeleteInsumoDialog({
+  state,
+  pendingDelete,
+  onCancel,
+  onConfirm,
+}: {
+  state: DeleteInsumoModalState;
+  pendingDelete: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const inUse = state.phase === "ready" && state.platoNames.length > 0;
+  return (
+    <div className="fixed inset-0 z-[220] flex items-start justify-center px-4 pt-[18vh]">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        onClick={onCancel}
+        aria-label="Cerrar"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-insumo-title"
+        className="relative w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-lg"
+      >
+        <h3 id="delete-insumo-title" className="text-base font-semibold text-[var(--foreground)]">
+          Eliminar insumo
+        </h3>
+        {state.phase === "checking" ? (
+          <p className="mt-3 text-sm text-[var(--foreground)]/80">Comprobando uso en recetas…</p>
+        ) : (
+          <div className="mt-3 space-y-2 text-sm text-[var(--foreground)]/90">
+            {inUse ? (
+              <>
+                <p>¿Seguro que quieres eliminar el insumo «{state.nombre}»?</p>
+                <p>
+                  Está siendo usado en las siguientes recetas:{" "}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {state.platoNames.join(", ")}
+                  </span>
+                  . Si lo eliminas, deberás editar esas recetas.
+                </p>
+              </>
+            ) : (
+              <p>
+                ¿Seguro que quieres eliminar el insumo «{state.nombre}»? Esta acción no se puede deshacer.
+              </p>
+            )}
+          </div>
+        )}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pendingDelete}
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          {state.phase === "ready" ? (
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={pendingDelete}
+              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {pendingDelete ? "Eliminando…" : inUse ? "Eliminar de todas formas" : "Eliminar"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HeaderWithFunnel({
   label,
   funnelActive,
@@ -692,6 +773,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
 export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [isDeleting, startDeleteTransition] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<{
@@ -710,6 +792,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<PopoverAnchor | null>(null);
+  const [deleteModal, setDeleteModal] = useState<DeleteInsumoModalState | null>(null);
 
   const unidadOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -822,10 +905,59 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
     });
   }, [draft, editingId, router]);
 
+  const beginDeleteInsumo = useCallback((id: string, nombre: string) => {
+    setError(null);
+    setDeleteModal({ phase: "checking", id, nombre });
+    void (async () => {
+      const res = await checkInsumoEnUso(id);
+      if (!res.ok) {
+        setDeleteModal(null);
+        setError(res.message);
+        return;
+      }
+      if (res.enUso) {
+        setDeleteModal({ phase: "ready", id, nombre, platoNames: res.platoNames });
+      } else {
+        setDeleteModal({ phase: "ready", id, nombre, platoNames: [] });
+      }
+    })();
+  }, []);
+
+  const cancelDeleteInsumo = useCallback(() => {
+    if (isDeleting) return;
+    setDeleteModal(null);
+  }, [isDeleting]);
+
+  const confirmDeleteInsumo = useCallback(() => {
+    if (!deleteModal || deleteModal.phase !== "ready") return;
+    const { id } = deleteModal;
+    startDeleteTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", id);
+      const r = await deleteInsumo(fd);
+      if (!r.ok) {
+        setError(r.message);
+        setDeleteModal(null);
+        return;
+      }
+      setDeleteModal(null);
+      setError(null);
+      router.refresh();
+    });
+  }, [deleteModal, router]);
+
   return (
     <div className="space-y-2">
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      ) : null}
+      {deleteModal ? (
+        <DeleteInsumoDialog
+          state={deleteModal}
+          pendingDelete={isDeleting}
+          onCancel={cancelDeleteInsumo}
+          onConfirm={confirmDeleteInsumo}
+        />
       ) : null}
       {openMenu && menuAnchor ? (
         <FilterPopover
@@ -983,15 +1115,14 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                           <button type="button" className={btnEdit} onClick={() => beginEdit(s)}>
                             Editar
                           </button>
-                          <form action={deleteSupply} className="inline">
-                            <input type="hidden" name="id" value={s.id} />
-                            <ConfirmSubmitButton
-                              confirmMessage="¿Eliminar este insumo? Si está en recetas, puede fallar."
-                              className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
-                            >
-                              Eliminar
-                            </ConfirmSubmitButton>
-                          </form>
+                          <button
+                            type="button"
+                            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                            disabled={!!deleteModal}
+                            onClick={() => beginDeleteInsumo(s.id, s.nombre)}
+                          >
+                            Eliminar
+                          </button>
                         </div>
                       )}
                     </td>

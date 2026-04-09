@@ -127,17 +127,72 @@ export async function addSupply(_: ActionState, formData: FormData): Promise<Act
   }
 }
 
-export async function deleteSupply(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const id = requiredString(formData, "id");
-  if (!id) throw new Error("Insumo inválido.");
+export type CheckInsumoEnUsoResult =
+  | { ok: true; enUso: false }
+  | { ok: true; enUso: true; platoNames: string[] }
+  | { ok: false; message: string };
 
-  const res = await prisma.insumo.deleteMany({
-    where: { id, userId },
-  });
-  if (res.count === 0) throw new Error("Insumo no encontrado.");
+/**
+ * Indica si el insumo aparece en alguna receta del usuario y devuelve los nombres de plato afectados (sin duplicados).
+ */
+export async function checkInsumoEnUso(insumoId: string): Promise<CheckInsumoEnUsoResult> {
+  try {
+    const userId = await requireUserId();
+    const id = insumoId.trim();
+    if (!id) return { ok: false, message: "Insumo inválido." };
 
-  revalidatePath("/configuracion");
+    const insumo = await prisma.insumo.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!insumo) return { ok: false, message: "Insumo no encontrado." };
+
+    const rows = await prisma.receta.findMany({
+      where: { userId, insumoId: id },
+      select: { plato: { select: { nombre: true } } },
+    });
+
+    if (rows.length === 0) return { ok: true, enUso: false };
+
+    const seen = new Set<string>();
+    const platoNames: string[] = [];
+    for (const r of rows) {
+      const n = r.plato.nombre;
+      if (!seen.has(n)) {
+        seen.add(n);
+        platoNames.push(n);
+      }
+    }
+    platoNames.sort((a, b) => a.localeCompare(b, "es"));
+
+    return { ok: true, enUso: true, platoNames };
+  } catch {
+    return { ok: false, message: "No se pudo comprobar el uso del insumo." };
+  }
+}
+
+/**
+ * Elimina el insumo y, en la misma transacción, los registros de Receta que lo referencian (cascade en acción).
+ */
+export async function deleteInsumo(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Insumo inválido." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.receta.deleteMany({ where: { insumoId: id, userId } });
+      const del = await tx.insumo.deleteMany({ where: { id, userId } });
+      if (del.count === 0) throw new Error("Insumo no encontrado.");
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Insumo eliminado." };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "No se pudo eliminar el insumo. Intenta de nuevo.";
+    return { ok: false, message };
+  }
 }
 
 export async function updateInsumo(formData: FormData): Promise<ActionState> {
