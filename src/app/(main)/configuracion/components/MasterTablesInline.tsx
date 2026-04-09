@@ -320,7 +320,7 @@ function FilterPopover({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const pos = useFilterPopoverPosition(open, triggerRef);
 
   useEffect(() => {
@@ -395,9 +395,9 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   const [catSearch, setCatSearch] = useState("");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const refNombre = useRef<HTMLButtonElement>(null);
-  const refTel = useRef<HTMLButtonElement>(null);
-  const refCat = useRef<HTMLButtonElement>(null);
+  const refNombre = useRef<HTMLButtonElement | null>(null);
+  const refTel = useRef<HTMLButtonElement | null>(null);
+  const refCat = useRef<HTMLButtonElement | null>(null);
 
   const catOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -666,9 +666,9 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
   const [insCatSearch, setInsCatSearch] = useState("");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const refNombre = useRef<HTMLButtonElement>(null);
-  const refUnidad = useRef<HTMLButtonElement>(null);
-  const refInsCat = useRef<HTMLButtonElement>(null);
+  const refNombre = useRef<HTMLButtonElement | null>(null);
+  const refUnidad = useRef<HTMLButtonElement | null>(null);
+  const refInsCat = useRef<HTMLButtonElement | null>(null);
 
   const unidadOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -996,10 +996,10 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
   const [activoSearch, setActivoSearch] = useState("");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const refNombre = useRef<HTMLButtonElement>(null);
-  const refPlatoCat = useRef<HTMLButtonElement>(null);
-  const refPrecio = useRef<HTMLButtonElement>(null);
-  const refActivo = useRef<HTMLButtonElement>(null);
+  const refNombre = useRef<HTMLButtonElement | null>(null);
+  const refPlatoCat = useRef<HTMLButtonElement | null>(null);
+  const refPrecio = useRef<HTMLButtonElement | null>(null);
+  const refActivo = useRef<HTMLButtonElement | null>(null);
 
   const platoCatOptions = useMemo(() => {
     const keys = new Set<string>();
