@@ -402,7 +402,7 @@ export async function updateReceta(payload: {
       }
     }
 
-    const uniqueIds = [...new Set(insumoIds)];
+    const uniqueIds = Array.from(new Set(insumoIds));
     const insumosOk = await prisma.insumo.findMany({
       where: { userId, id: { in: uniqueIds } },
       select: { id: true },
