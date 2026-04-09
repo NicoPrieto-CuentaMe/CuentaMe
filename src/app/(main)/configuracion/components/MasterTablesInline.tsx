@@ -50,6 +50,14 @@ function textIncludes(haystack: string, needle: string) {
 
 const EMPTY_KEY = "__empty__";
 
+/** Posición del popover tomada del botón del embudo en el momento del clic (sin refs en el DOM). */
+type PopoverAnchor = { left: number; bottom: number; width: number };
+
+function anchorFromEvent(e: React.MouseEvent<HTMLButtonElement>): PopoverAnchor {
+  const r = e.currentTarget.getBoundingClientRect();
+  return { left: r.left, bottom: r.bottom, width: r.width };
+}
+
 function FunnelIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -72,32 +80,25 @@ function FunnelIcon({ className }: { className?: string }) {
   );
 }
 
-function useFilterPopoverPosition(open: boolean, triggerRef: React.RefObject<HTMLButtonElement | null>) {
+function usePopoverPanelStyle(open: boolean, anchor: PopoverAnchor | null) {
   const [style, setStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
-    if (!open || !triggerRef.current) return;
+    if (!open || !anchor) return;
     const update = () => {
-      const el = triggerRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const w = Math.max(200, r.width);
+      const w = Math.max(200, anchor.width);
       setStyle({
         position: "fixed",
-        top: r.bottom + 6,
-        left: Math.min(r.left, Math.max(8, window.innerWidth - w - 8)),
+        top: anchor.bottom + 6,
+        left: Math.min(anchor.left, Math.max(8, window.innerWidth - w - 8)),
         minWidth: w,
         zIndex: 200,
       });
     };
     update();
-    window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
-    };
-  }, [open, triggerRef]);
+    return () => window.removeEventListener("resize", update);
+  }, [open, anchor]);
 
   return style;
 }
@@ -311,32 +312,34 @@ function PriceFilterMenu({
 
 function FilterPopover({
   open,
-  triggerRef,
+  anchor,
   onClose,
   children,
 }: {
   open: boolean;
-  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  anchor: PopoverAnchor | null;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const pos = useFilterPopoverPosition(open, triggerRef);
+  const pos = usePopoverPanelStyle(open, anchor);
 
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (!t) return;
-      if (t.closest("[data-filter-panel]")) return;
-      if (t.closest("[data-funnel-trigger]")) return;
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      const panel = panelRef.current;
+      if (panel?.contains(t)) return;
+      // Clic en otro embudo: no cerrar aquí; el handler del botón abrirá el menú correspondiente.
+      if (t instanceof Element && t.closest("[data-funnel-trigger]")) return;
       onClose();
     };
     document.addEventListener("mousedown", down);
     return () => document.removeEventListener("mousedown", down);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !anchor) return null;
 
   return createPortal(
     <div ref={panelRef} data-filter-panel className={popoverPanel} style={pos}>
@@ -354,23 +357,20 @@ function HeaderWithFunnel({
   label,
   funnelActive,
   onFunnelClick,
-  funnelRef,
 }: {
   label: string;
   funnelActive: boolean;
-  onFunnelClick: () => void;
-  funnelRef: React.RefObject<HTMLButtonElement | null>;
+  onFunnelClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <div className="flex items-center justify-end gap-1.5">
       <span className="font-semibold">{label}</span>
       <button
-        ref={funnelRef}
         data-funnel-trigger
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          onFunnelClick();
+          onFunnelClick(e);
         }}
         className="shrink-0 rounded p-0.5 hover:bg-gray-100"
         aria-label={`Filtrar ${label}`}
@@ -395,9 +395,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   const [catSearch, setCatSearch] = useState("");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const refNombre = useRef<HTMLButtonElement | null>(null);
-  const refTel = useRef<HTMLButtonElement | null>(null);
-  const refCat = useRef<HTMLButtonElement | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<PopoverAnchor | null>(null);
 
   const catOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -432,9 +430,15 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
     });
   }, [rows, fNombre, fTelefono, catApplied]);
 
-  const openWithRef = (key: string) => {
+  const toggleProvMenu = (key: string) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const anchor = anchorFromEvent(e);
     setOpenMenu((prev) => {
-      if (prev === key) return null;
+      if (prev === key) {
+        setMenuAnchor(null);
+        return null;
+      }
+      setMenuAnchor(anchor);
       if (key === "prov-categoria") {
         setCatDraft(new Set(catApplied));
         setCatSearch("");
@@ -443,7 +447,10 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
     });
   };
 
-  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const closeMenu = useCallback(() => {
+    setOpenMenu(null);
+    setMenuAnchor(null);
+  }, []);
 
   const applyCategoria = () => {
     setCatApplied(new Set(catDraft));
@@ -489,15 +496,9 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   }, [draft, editingId, router]);
 
   const renderPopover = () => {
-    if (!openMenu) return null;
-    const refMap: Record<string, React.RefObject<HTMLButtonElement | null>> = {
-      "prov-nombre": refNombre,
-      "prov-telefono": refTel,
-      "prov-categoria": refCat,
-    };
-    const tr = refMap[openMenu] ?? refNombre;
+    if (!openMenu || !menuAnchor) return null;
     return (
-      <FilterPopover open={!!openMenu} triggerRef={tr} onClose={closeMenu}>
+      <FilterPopover open anchor={menuAnchor} onClose={closeMenu}>
         {openMenu === "prov-nombre" ? (
           <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
         ) : null}
@@ -533,24 +534,21 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
-                  onFunnelClick={() => openWithRef("prov-nombre")}
-                  funnelRef={refNombre}
+                  onFunnelClick={toggleProvMenu("prov-nombre")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Teléfono"
                   funnelActive={funnelTel}
-                  onFunnelClick={() => openWithRef("prov-telefono")}
-                  funnelRef={refTel}
+                  onFunnelClick={toggleProvMenu("prov-telefono")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelCat}
-                  onFunnelClick={() => openWithRef("prov-categoria")}
-                  funnelRef={refCat}
+                  onFunnelClick={toggleProvMenu("prov-categoria")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
@@ -666,9 +664,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
   const [insCatSearch, setInsCatSearch] = useState("");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const refNombre = useRef<HTMLButtonElement | null>(null);
-  const refUnidad = useRef<HTMLButtonElement | null>(null);
-  const refInsCat = useRef<HTMLButtonElement | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<PopoverAnchor | null>(null);
 
   const unidadOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -719,9 +715,15 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
     });
   }, [rows, fNombre, unidadApplied, insCatApplied]);
 
-  const openWithRef = (key: string) => {
+  const toggleInsMenu = (key: string) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const anchor = anchorFromEvent(e);
     setOpenMenu((prev) => {
-      if (prev === key) return null;
+      if (prev === key) {
+        setMenuAnchor(null);
+        return null;
+      }
+      setMenuAnchor(anchor);
       if (key === "ins-unidad") {
         setUnidadDraft(new Set(unidadApplied));
         setUnidadSearch("");
@@ -734,7 +736,10 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
     });
   };
 
-  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const closeMenu = useCallback(() => {
+    setOpenMenu(null);
+    setMenuAnchor(null);
+  }, []);
 
   const beginEdit = useCallback((r: InsumoRow) => {
     setEditingId(r.id);
@@ -777,18 +782,8 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       ) : null}
-      {openMenu ? (
-        <FilterPopover
-          open
-          triggerRef={
-            openMenu === "ins-nombre"
-              ? refNombre
-              : openMenu === "ins-unidad"
-                ? refUnidad
-                : refInsCat
-          }
-          onClose={closeMenu}
-        >
+      {openMenu && menuAnchor ? (
+        <FilterPopover open anchor={menuAnchor} onClose={closeMenu}>
           {openMenu === "ins-nombre" ? (
             <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
           ) : null}
@@ -830,24 +825,21 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
-                  onFunnelClick={() => openWithRef("ins-nombre")}
-                  funnelRef={refNombre}
+                  onFunnelClick={toggleInsMenu("ins-nombre")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Unidad base"
                   funnelActive={funnelUnidad}
-                  onFunnelClick={() => openWithRef("ins-unidad")}
-                  funnelRef={refUnidad}
+                  onFunnelClick={toggleInsMenu("ins-unidad")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelInsCat}
-                  onFunnelClick={() => openWithRef("ins-categoria")}
-                  funnelRef={refInsCat}
+                  onFunnelClick={toggleInsMenu("ins-categoria")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
@@ -996,10 +988,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
   const [activoSearch, setActivoSearch] = useState("");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const refNombre = useRef<HTMLButtonElement | null>(null);
-  const refPlatoCat = useRef<HTMLButtonElement | null>(null);
-  const refPrecio = useRef<HTMLButtonElement | null>(null);
-  const refActivo = useRef<HTMLButtonElement | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<PopoverAnchor | null>(null);
 
   const platoCatOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -1060,9 +1049,15 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     });
   }, [rows, fNombre, platoCatApplied, precioApplied, activoApplied]);
 
-  const openWithRef = (key: string) => {
+  const togglePlaMenu = (key: string) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const anchor = anchorFromEvent(e);
     setOpenMenu((prev) => {
-      if (prev === key) return null;
+      if (prev === key) {
+        setMenuAnchor(null);
+        return null;
+      }
+      setMenuAnchor(anchor);
       if (key === "pla-categoria") {
         setPlatoCatDraft(new Set(platoCatApplied));
         setPlatoCatSearch("");
@@ -1078,7 +1073,10 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     });
   };
 
-  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const closeMenu = useCallback(() => {
+    setOpenMenu(null);
+    setMenuAnchor(null);
+  }, []);
 
   const money = useMemo(
     () =>
@@ -1133,24 +1131,13 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     });
   }, [draft, editingId, router]);
 
-  const triggerRefPlatos =
-    openMenu === "pla-nombre"
-      ? refNombre
-      : openMenu === "pla-categoria"
-        ? refPlatoCat
-        : openMenu === "pla-precio"
-          ? refPrecio
-          : openMenu === "pla-activo"
-            ? refActivo
-            : refNombre;
-
   return (
     <div className="space-y-2">
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       ) : null}
-      {openMenu ? (
-        <FilterPopover open triggerRef={triggerRefPlatos} onClose={closeMenu}>
+      {openMenu && menuAnchor ? (
+        <FilterPopover open anchor={menuAnchor} onClose={closeMenu}>
           {openMenu === "pla-nombre" ? (
             <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
           ) : null}
@@ -1205,32 +1192,28 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
-                  onFunnelClick={() => openWithRef("pla-nombre")}
-                  funnelRef={refNombre}
+                  onFunnelClick={togglePlaMenu("pla-nombre")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelPlatoCat}
-                  onFunnelClick={() => openWithRef("pla-categoria")}
-                  funnelRef={refPlatoCat}
+                  onFunnelClick={togglePlaMenu("pla-categoria")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Precio"
                   funnelActive={funnelPrecio}
-                  onFunnelClick={() => openWithRef("pla-precio")}
-                  funnelRef={refPrecio}
+                  onFunnelClick={togglePlaMenu("pla-precio")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 text-right">
                 <HeaderWithFunnel
                   label="Activo"
                   funnelActive={funnelActivo}
-                  onFunnelClick={() => openWithRef("pla-activo")}
-                  funnelRef={refActivo}
+                  onFunnelClick={togglePlaMenu("pla-activo")}
                 />
               </th>
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
