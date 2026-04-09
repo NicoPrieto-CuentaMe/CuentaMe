@@ -355,6 +355,94 @@ export async function saveRecipeComplete(_: ActionState, formData: FormData): Pr
   }
 }
 
+export type RecetaIngredienteInput = {
+  insumoId: string;
+  cantidad: string;
+  unidad: string;
+};
+
+export async function updateReceta(payload: {
+  platoId: string;
+  ingredientes: RecetaIngredienteInput[];
+}): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const platoId = payload.platoId?.trim() ?? "";
+    const ingredientes = payload.ingredientes ?? [];
+
+    if (!platoId) return { ok: false, message: "Plato inválido." };
+    if (ingredientes.length < 1) {
+      return { ok: false, message: "Debe haber al menos 1 ingrediente." };
+    }
+    if (ingredientes.length > 50) {
+      return { ok: false, message: "Demasiados ingredientes (máximo 50)." };
+    }
+
+    const plato = await prisma.plato.findFirst({
+      where: { id: platoId, userId },
+      select: { id: true },
+    });
+    if (!plato) return { ok: false, message: "Plato no encontrado." };
+
+    const insumoIds = ingredientes.map((r) => r.insumoId.trim());
+    if (insumoIds.some((id) => !id)) {
+      return { ok: false, message: "Completa todos los insumos." };
+    }
+    if (new Set(insumoIds).size !== insumoIds.length) {
+      return { ok: false, message: "No puedes repetir el mismo insumo en la receta." };
+    }
+
+    for (let i = 0; i < ingredientes.length; i++) {
+      const r = ingredientes[i];
+      if (!r.cantidad?.trim()) {
+        return { ok: false, message: `Ingresa la cantidad en la fila ${i + 1}.` };
+      }
+      if (!r.unidad?.trim()) {
+        return { ok: false, message: `Selecciona la unidad en la fila ${i + 1}.` };
+      }
+    }
+
+    const uniqueIds = [...new Set(insumoIds)];
+    const insumosOk = await prisma.insumo.findMany({
+      where: { userId, id: { in: uniqueIds } },
+      select: { id: true },
+    });
+    if (insumosOk.length !== uniqueIds.length) {
+      return { ok: false, message: "Uno o más insumos no son válidos." };
+    }
+
+    const data = ingredientes.map((r) => {
+      const cantidad = toPositiveDecimal(r.cantidad.trim());
+      if (!cantidad) {
+        throw new Error(`La cantidad debe ser mayor a 0 en cada fila.`);
+      }
+      const unidad = (Unidad as Record<string, Unidad>)[r.unidad.trim()];
+      if (!unidad) {
+        throw new Error("Unidad inválida.");
+      }
+      return {
+        userId,
+        platoId,
+        insumoId: r.insumoId.trim(),
+        cantidad,
+        unidad,
+      };
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.receta.deleteMany({ where: { platoId, userId } });
+      await tx.receta.createMany({ data });
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Receta actualizada." };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "No se pudo actualizar la receta. Intenta de nuevo.";
+    return { ok: false, message };
+  }
+}
+
 export async function deleteRecipeIngredient(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const id = requiredString(formData, "id");
