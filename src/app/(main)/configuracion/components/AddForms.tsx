@@ -4,43 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState } from "react-dom";
 import type { ActionState } from "../actions";
 import { addDish, addSupplier, addSupply, saveRecipeComplete } from "../actions";
+import { insumoCategorias, platoCategorias, proveedorCategorias } from "../categories";
+import { digitsToSalePriceString, formatCopFromDigits } from "../cop-price";
 import { UNIT_OPTIONS } from "../units";
 import type { Insumo, Plato } from "@prisma/client";
 
 const initialState: ActionState = { ok: true };
-
-const proveedorCategorias = [
-  "Carnes",
-  "Lácteos",
-  "Verduras y frutas",
-  "Granos y secos",
-  "Bebidas",
-  "Limpieza y desechables",
-  "Otro",
-] as const;
-
-const insumoCategorias = [
-  "Carnes",
-  "Lácteos",
-  "Verduras y frutas",
-  "Granos y secos",
-  "Bebidas",
-  "Aceites y grasas",
-  "Condimentos y salsas",
-  "Panadería",
-  "Limpieza y desechables",
-  "Otro",
-] as const;
-
-const platoCategorias = [
-  "Entradas",
-  "Platos fuertes",
-  "Sopas y caldos",
-  "Bebidas",
-  "Postres",
-  "Combos",
-  "Otro",
-] as const;
 
 function Feedback({ state }: { state: ActionState }) {
   if (!("ok" in state) || state.ok) return null;
@@ -183,21 +152,9 @@ export function AddDishForm() {
     }
   }, [state.ok]);
 
-  const precioNumerico = useMemo(() => {
-    const digits = precioDisplay.replace(/[^\d]/g, "");
-    if (!digits) return "";
-    const n = Number(digits);
-    if (!Number.isFinite(n)) return "";
-    return String(n);
-  }, [precioDisplay]);
+  const precioNumerico = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
 
-  const precioFormateado = useMemo(() => {
-    const digits = precioDisplay.replace(/[^\d]/g, "");
-    if (!digits) return "";
-    const n = Number(digits);
-    if (!Number.isFinite(n)) return "";
-    return `$ ${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(n)}`;
-  }, [precioDisplay]);
+  const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
 
   return (
     <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-4">

@@ -71,6 +71,34 @@ export async function deleteSupplier(formData: FormData): Promise<void> {
   revalidatePath("/configuracion");
 }
 
+export async function updateProveedor(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    const nombre = requiredString(formData, "nombre");
+    const telefono = optionalString(formData, "telefono");
+    const categoria = optionalString(formData, "categoria");
+
+    if (!id) return { ok: false, message: "Proveedor inválido." };
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
+
+    const res = await prisma.proveedor.updateMany({
+      where: { id, userId },
+      data: { nombre, telefono: telefono ?? null, categoria: categoria ?? null },
+    });
+    if (res.count === 0) return { ok: false, message: "Proveedor no encontrado." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Proveedor actualizado." };
+  } catch (e) {
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe un proveedor con ese nombre."
+        : "No se pudo actualizar el proveedor.";
+    return { ok: false, message };
+  }
+}
+
 export async function addSupply(_: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const userId = await requireUserId();
@@ -112,6 +140,38 @@ export async function deleteSupply(formData: FormData): Promise<void> {
   revalidatePath("/configuracion");
 }
 
+export async function updateInsumo(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    const nombre = requiredString(formData, "nombre");
+    const baseUnitRaw = requiredString(formData, "baseUnit");
+    const categoria = optionalString(formData, "categoria");
+
+    if (!id) return { ok: false, message: "Insumo inválido." };
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
+    if (!baseUnitRaw) return { ok: false, message: "La unidad base es obligatoria." };
+
+    const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
+    if (!unidadBase) return { ok: false, message: "Unidad base inválida." };
+
+    const res = await prisma.insumo.updateMany({
+      where: { id, userId },
+      data: { nombre, unidadBase, categoria: categoria ?? null },
+    });
+    if (res.count === 0) return { ok: false, message: "Insumo no encontrado." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Insumo actualizado." };
+  } catch (e) {
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe un insumo con ese nombre."
+        : "No se pudo actualizar el insumo.";
+    return { ok: false, message };
+  }
+}
+
 export async function addDish(_: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const userId = await requireUserId();
@@ -151,6 +211,38 @@ export async function deleteDish(formData: FormData): Promise<void> {
   if (res.count === 0) throw new Error("Plato no encontrado.");
 
   revalidatePath("/configuracion");
+}
+
+export async function updatePlato(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    const nombre = requiredString(formData, "nombre");
+    const categoria = optionalString(formData, "categoria");
+    const salePriceRaw = requiredString(formData, "salePrice");
+    const activeRaw = formData.get("active");
+    const active = activeRaw === "on" || activeRaw === "true";
+
+    if (!id) return { ok: false, message: "Plato inválido." };
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
+    const salePrice = toPositiveDecimal(salePriceRaw);
+    if (!salePrice) return { ok: false, message: "El precio de venta debe ser mayor a 0." };
+
+    const res = await prisma.plato.updateMany({
+      where: { id, userId },
+      data: { nombre, categoria: categoria ?? null, precioVenta: salePrice, active },
+    });
+    if (res.count === 0) return { ok: false, message: "Plato no encontrado." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Plato actualizado." };
+  } catch (e) {
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe un plato con ese nombre."
+        : "No se pudo actualizar el plato.";
+    return { ok: false, message };
+  }
 }
 
 export async function addRecipeIngredient(_: ActionState, formData: FormData): Promise<ActionState> {

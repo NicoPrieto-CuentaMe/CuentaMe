@@ -2,10 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { ConfirmSubmitButton } from "./components/ConfirmSubmitButton";
 import { AddDishForm, AddSupplierForm, AddSupplyForm } from "./components/AddForms";
-import { deleteDish, deleteSupplier, deleteSupply } from "./actions";
-import { UNIT_OPTIONS } from "./units";
+import { InsumosTable, PlatosTable, ProveedoresTable } from "./components/MasterTablesInline";
 import { RecipesCardsModal } from "./components/RecipeCardsModal";
 
 const tabs = [
@@ -21,8 +19,6 @@ function normalizeTab(tab: unknown): TabKey {
   const t = typeof tab === "string" ? tab : "";
   return (tabs.find((x) => x.key === t)?.key ?? "proveedores") as TabKey;
 }
-
-const unitLabel = new Map(UNIT_OPTIONS.map((u) => [u.value, u.label] as const));
 
 export default async function ConfiguracionPage({
   searchParams,
@@ -85,12 +81,6 @@ export default async function ConfiguracionPage({
     })),
   }));
 
-  const money = new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  });
-
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
@@ -135,36 +125,7 @@ export default async function ConfiguracionPage({
             {proveedores.length === 0 ? (
               <p className="text-sm text-[var(--foreground)]/60">Aún no tienes proveedores registrados</p>
             ) : (
-              <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-sm">
-                <thead>
-                  <tr className="text-[var(--foreground)]/70">
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Nombre</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Teléfono</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Categoría</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {proveedores.map((s) => (
-                    <tr key={s.id} className="text-[var(--foreground)]/90">
-                      <td className="border-b border-[var(--border)] px-3 py-2">{s.nombre}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">{s.telefono ?? "—"}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">{s.categoria ?? "—"}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">
-                        <form action={deleteSupplier}>
-                          <input type="hidden" name="id" value={s.id} />
-                          <ConfirmSubmitButton
-                            confirmMessage="¿Eliminar este proveedor? Esta acción no se puede deshacer."
-                            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-                          >
-                            Eliminar
-                          </ConfirmSubmitButton>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ProveedoresTable rows={proveedores} />
             )}
           </div>
         </section>
@@ -185,38 +146,7 @@ export default async function ConfiguracionPage({
             {insumos.length === 0 ? (
               <p className="text-sm text-[var(--foreground)]/60">Aún no tienes insumos registrados</p>
             ) : (
-              <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-sm">
-                <thead>
-                  <tr className="text-[var(--foreground)]/70">
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Nombre</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Unidad base</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Categoría</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {insumos.map((s) => (
-                    <tr key={s.id} className="text-[var(--foreground)]/90">
-                      <td className="border-b border-[var(--border)] px-3 py-2">{s.nombre}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">
-                        {unitLabel.get(s.unidadBase) ?? s.unidadBase}
-                      </td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">{s.categoria ?? "—"}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">
-                        <form action={deleteSupply}>
-                          <input type="hidden" name="id" value={s.id} />
-                          <ConfirmSubmitButton
-                            confirmMessage="¿Eliminar este insumo? Si está en recetas, puede fallar."
-                            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-                          >
-                            Eliminar
-                          </ConfirmSubmitButton>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <InsumosTable rows={insumos} />
             )}
           </div>
         </section>
@@ -237,50 +167,7 @@ export default async function ConfiguracionPage({
             {platos.length === 0 ? (
               <p className="text-sm text-[var(--foreground)]/60">Aún no tienes platos registrados</p>
             ) : (
-              <table className="w-full min-w-[820px] border-separate border-spacing-0 text-left text-sm">
-                <thead>
-                  <tr className="text-[var(--foreground)]/70">
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Nombre</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Categoría</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Precio</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Activo</th>
-                    <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {platos.map((d) => (
-                    <tr key={d.id} className="text-[var(--foreground)]/90">
-                      <td className="border-b border-[var(--border)] px-3 py-2">{d.nombre}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">{d.categoria ?? "—"}</td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">
-                        {money.format(Number(d.precioVenta))}
-                      </td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">
-                        {d.active ? (
-                          <span className="rounded-full bg-accent/10 px-2 py-1 text-xs font-semibold text-accent">
-                            Activo
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-[var(--foreground)]/70">
-                            Inactivo
-                          </span>
-                        )}
-                      </td>
-                      <td className="border-b border-[var(--border)] px-3 py-2">
-                        <form action={deleteDish}>
-                          <input type="hidden" name="id" value={d.id} />
-                          <ConfirmSubmitButton
-                            confirmMessage="¿Eliminar este plato? Si tiene receta, puede fallar."
-                            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-                          >
-                            Eliminar
-                          </ConfirmSubmitButton>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PlatosTable rows={platos} />
             )}
           </div>
         </section>
