@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ConfirmSubmitButton } from "./components/ConfirmSubmitButton";
-import { AddDishForm, AddSupplierForm, AddSupplyForm, RecipeBuilderForm } from "./components/AddForms";
-import { deleteDish, deleteRecipeIngredient, deleteSupplier, deleteSupply } from "./actions";
+import { AddDishForm, AddSupplierForm, AddSupplyForm } from "./components/AddForms";
+import { deleteDish, deleteSupplier, deleteSupply } from "./actions";
 import { UNIT_OPTIONS } from "./units";
+import { RecipesCardsModal } from "./components/RecipeCardsModal";
 
 const tabs = [
   { key: "proveedores", label: "Proveedores" },
@@ -26,7 +27,7 @@ const unitLabel = new Map(UNIT_OPTIONS.map((u) => [u.value, u.label] as const));
 export default async function ConfiguracionPage({
   searchParams,
 }: {
-  searchParams?: { tab?: string };
+  searchParams?: { tab?: string; dishId?: string };
 }) {
   const session = await auth();
   const userId = session?.user?.id;
@@ -66,6 +67,23 @@ export default async function ConfiguracionPage({
     },
     new Map<string, { dishName: string; ingredients: typeof recetas }>(),
   );
+
+  const platosConReceta = new Set(recetas.map((r) => r.platoId));
+  const platosSinReceta = activeDishes
+    .filter((p) => !platosConReceta.has(p.id))
+    .map((p) => ({ id: p.id, nombre: p.nombre }));
+
+  const recipeGroups = Array.from(recipesByDish.entries()).map(([platoId, g]) => ({
+    platoId,
+    platoNombre: g.dishName,
+    ingredientes: g.ingredients.map((ri) => ({
+      id: ri.id,
+      insumoId: ri.insumoId,
+      insumoNombre: ri.insumo.nombre,
+      cantidad: String(ri.cantidad),
+      unidad: ri.unidad,
+    })),
+  }));
 
   const money = new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -276,56 +294,15 @@ export default async function ConfiguracionPage({
           </p>
 
           <div className="mt-4">
-            <RecipeBuilderForm activeDishes={activeDishes} supplies={insumos} />
+            <RecipesCardsModal
+              groups={recipeGroups}
+              platosSinReceta={platosSinReceta}
+              activeDishes={activeDishes}
+              supplies={insumos}
+              preselectedDishId={searchParams?.dishId}
+            />
           </div>
 
-          <div className="mt-6 space-y-4">
-            {recetas.length === 0 ? (
-              <p className="text-sm text-[var(--foreground)]/60">Aún no tienes recetas registradas</p>
-            ) : (
-              Array.from(recipesByDish.entries()).map(([dishId, group]) => (
-                <div key={dishId} className="rounded-lg border border-[var(--border)] bg-white">
-                  <div className="border-b border-[var(--border)] px-4 py-3">
-                    <h4 className="text-sm font-semibold text-[var(--foreground)]">{group.dishName}</h4>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-sm">
-                      <thead>
-                        <tr className="text-[var(--foreground)]/70">
-                          <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Insumo</th>
-                          <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Cantidad</th>
-                          <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Unidad</th>
-                          <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.ingredients.map((ri) => (
-                          <tr key={ri.id} className="text-[var(--foreground)]/90">
-                            <td className="border-b border-[var(--border)] px-3 py-2">{ri.insumo.nombre}</td>
-                            <td className="border-b border-[var(--border)] px-3 py-2">{String(ri.cantidad)}</td>
-                            <td className="border-b border-[var(--border)] px-3 py-2">
-                              {unitLabel.get(ri.unidad) ?? ri.unidad}
-                            </td>
-                            <td className="border-b border-[var(--border)] px-3 py-2">
-                              <form action={deleteRecipeIngredient}>
-                                <input type="hidden" name="id" value={ri.id} />
-                                <ConfirmSubmitButton
-                                  confirmMessage="¿Eliminar este ingrediente de la receta?"
-                                  className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-                                >
-                                  Eliminar
-                                </ConfirmSubmitButton>
-                              </form>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </section>
       ) : null}
     </div>

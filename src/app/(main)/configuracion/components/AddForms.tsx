@@ -174,7 +174,30 @@ export function AddSupplyForm() {
 export function AddDishForm() {
   const [state, formAction] = useFormState(addDish, initialState);
   const formRef = useRef<HTMLFormElement>(null);
-  useResetOnOk(state, formRef);
+  const [precioDisplay, setPrecioDisplay] = useState<string>("");
+
+  useEffect(() => {
+    if (state.ok) {
+      formRef.current?.reset();
+      setPrecioDisplay("");
+    }
+  }, [state.ok]);
+
+  const precioNumerico = useMemo(() => {
+    const digits = precioDisplay.replace(/[^\d]/g, "");
+    if (!digits) return "";
+    const n = Number(digits);
+    if (!Number.isFinite(n)) return "";
+    return String(n);
+  }, [precioDisplay]);
+
+  const precioFormateado = useMemo(() => {
+    const digits = precioDisplay.replace(/[^\d]/g, "");
+    if (!digits) return "";
+    const n = Number(digits);
+    if (!Number.isFinite(n)) return "";
+    return `$ ${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(n)}`;
+  }, [precioDisplay]);
 
   return (
     <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-4">
@@ -204,15 +227,18 @@ export function AddDishForm() {
       </div>
       <div className="md:col-span-1">
         <label className="text-sm font-medium text-[var(--foreground)]">Precio de venta *</label>
+        <input type="hidden" name="salePrice" value={precioNumerico} />
         <input
-          name="salePrice"
           required
-          inputMode="decimal"
-          type="number"
-          step="0.01"
-          min="0"
+          inputMode="numeric"
+          value={precioFormateado}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const digits = raw.replace(/[^\d]/g, "");
+            setPrecioDisplay(digits);
+          }}
           className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
-          placeholder="Ej: 25000"
+          placeholder="Ej: $ 25.000"
         />
       </div>
       <div className="md:col-span-1">
@@ -252,14 +278,27 @@ function emptyRow(): RecipeRow {
 export function RecipeBuilderForm({
   activeDishes,
   supplies,
+  initialDishId,
+  lockDish = false,
+  initialCount,
+  initialRows,
 }: {
   activeDishes: Plato[];
   supplies: Insumo[];
+  initialDishId?: string;
+  lockDish?: boolean;
+  initialCount?: number;
+  initialRows?: RecipeRow[];
 }) {
   const [state, formAction] = useFormState(saveRecipeComplete, initialState);
   const formRef = useRef<HTMLFormElement>(null);
-  const [count, setCount] = useState<number>(1);
-  const [rows, setRows] = useState<RecipeRow[]>(() => [emptyRow()]);
+  const [dishId, setDishId] = useState<string>(initialDishId ?? "");
+  const [countDraft, setCountDraft] = useState<string>(String(initialCount ?? 1));
+  const [count, setCount] = useState<number>(initialCount ?? 1);
+  const [rows, setRows] = useState<RecipeRow[]>(() => {
+    if (initialRows?.length) return initialRows;
+    return Array.from({ length: initialCount ?? 1 }, () => emptyRow());
+  });
 
   const suppliesSorted = useMemo(
     () => [...supplies].sort((a, b) => a.nombre.localeCompare(b.nombre)),
@@ -269,10 +308,12 @@ export function RecipeBuilderForm({
   useEffect(() => {
     if (state.ok) {
       formRef.current?.reset();
+      setDishId(initialDishId ?? "");
+      setCountDraft("1");
       setCount(1);
       setRows([emptyRow()]);
     }
-  }, [state.ok]);
+  }, [state.ok, initialDishId]);
 
   useEffect(() => {
     setRows((prev) => {
@@ -282,6 +323,20 @@ export function RecipeBuilderForm({
     });
   }, [count]);
 
+  useEffect(() => {
+    setDishId(initialDishId ?? "");
+  }, [initialDishId]);
+
+  function commitCountFromDraft() {
+    const trimmed = countDraft.trim();
+    if (!trimmed) return;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) return;
+    const clamped = Math.min(20, Math.max(1, Math.trunc(n)));
+    setCountDraft(String(clamped));
+    setCount(clamped);
+  }
+
   return (
     <form ref={formRef} action={formAction} className="grid gap-3">
       <div className="grid gap-3 md:grid-cols-5">
@@ -290,7 +345,9 @@ export function RecipeBuilderForm({
           <select
             name="dishId"
             required
-            defaultValue=""
+            value={dishId}
+            disabled={lockDish}
+            onChange={(e) => setDishId(e.target.value)}
             className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
           >
             <option value="" disabled>
@@ -306,19 +363,32 @@ export function RecipeBuilderForm({
 
         <div className="md:col-span-1">
           <label className="text-sm font-medium text-[var(--foreground)]"># de insumos</label>
-          <input
-            name="count"
-            type="number"
-            min={1}
-            max={20}
-            value={count}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              if (!Number.isFinite(next)) return;
-              setCount(Math.min(20, Math.max(1, Math.trunc(next))));
-            }}
-            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
-          />
+          <div className="mt-1 flex gap-2">
+            <input
+              inputMode="numeric"
+              value={countDraft}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  setCountDraft("");
+                  return;
+                }
+                if (!/^\d+$/.test(raw)) return;
+                setCountDraft(raw);
+              }}
+              onBlur={commitCountFromDraft}
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+              placeholder="1 a 20"
+            />
+            <input type="hidden" name="count" value={String(count)} />
+            <button
+              type="button"
+              onClick={commitCountFromDraft}
+              className="shrink-0 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 hover:text-[var(--foreground)]"
+            >
+              Generar
+            </button>
+          </div>
         </div>
 
         <div className="md:col-span-2" />
@@ -345,7 +415,7 @@ export function RecipeBuilderForm({
                     }}
                     className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
                   >
-                    <option value="" disabled>
+                    <option value="">
                       Selecciona...
                     </option>
                     {suppliesSorted.map((s) => (
@@ -384,7 +454,7 @@ export function RecipeBuilderForm({
                     }}
                     className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
                   >
-                    <option value="" disabled>
+                    <option value="">
                       Selecciona...
                     </option>
                     {UNIT_OPTIONS.map((u) => (
