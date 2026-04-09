@@ -28,6 +28,14 @@ const btnEdit =
 
 const unitLabel = new Map(UNIT_OPTIONS.map((u) => [u.value, u.label] as const));
 
+const filterField =
+  "w-full rounded border border-[var(--border)]/50 bg-gray-100 px-1.5 py-0.5 text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--foreground)]/40 focus:border-accent";
+
+function textIncludes(haystack: string, needle: string) {
+  if (!needle.trim()) return true;
+  return haystack.toLowerCase().includes(needle.trim().toLowerCase());
+}
+
 type ProveedorRow = Pick<Proveedor, "id" | "nombre" | "telefono" | "categoria">;
 type InsumoRow = Pick<Insumo, "id" | "nombre" | "unidadBase" | "categoria">;
 type PlatoRow = Pick<Plato, "id" | "nombre" | "categoria" | "precioVenta" | "active">;
@@ -38,6 +46,28 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ nombre: string; telefono: string; categoria: string } | null>(null);
+
+  const [fNombre, setFNombre] = useState("");
+  const [fTelefono, setFTelefono] = useState("");
+  const [fCategoria, setFCategoria] = useState("");
+
+  const proveedorFiltersActive =
+    fNombre.trim() !== "" || fTelefono.trim() !== "" || fCategoria !== "";
+
+  const filteredProveedores = useMemo(() => {
+    return rows.filter((s) => {
+      if (!textIncludes(s.nombre, fNombre)) return false;
+      if (!textIncludes(s.telefono ?? "", fTelefono)) return false;
+      if (fCategoria && (s.categoria ?? "") !== fCategoria) return false;
+      return true;
+    });
+  }, [rows, fNombre, fTelefono, fCategoria]);
+
+  const clearProveedorFilters = useCallback(() => {
+    setFNombre("");
+    setFTelefono("");
+    setFCategoria("");
+  }, []);
 
   const beginEdit = useCallback((r: ProveedorRow) => {
     setEditingId(r.id);
@@ -80,6 +110,17 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       ) : null}
+      {proveedorFiltersActive ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={clearProveedorFilters}
+            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-sm">
           <thead>
@@ -89,9 +130,54 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Categoría</th>
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
             </tr>
+            <tr className="bg-[var(--background)]/80 text-[var(--foreground)]/80">
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <input
+                  type="search"
+                  value={fNombre}
+                  onChange={(e) => setFNombre(e.target.value)}
+                  placeholder="Filtrar…"
+                  className={filterField}
+                  aria-label="Filtrar por nombre"
+                />
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <input
+                  type="search"
+                  value={fTelefono}
+                  onChange={(e) => setFTelefono(e.target.value)}
+                  placeholder="Filtrar…"
+                  className={filterField}
+                  aria-label="Filtrar por teléfono"
+                />
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <select
+                  value={fCategoria}
+                  onChange={(e) => setFCategoria(e.target.value)}
+                  className={filterField}
+                  aria-label="Filtrar por categoría"
+                >
+                  <option value="">Todas</option>
+                  {proveedorCategorias.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1" />
+            </tr>
           </thead>
           <tbody>
-            {rows.map((s) => {
+            {filteredProveedores.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="border-b border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--foreground)]/60">
+                  No se encontraron resultados para los filtros aplicados
+                </td>
+              </tr>
+            ) : (
+              filteredProveedores.map((s) => {
               const isEdit = editingId === s.id;
               return (
                 <tr key={s.id} className="text-[var(--foreground)]/90">
@@ -164,7 +250,8 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                   </td>
                 </tr>
               );
-            })}
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -182,6 +269,28 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
     baseUnit: string;
     categoria: string;
   } | null>(null);
+
+  const [fNombre, setFNombre] = useState("");
+  const [fUnidadBase, setFUnidadBase] = useState("");
+  const [fCategoria, setFCategoria] = useState("");
+
+  const insumoFiltersActive =
+    fNombre.trim() !== "" || fUnidadBase !== "" || fCategoria !== "";
+
+  const filteredInsumos = useMemo(() => {
+    return rows.filter((s) => {
+      if (!textIncludes(s.nombre, fNombre)) return false;
+      if (fUnidadBase && s.unidadBase !== fUnidadBase) return false;
+      if (fCategoria && (s.categoria ?? "") !== fCategoria) return false;
+      return true;
+    });
+  }, [rows, fNombre, fUnidadBase, fCategoria]);
+
+  const clearInsumoFilters = useCallback(() => {
+    setFNombre("");
+    setFUnidadBase("");
+    setFCategoria("");
+  }, []);
 
   const beginEdit = useCallback((r: InsumoRow) => {
     setEditingId(r.id);
@@ -224,6 +333,17 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       ) : null}
+      {insumoFiltersActive ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={clearInsumoFilters}
+            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-sm">
           <thead>
@@ -233,9 +353,59 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Categoría</th>
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
             </tr>
+            <tr className="bg-[var(--background)]/80 text-[var(--foreground)]/80">
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <input
+                  type="search"
+                  value={fNombre}
+                  onChange={(e) => setFNombre(e.target.value)}
+                  placeholder="Filtrar…"
+                  className={filterField}
+                  aria-label="Filtrar por nombre"
+                />
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <select
+                  value={fUnidadBase}
+                  onChange={(e) => setFUnidadBase(e.target.value)}
+                  className={filterField}
+                  aria-label="Filtrar por unidad base"
+                >
+                  <option value="">Todas</option>
+                  {UNIT_OPTIONS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <select
+                  value={fCategoria}
+                  onChange={(e) => setFCategoria(e.target.value)}
+                  className={filterField}
+                  aria-label="Filtrar por categoría"
+                >
+                  <option value="">Todas</option>
+                  {insumoCategorias.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1" />
+            </tr>
           </thead>
           <tbody>
-            {rows.map((s) => {
+            {filteredInsumos.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="border-b border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--foreground)]/60">
+                  No se encontraron resultados para los filtros aplicados
+                </td>
+              </tr>
+            ) : (
+              filteredInsumos.map((s) => {
               const isEdit = editingId === s.id;
               return (
                 <tr key={s.id} className="text-[var(--foreground)]/90">
@@ -317,7 +487,8 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                   </td>
                 </tr>
               );
-            })}
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -357,6 +528,49 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     precioDigits: string;
     active: boolean;
   } | null>(null);
+
+  const [fNombre, setFNombre] = useState("");
+  const [fCategoria, setFCategoria] = useState("");
+  const [fPrecioDesde, setFPrecioDesde] = useState("");
+  const [fPrecioHasta, setFPrecioHasta] = useState("");
+  const [fActivo, setFActivo] = useState<"" | "activos" | "inactivos">("");
+
+  const platoFiltersActive =
+    fNombre.trim() !== "" ||
+    fCategoria !== "" ||
+    fPrecioDesde.trim() !== "" ||
+    fPrecioHasta.trim() !== "" ||
+    fActivo !== "";
+
+  const filteredPlatos = useMemo(() => {
+    const parseBound = (s: string): number | null => {
+      const t = s.trim();
+      if (t === "") return null;
+      const n = Number(t);
+      return Number.isFinite(n) ? n : null;
+    };
+    const desde = parseBound(fPrecioDesde);
+    const hasta = parseBound(fPrecioHasta);
+
+    return rows.filter((d) => {
+      if (!textIncludes(d.nombre, fNombre)) return false;
+      if (fCategoria && (d.categoria ?? "") !== fCategoria) return false;
+      const precio = Number(d.precioVenta);
+      if (desde !== null && precio < desde) return false;
+      if (hasta !== null && precio > hasta) return false;
+      if (fActivo === "activos" && !d.active) return false;
+      if (fActivo === "inactivos" && d.active) return false;
+      return true;
+    });
+  }, [rows, fNombre, fCategoria, fPrecioDesde, fPrecioHasta, fActivo]);
+
+  const clearPlatoFilters = useCallback(() => {
+    setFNombre("");
+    setFCategoria("");
+    setFPrecioDesde("");
+    setFPrecioHasta("");
+    setFActivo("");
+  }, []);
 
   const money = useMemo(
     () =>
@@ -416,6 +630,17 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       ) : null}
+      {platoFiltersActive ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={clearPlatoFilters}
+            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-separate border-spacing-0 text-left text-sm">
           <thead>
@@ -426,9 +651,80 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Activo</th>
               <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
             </tr>
+            <tr className="bg-[var(--background)]/80 text-[var(--foreground)]/80">
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <input
+                  type="search"
+                  value={fNombre}
+                  onChange={(e) => setFNombre(e.target.value)}
+                  placeholder="Filtrar…"
+                  className={filterField}
+                  aria-label="Filtrar por nombre"
+                />
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <select
+                  value={fCategoria}
+                  onChange={(e) => setFCategoria(e.target.value)}
+                  className={filterField}
+                  aria-label="Filtrar por categoría"
+                >
+                  <option value="">Todas</option>
+                  {platoCategorias.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <div className="flex flex-col gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={fPrecioDesde}
+                    onChange={(e) => setFPrecioDesde(e.target.value)}
+                    placeholder="Desde"
+                    className={filterField}
+                    aria-label="Precio desde"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={fPrecioHasta}
+                    onChange={(e) => setFPrecioHasta(e.target.value)}
+                    placeholder="Hasta"
+                    className={filterField}
+                    aria-label="Precio hasta"
+                  />
+                </div>
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1 align-top font-normal">
+                <select
+                  value={fActivo}
+                  onChange={(e) => setFActivo(e.target.value as "" | "activos" | "inactivos")}
+                  className={filterField}
+                  aria-label="Filtrar por estado activo"
+                >
+                  <option value="">Todos</option>
+                  <option value="activos">Activos</option>
+                  <option value="inactivos">Inactivos</option>
+                </select>
+              </th>
+              <th className="border-b border-[var(--border)] px-3 pb-2 pt-1" />
+            </tr>
           </thead>
           <tbody>
-            {rows.map((d) => {
+            {filteredPlatos.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="border-b border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--foreground)]/60">
+                  No se encontraron resultados para los filtros aplicados
+                </td>
+              </tr>
+            ) : (
+              filteredPlatos.map((d) => {
               const isEdit = editingId === d.id;
               return (
                 <tr key={d.id} className="text-[var(--foreground)]/90">
@@ -521,7 +817,8 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                   </td>
                 </tr>
               );
-            })}
+              })
+            )}
           </tbody>
         </table>
       </div>
