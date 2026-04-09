@@ -58,22 +58,17 @@ export async function addSupplier(_: ActionState, formData: FormData): Promise<A
   }
 }
 
-export async function deleteSupplier(formData: FormData): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const id = requiredString(formData, "id");
-    if (!id) return { ok: false, message: "Proveedor inválido." };
+export async function deleteSupplier(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = requiredString(formData, "id");
+  if (!id) throw new Error("Proveedor inválido.");
 
-    const res = await prisma.proveedor.deleteMany({
-      where: { id, userId },
-    });
-    if (res.count === 0) return { ok: false, message: "Proveedor no encontrado." };
+  const res = await prisma.proveedor.deleteMany({
+    where: { id, userId },
+  });
+  if (res.count === 0) throw new Error("Proveedor no encontrado.");
 
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Proveedor eliminado." };
-  } catch {
-    return { ok: false, message: "No se pudo eliminar el proveedor." };
-  }
+  revalidatePath("/configuracion");
 }
 
 export async function addSupply(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -104,22 +99,17 @@ export async function addSupply(_: ActionState, formData: FormData): Promise<Act
   }
 }
 
-export async function deleteSupply(formData: FormData): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const id = requiredString(formData, "id");
-    if (!id) return { ok: false, message: "Insumo inválido." };
+export async function deleteSupply(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = requiredString(formData, "id");
+  if (!id) throw new Error("Insumo inválido.");
 
-    const res = await prisma.insumo.deleteMany({
-      where: { id, userId },
-    });
-    if (res.count === 0) return { ok: false, message: "Insumo no encontrado." };
+  const res = await prisma.insumo.deleteMany({
+    where: { id, userId },
+  });
+  if (res.count === 0) throw new Error("Insumo no encontrado.");
 
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Insumo eliminado." };
-  } catch {
-    return { ok: false, message: "No se pudo eliminar el insumo (puede estar usado en recetas)." };
-  }
+  revalidatePath("/configuracion");
 }
 
 export async function addDish(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -150,22 +140,17 @@ export async function addDish(_: ActionState, formData: FormData): Promise<Actio
   }
 }
 
-export async function deleteDish(formData: FormData): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const id = requiredString(formData, "id");
-    if (!id) return { ok: false, message: "Plato inválido." };
+export async function deleteDish(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = requiredString(formData, "id");
+  if (!id) throw new Error("Plato inválido.");
 
-    const res = await prisma.plato.deleteMany({
-      where: { id, userId },
-    });
-    if (res.count === 0) return { ok: false, message: "Plato no encontrado." };
+  const res = await prisma.plato.deleteMany({
+    where: { id, userId },
+  });
+  if (res.count === 0) throw new Error("Plato no encontrado.");
 
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Plato eliminado." };
-  } catch {
-    return { ok: false, message: "No se pudo eliminar el plato (puede tener recetas)." };
-  }
+  revalidatePath("/configuracion");
 }
 
 export async function addRecipeIngredient(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -210,21 +195,16 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
   }
 }
 
-export async function deleteRecipeIngredient(formData: FormData): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const id = requiredString(formData, "id");
-    if (!id) return { ok: false, message: "Ingrediente inválido." };
+export async function deleteRecipeIngredient(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = requiredString(formData, "id");
+  if (!id) throw new Error("Ingrediente inválido.");
 
-    const res = await prisma.receta.deleteMany({
-      where: { id, userId },
-    });
-    if (res.count === 0) return { ok: false, message: "Ingrediente no encontrado." };
+  const res = await prisma.receta.deleteMany({
+    where: { id, userId },
+  });
+  if (res.count === 0) throw new Error("Ingrediente no encontrado.");
 
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Ingrediente eliminado." };
-  } catch {
-    return { ok: false, message: "No se pudo eliminar el ingrediente." };
-  }
+  revalidatePath("/configuracion");
 }
 
