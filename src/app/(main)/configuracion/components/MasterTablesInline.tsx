@@ -107,11 +107,14 @@ function TextFilterMenu({
   value,
   onChange,
   onClear,
+  onApplyEnter,
   placeholder = "Buscar…",
 }: {
   value: string;
   onChange: (v: string) => void;
   onClear: () => void;
+  /** Enter: mismo efecto que confirmar el filtro (p. ej. cerrar el menú; el texto ya filtra en vivo). */
+  onApplyEnter?: () => void;
   placeholder?: string;
 }) {
   return (
@@ -120,6 +123,12 @@ function TextFilterMenu({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onApplyEnter?.();
+          }
+        }}
         placeholder={placeholder}
         className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
         autoFocus
@@ -194,6 +203,12 @@ function CategoricalFilterMenu({
         type="search"
         value={optionSearch}
         onChange={(e) => setOptionSearch(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onApply();
+          }
+        }}
         placeholder="Buscar opciones…"
         className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
       />
@@ -275,6 +290,12 @@ function PriceFilterMenu({
           min={0}
           value={desde}
           onChange={(e) => setDesde(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onApply();
+            }
+          }}
           className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
         />
       </div>
@@ -286,6 +307,12 @@ function PriceFilterMenu({
           min={0}
           value={hasta}
           onChange={(e) => setHasta(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onApply();
+            }
+          }}
           className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
         />
       </div>
@@ -363,8 +390,8 @@ function HeaderWithFunnel({
   onFunnelClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <div className="flex items-center justify-end gap-1.5">
-      <span className="font-semibold">{label}</span>
+    <>
+      <span className="block w-full px-8 text-center font-semibold">{label}</span>
       <button
         data-funnel-trigger
         type="button"
@@ -372,12 +399,12 @@ function HeaderWithFunnel({
           e.stopPropagation();
           onFunnelClick(e);
         }}
-        className="shrink-0 rounded p-0.5 hover:bg-gray-100"
+        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-gray-100"
         aria-label={`Filtrar ${label}`}
       >
         <FunnelIcon className={funnelActive ? "text-[#1a6b3c]" : "text-gray-400"} />
       </button>
-    </div>
+    </>
   );
 }
 
@@ -500,10 +527,20 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
     return (
       <FilterPopover open anchor={menuAnchor} onClose={closeMenu}>
         {openMenu === "prov-nombre" ? (
-          <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
+          <TextFilterMenu
+            value={fNombre}
+            onChange={setFNombre}
+            onClear={() => setFNombre("")}
+            onApplyEnter={closeMenu}
+          />
         ) : null}
         {openMenu === "prov-telefono" ? (
-          <TextFilterMenu value={fTelefono} onChange={setFTelefono} onClear={() => setFTelefono("")} />
+          <TextFilterMenu
+            value={fTelefono}
+            onChange={setFTelefono}
+            onClear={() => setFTelefono("")}
+            onApplyEnter={closeMenu}
+          />
         ) : null}
         {openMenu === "prov-categoria" ? (
           <CategoricalFilterMenu
@@ -530,21 +567,21 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
         <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="text-[var(--foreground)]/70">
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
                   onFunnelClick={toggleProvMenu("prov-nombre")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Teléfono"
                   funnelActive={funnelTel}
                   onFunnelClick={toggleProvMenu("prov-telefono")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelCat}
@@ -785,7 +822,12 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       {openMenu && menuAnchor ? (
         <FilterPopover open anchor={menuAnchor} onClose={closeMenu}>
           {openMenu === "ins-nombre" ? (
-            <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
+            <TextFilterMenu
+              value={fNombre}
+              onChange={setFNombre}
+              onClear={() => setFNombre("")}
+              onApplyEnter={closeMenu}
+            />
           ) : null}
           {openMenu === "ins-unidad" ? (
             <CategoricalFilterMenu
@@ -821,21 +863,21 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
         <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="text-[var(--foreground)]/70">
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
                   onFunnelClick={toggleInsMenu("ins-nombre")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Unidad base"
                   funnelActive={funnelUnidad}
                   onFunnelClick={toggleInsMenu("ins-unidad")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelInsCat}
@@ -1139,7 +1181,12 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
       {openMenu && menuAnchor ? (
         <FilterPopover open anchor={menuAnchor} onClose={closeMenu}>
           {openMenu === "pla-nombre" ? (
-            <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
+            <TextFilterMenu
+              value={fNombre}
+              onChange={setFNombre}
+              onClear={() => setFNombre("")}
+              onApplyEnter={closeMenu}
+            />
           ) : null}
           {openMenu === "pla-categoria" ? (
             <CategoricalFilterMenu
@@ -1188,28 +1235,28 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
         <table className="w-full min-w-[900px] border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="text-[var(--foreground)]/70">
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
                   onFunnelClick={togglePlaMenu("pla-nombre")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelPlatoCat}
                   onFunnelClick={togglePlaMenu("pla-categoria")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Precio"
                   funnelActive={funnelPrecio}
                   onFunnelClick={togglePlaMenu("pla-precio")}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 text-right">
+              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Activo"
                   funnelActive={funnelActivo}
