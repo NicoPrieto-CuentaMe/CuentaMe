@@ -195,6 +195,74 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
   }
 }
 
+export async function saveRecipeComplete(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const platoId = requiredString(formData, "dishId");
+    const countRaw = requiredString(formData, "count");
+
+    if (!platoId) return { ok: false, message: "Selecciona un plato.", field: "dishId" };
+    const count = Number(countRaw);
+    if (!Number.isInteger(count) || count < 1 || count > 20) {
+      return { ok: false, message: "El número de insumos debe estar entre 1 y 20.", field: "count" };
+    }
+
+    const plato = await prisma.plato.findFirst({
+      where: { id: platoId, userId, active: true },
+      select: { id: true },
+    });
+    if (!plato) return { ok: false, message: "Plato inválido o inactivo.", field: "dishId" };
+
+    const rows = Array.from({ length: count }, (_, i) => {
+      const insumoId = requiredString(formData, `supplyId_${i}`);
+      const cantidadRaw = requiredString(formData, `quantity_${i}`);
+      const unidadRaw = requiredString(formData, `unit_${i}`);
+      return { insumoId, cantidadRaw, unidadRaw, index: i };
+    });
+
+    for (const r of rows) {
+      if (!r.insumoId) return { ok: false, message: `Selecciona el insumo en la fila ${r.index + 1}.` };
+      if (!r.cantidadRaw) return { ok: false, message: `Ingresa la cantidad en la fila ${r.index + 1}.` };
+      if (!r.unidadRaw) return { ok: false, message: `Selecciona la unidad en la fila ${r.index + 1}.` };
+    }
+
+    const uniqueInsumos = new Set(rows.map((r) => r.insumoId));
+    if (uniqueInsumos.size !== rows.length) {
+      return { ok: false, message: "No puedes repetir el mismo insumo en más de una fila." };
+    }
+
+    const insumoIds = Array.from(uniqueInsumos);
+    const existing = await prisma.insumo.findMany({
+      where: { userId, id: { in: insumoIds } },
+      select: { id: true },
+    });
+    if (existing.length !== insumoIds.length) {
+      return { ok: false, message: "Uno o más insumos no son válidos." };
+    }
+
+    const ops = rows.map((r) => {
+      const cantidad = toPositiveDecimal(r.cantidadRaw);
+      if (!cantidad) throw new Error(`Cantidad inválida en fila ${r.index + 1}.`);
+      const unidad = (Unidad as Record<string, Unidad>)[r.unidadRaw];
+      if (!unidad) throw new Error(`Unidad inválida en fila ${r.index + 1}.`);
+
+      return prisma.receta.upsert({
+        where: { platoId_insumoId: { platoId, insumoId: r.insumoId } },
+        create: { userId, platoId, insumoId: r.insumoId, cantidad, unidad },
+        update: { userId, cantidad, unidad },
+      });
+    });
+
+    await prisma.$transaction(ops);
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Receta guardada." };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "No se pudo guardar la receta. Intenta de nuevo.";
+    return { ok: false, message };
+  }
+}
+
 export async function deleteRecipeIngredient(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const id = requiredString(formData, "id");

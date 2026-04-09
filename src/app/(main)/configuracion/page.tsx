@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ConfirmSubmitButton } from "./components/ConfirmSubmitButton";
-import { AddDishForm, AddRecipeIngredientForm, AddSupplierForm, AddSupplyForm } from "./components/AddForms";
+import { AddDishForm, AddSupplierForm, AddSupplyForm, RecipeBuilderForm } from "./components/AddForms";
 import { deleteDish, deleteRecipeIngredient, deleteSupplier, deleteSupply } from "./actions";
 import { UNIT_OPTIONS } from "./units";
 
@@ -276,7 +276,7 @@ export default async function ConfiguracionPage({
           </p>
 
           <div className="mt-4">
-            <AddRecipeIngredientForm activeDishes={activeDishes} supplies={insumos} />
+            <RecipeBuilderForm activeDishes={activeDishes} supplies={insumos} />
           </div>
 
           <div className="mt-6 space-y-4">
