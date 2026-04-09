@@ -1,11 +1,17 @@
 import type { NextAuthConfig } from "next-auth";
 
-const protectedPrefixes = ["/dashboard", "/ventas", "/compras", "/chat"] as const;
+/**
+ * Rutas accesibles sin sesión. El resto de rutas de página exigen usuario autenticado.
+ * (Las rutas bajo /api/auth quedan fuera del matcher del middleware.)
+ *
+ * Rutas del grupo (main) protegidas: /dashboard, /ventas, /compras, /chat, /configuracion
+ * y cualquier subruta futura bajo esos prefijos, salvo que se añadan aquí como públicas.
+ */
+const publicPaths = new Set<string>(["/", "/login"]);
 
-function isProtectedPath(pathname: string) {
-  return protectedPrefixes.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
+function isPublicPath(pathname: string) {
+  if (publicPaths.has(pathname)) return true;
+  return false;
 }
 
 export const authConfig = {
@@ -16,9 +22,8 @@ export const authConfig = {
   providers: [],
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
-      if (nextUrl.pathname === "/login") return true;
-      if (isProtectedPath(nextUrl.pathname)) return !!auth?.user;
-      return true;
+      if (isPublicPath(nextUrl.pathname)) return true;
+      return !!auth?.user;
     },
   },
 } satisfies NextAuthConfig;

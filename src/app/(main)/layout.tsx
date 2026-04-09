@@ -9,7 +9,7 @@ export default async function MainLayout({
   children: ReactNode;
 }>) {
   const session = await auth();
-  if (!session?.user?.restaurantName) redirect("/login");
+  if (!session?.user) redirect("/login");
 
   return (
     <AppShell restaurantName={session.user.restaurantName}>{children}</AppShell>
