@@ -215,7 +215,7 @@ export function AddRecipeIngredientForm({
           </option>
           {activeDishes.map((d) => (
             <option key={d.id} value={d.id}>
-              {d.name}
+              {d.nombre}
             </option>
           ))}
         </select>
@@ -233,7 +233,7 @@ export function AddRecipeIngredientForm({
           </option>
           {supplies.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name}
+              {s.nombre}
             </option>
           ))}
         </select>
