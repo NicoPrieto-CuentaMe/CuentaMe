@@ -2,21 +2,21 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { AddDishForm, AddSupplierForm, AddSupplyForm } from "./components/AddForms";
-import { InsumosTable, PlatosTable, ProveedoresTable } from "./components/MasterTablesInline";
-import { RecipesCardsModal } from "./components/RecipeCardsModal";
+import { AddSupplierForm, AddSupplyForm } from "./components/AddForms";
+import { InsumosTable, ProveedoresTable } from "./components/MasterTablesInline";
+import { CartaTab } from "./components/CartaTab";
 
 const tabs = [
   { key: "proveedores", label: "Proveedores" },
   { key: "insumos", label: "Insumos" },
-  { key: "platos", label: "Platos" },
-  { key: "recetas", label: "Recetas" },
+  { key: "carta", label: "Carta" },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
 
 function normalizeTab(tab: unknown): TabKey {
   const t = typeof tab === "string" ? tab : "";
+  if (t === "platos" || t === "recetas") return "carta";
   return (tabs.find((x) => x.key === t)?.key ?? "proveedores") as TabKey;
 }
 
@@ -31,7 +31,7 @@ export default async function ConfiguracionPage({
 
   const tab = normalizeTab(searchParams?.tab);
 
-  const [proveedores, insumos, platos, recetas] = await Promise.all([
+  const [proveedores, insumos, platos] = await Promise.all([
     prisma.proveedor.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -42,44 +42,15 @@ export default async function ConfiguracionPage({
     }),
     prisma.plato.findMany({
       where: { userId },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.receta.findMany({
-      where: { userId },
-      include: { plato: true, insumo: true },
-      orderBy: [{ plato: { nombre: "asc" } }, { insumo: { nombre: "asc" } }],
+      include: {
+        recetas: {
+          include: { insumo: true },
+          orderBy: { insumo: { nombre: "asc" } },
+        },
+      },
+      orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
     }),
   ]);
-
-  const activeDishes = platos.filter((d) => d.active);
-
-  const recipesByDish = recetas.reduce(
-    (acc, ri) => {
-      const key = ri.platoId;
-      const existing = acc.get(key);
-      if (existing) existing.ingredients.push(ri);
-      else acc.set(key, { dishName: ri.plato.nombre, ingredients: [ri] });
-      return acc;
-    },
-    new Map<string, { dishName: string; ingredients: typeof recetas }>(),
-  );
-
-  const platosConReceta = new Set(recetas.map((r) => r.platoId));
-  const platosSinReceta = activeDishes
-    .filter((p) => !platosConReceta.has(p.id))
-    .map((p) => ({ id: p.id, nombre: p.nombre }));
-
-  const recipeGroups = Array.from(recipesByDish.entries()).map(([platoId, g]) => ({
-    platoId,
-    platoNombre: g.dishName,
-    ingredientes: g.ingredients.map((ri) => ({
-      id: ri.id,
-      insumoId: ri.insumoId,
-      insumoNombre: ri.insumo.nombre,
-      cantidad: String(ri.cantidad),
-      unidad: ri.unidad,
-    })),
-  }));
 
   return (
     <div className="space-y-4">
@@ -152,47 +123,9 @@ export default async function ConfiguracionPage({
         </section>
       ) : null}
 
-      {tab === "platos" ? (
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-[var(--foreground)]">Platos</h3>
-          <p className="mt-1 text-sm text-[var(--foreground)]/60">
-            Crea tus platos con precio de venta y estado activo.
-          </p>
-
-          <div className="mt-4">
-            <AddDishForm />
-          </div>
-
-          <div className="mt-6 overflow-x-auto">
-            {platos.length === 0 ? (
-              <p className="text-sm text-[var(--foreground)]/60">Aún no tienes platos registrados</p>
-            ) : (
-              <PlatosTable rows={platos} />
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "recetas" ? (
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-[var(--foreground)]">Recetas</h3>
-          <p className="mt-1 text-sm text-[var(--foreground)]/60">
-            Agrega ingredientes a cada plato (solo aparecen platos activos).
-          </p>
-
-          <div className="mt-4">
-            <RecipesCardsModal
-              groups={recipeGroups}
-              platosSinReceta={platosSinReceta}
-              activeDishes={activeDishes}
-              supplies={insumos}
-              preselectedDishId={searchParams?.dishId}
-            />
-          </div>
-
-        </section>
+      {tab === "carta" ? (
+        <CartaTab platos={platos} insumos={insumos} initialDishId={searchParams?.dishId} />
       ) : null}
     </div>
   );
 }
-

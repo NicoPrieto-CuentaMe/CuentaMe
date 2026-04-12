@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Insumo, Plato, Unidad } from "@prisma/client";
 import { RecipeBuilderForm } from "./AddForms";
@@ -40,12 +40,18 @@ export function RecipesCardsModal({
   activeDishes,
   supplies,
   preselectedDishId,
+  variant = "standalone",
+  externalPlatoId = null,
+  onExternalClose,
 }: {
   groups: RecipeCardGroup[];
   platosSinReceta: Array<{ id: string; nombre: string }>;
   activeDishes: Plato[];
   supplies: Insumo[];
   preselectedDishId?: string;
+  variant?: "standalone" | "embedded";
+  externalPlatoId?: string | null;
+  onExternalClose?: () => void;
 }) {
   const router = useRouter();
   const search = useSearchParams();
@@ -54,6 +60,20 @@ export function RecipesCardsModal({
   const [editRows, setEditRows] = useState<EditRow[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const embedded = variant === "embedded";
+
+  useEffect(() => {
+    if (!embedded) return;
+    if (externalPlatoId) {
+      setOpenPlatoId(externalPlatoId);
+    } else {
+      setOpenPlatoId(null);
+      setEditing(false);
+      setEditRows([]);
+      setEditError(null);
+    }
+  }, [embedded, externalPlatoId]);
 
   const suppliesSorted = useMemo(
     () => [...supplies].sort((a, b) => a.nombre.localeCompare(b.nombre)),
@@ -64,6 +84,16 @@ export function RecipesCardsModal({
     () => groups.find((g) => g.platoId === openPlatoId) ?? null,
     [groups, openPlatoId],
   );
+
+  const closeModal = useCallback(() => {
+    setOpenPlatoId(null);
+    setEditing(false);
+    setEditRows([]);
+    setEditError(null);
+    if (embedded) onExternalClose?.();
+  }, [embedded, onExternalClose]);
+
+  const lastOpenedPlatoRef = useRef<string | null>(null);
 
   const beginEdit = useCallback(() => {
     if (!openGroup) return;
@@ -78,11 +108,33 @@ export function RecipesCardsModal({
     setEditing(true);
   }, [openGroup]);
 
+  /** Al abrir el modal por primera vez para un plato: vacío → edición; con datos → lectura. */
+  useLayoutEffect(() => {
+    if (!openPlatoId || !openGroup) {
+      lastOpenedPlatoRef.current = null;
+      return;
+    }
+    if (lastOpenedPlatoRef.current === openPlatoId) return;
+    lastOpenedPlatoRef.current = openPlatoId;
+    setEditError(null);
+    if (openGroup.ingredientes.length === 0) {
+      setEditing(true);
+      setEditRows([{ insumoId: "", cantidad: "", unidad: "" }]);
+    } else {
+      setEditing(false);
+      setEditRows([]);
+    }
+  }, [openPlatoId, openGroup]);
+
   const cancelEdit = useCallback(() => {
+    if (openGroup && openGroup.ingredientes.length === 0) {
+      closeModal();
+      return;
+    }
     setEditing(false);
     setEditRows([]);
     setEditError(null);
-  }, []);
+  }, [closeModal, openGroup]);
 
   const saveEdit = useCallback(() => {
     if (!openGroup) return;
@@ -146,7 +198,7 @@ export function RecipesCardsModal({
 
   return (
     <div className="space-y-4">
-      {platosSinReceta.length > 0 ? (
+      {!embedded && platosSinReceta.length > 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <span className="font-semibold">
             {platosSinReceta.length} platos aún no tienen receta:
@@ -157,7 +209,7 @@ export function RecipesCardsModal({
               type="button"
               onClick={() => {
                 const params = new URLSearchParams(search?.toString());
-                params.set("tab", "recetas");
+                params.set("tab", "carta");
                 params.set("dishId", p.id);
                 router.replace(`/configuracion?${params.toString()}`);
               }}
@@ -170,53 +222,52 @@ export function RecipesCardsModal({
         </div>
       ) : null}
 
-      <div>
-        <RecipeBuilderForm activeDishes={activeDishes} supplies={supplies} initialDishId={preselectedDishId} />
-      </div>
+      {!embedded ? (
+        <div>
+          <RecipeBuilderForm activeDishes={activeDishes} supplies={supplies} initialDishId={preselectedDishId} />
+        </div>
+      ) : null}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {groups.length === 0 ? (
-          <p className="text-sm text-[var(--foreground)]/60">Aún no tienes recetas registradas</p>
-        ) : (
-          groups.map((g) => (
-            <button
-              key={g.platoId}
-              type="button"
-              onClick={() => {
-                setOpenPlatoId(g.platoId);
-                setEditing(false);
-                setEditRows([]);
-                setEditError(null);
-              }}
-              className="rounded-xl border border-[var(--border)] bg-white p-4 text-left shadow-sm hover:bg-gray-50"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-[var(--foreground)]">{g.platoNombre}</div>
-                  <div className="mt-1 text-sm text-[var(--foreground)]/60">
-                    {g.ingredientes.length} ingredientes
+      {!embedded ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {groups.length === 0 ? (
+            <p className="text-sm text-[var(--foreground)]/60">Aún no tienes recetas registradas</p>
+          ) : (
+            groups.map((g) => (
+              <button
+                key={g.platoId}
+                type="button"
+                onClick={() => {
+                  setOpenPlatoId(g.platoId);
+                  setEditing(false);
+                  setEditRows([]);
+                  setEditError(null);
+                }}
+                className="rounded-xl border border-[var(--border)] bg-white p-4 text-left shadow-sm hover:bg-gray-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-[var(--foreground)]">{g.platoNombre}</div>
+                    <div className="mt-1 text-sm text-[var(--foreground)]/60">
+                      {g.ingredientes.length} ingredientes
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-accent/10 px-2 py-1 text-xs font-semibold text-accent">
+                    Ver
                   </div>
                 </div>
-                <div className="rounded-full bg-accent/10 px-2 py-1 text-xs font-semibold text-accent">
-                  Ver
-                </div>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
 
       {openGroup ? (
         <div className="fixed inset-0 z-50">
           <button
             type="button"
             className="absolute inset-0 bg-black/50"
-            onClick={() => {
-              setOpenPlatoId(null);
-              setEditing(false);
-              setEditRows([]);
-              setEditError(null);
-            }}
+            onClick={closeModal}
             aria-label="Cerrar"
           />
           <div className="relative mx-auto mt-16 max-h-[calc(100vh-5rem)] w-[min(760px,calc(100%-2rem))] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg">
@@ -229,19 +280,14 @@ export function RecipesCardsModal({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setOpenPlatoId(null);
-                  setEditing(false);
-                  setEditRows([]);
-                  setEditError(null);
-                }}
+                onClick={closeModal}
                 className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 hover:text-[var(--foreground)]"
               >
                 Cerrar
               </button>
             </div>
 
-            {!editing ? (
+            {openGroup.ingredientes.length > 0 && !editing ? (
               <div className="mt-4 space-y-2">
                 <div className="rounded-lg border border-[var(--border)] bg-white">
                   <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--foreground)]/70">
