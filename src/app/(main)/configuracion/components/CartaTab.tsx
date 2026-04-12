@@ -13,6 +13,7 @@ import {
   updatePlatoCompleto,
   type ActionState,
 } from "../actions";
+import { sonUnidadesCompatibles } from "@/lib/unidades.config";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
 import { RecipesCardsModal, type RecipeCardGroup } from "./RecipeCardsModal";
 
@@ -26,7 +27,7 @@ export type CartaCategoriaRow = Categoria & {
 export type CartaPlatoRow = Plato & {
   recetas: Array<
     Receta & {
-      insumo: { nombre: string };
+      insumo: { nombre: string; unidadBase: Unidad };
     }
   >;
   categoria: Categoria | null;
@@ -212,7 +213,8 @@ function CategoriaChips({
                 <>
                   <button
                     type="button"
-                    className="max-w-[200px] truncate text-left font-medium text-text-primary hover:underline"
+                    className="max-w-[200px] truncate text-left font-medium text-text-primary no-underline decoration-none hover:no-underline"
+                    style={{ textDecoration: "none" }}
                     onClick={() => {
                       setRenameId(c.id);
                       setRenameDraft(c.nombre);
@@ -655,6 +657,16 @@ export function CartaTab({
       .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   }, [platos]);
 
+  const platosConInconsistenciaUnidades = useMemo(() => {
+    return [...platos]
+      .filter((plato) =>
+        plato.recetas.some((receta) =>
+          !sonUnidadesCompatibles(receta.insumo.unidadBase as string, receta.unidad as string),
+        ),
+      )
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [platos]);
+
   const activeDishes = useMemo(() => platos.filter((p) => p.active), [platos]);
 
   const recipeGroups: RecipeCardGroup[] = useMemo(
@@ -753,6 +765,43 @@ export function CartaTab({
               <span className="text-text-secondary">
                 {" "}
                 +{platosNecesitanReceta.length - 3} más
+              </span>
+            ) : null}
+          </p>
+        </div>
+      ) : null}
+
+      {platosConInconsistenciaUnidades.length > 0 ? (
+        <div
+          className="flex gap-3 rounded-lg border-l-4 border-danger bg-danger-light px-4 py-3 text-sm text-text-primary shadow-sm"
+          role="status"
+        >
+          <span className="shrink-0 select-none text-lg leading-snug text-danger" aria-hidden>
+            ✕
+          </span>
+          <p className="min-w-0 leading-relaxed">
+            <span className="font-medium">
+              {platosConInconsistenciaUnidades.length === 1
+                ? "1 plato tiene inconsistencias de unidades"
+                : `${platosConInconsistenciaUnidades.length} platos tienen inconsistencias de unidades`}
+            </span>
+            {": "}
+            {platosConInconsistenciaUnidades.slice(0, 3).map((p, i) => (
+              <span key={p.id}>
+                {i > 0 ? ", " : ""}
+                <button
+                  type="button"
+                  className="font-medium text-danger underline decoration-danger/80 underline-offset-2 transition hover:text-danger hover:decoration-danger"
+                  onClick={() => handleAlertPlatoClick(p)}
+                >
+                  {p.nombre}
+                </button>
+              </span>
+            ))}
+            {platosConInconsistenciaUnidades.length > 3 ? (
+              <span className="text-text-secondary">
+                {" "}
+                +{platosConInconsistenciaUnidades.length - 3} más
               </span>
             ) : null}
           </p>
