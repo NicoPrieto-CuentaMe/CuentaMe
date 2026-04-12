@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState } from "react-dom";
 import type { ActionState } from "../actions";
 import { addDish, addSupplier, addSupply, saveRecipeComplete } from "../actions";
-import { insumoCategorias, platoCategorias, proveedorCategorias } from "../categories";
+import { insumoCategorias, proveedorCategorias } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits } from "../cop-price";
 import { UNIT_OPTIONS } from "../units";
 import type { Insumo, Plato } from "@prisma/client";
@@ -157,7 +157,7 @@ export function AddDishForm() {
   const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
 
   return (
-    <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-4">
+    <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-3">
       <div className="md:col-span-1">
         <label className="text-sm font-medium text-[var(--foreground)]">Nombre *</label>
         <input
@@ -166,21 +166,6 @@ export function AddDishForm() {
           className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
           placeholder="Ej: Hamburguesa"
         />
-      </div>
-      <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Categoría</label>
-        <select
-          name="category"
-          defaultValue=""
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
-        >
-          <option value="">Selecciona...</option>
-          {platoCategorias.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
       </div>
       <div className="md:col-span-1">
         <label className="text-sm font-medium text-[var(--foreground)]">Precio de venta *</label>
@@ -213,7 +198,7 @@ export function AddDishForm() {
           </label>
         </div>
       </div>
-      <div className="md:col-span-4 flex items-center justify-between gap-3">
+      <div className="md:col-span-3 flex items-center justify-between gap-3">
         <Feedback state={state} />
         <button
           type="submit"

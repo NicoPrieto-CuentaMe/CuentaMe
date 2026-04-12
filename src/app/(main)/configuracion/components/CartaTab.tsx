@@ -1,15 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
-import type { Insumo, Plato, Receta, Unidad } from "@prisma/client";
-import { createPlato, deletePlatoConReceta, updatePlatoCompleto, type ActionState } from "../actions";
-import { platoCategorias } from "../categories";
+import type { Categoria, Insumo, Plato, Receta, Unidad } from "@prisma/client";
+import {
+  createCategoria,
+  createPlato,
+  deleteCategoria,
+  deletePlatoConReceta,
+  updatePlatoCompleto,
+  type ActionState,
+} from "../actions";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
 import { RecipesCardsModal, type RecipeCardGroup } from "./RecipeCardsModal";
 
 const initialState: ActionState = { ok: true };
+
+export type CartaCategoriaRow = Categoria & {
+  _count: { platos: number };
+};
 
 export type CartaPlatoRow = Plato & {
   recetas: Array<
@@ -17,33 +27,8 @@ export type CartaPlatoRow = Plato & {
       insumo: { nombre: string };
     }
   >;
+  categoria: Categoria | null;
 };
-
-function sortCategoryKeys(keys: string[]) {
-  const order = new Map<string, number>(platoCategorias.map((c, i) => [c, i]));
-  const sin = "(Sin categoría)";
-  return [...keys].sort((a, b) => {
-    if (a === sin) return 1;
-    if (b === sin) return -1;
-    const ia = order.has(a) ? order.get(a)! : 1000;
-    const ib = order.has(b) ? order.get(b)! : 1000;
-    if (ia !== ib) return ia - ib;
-    return a.localeCompare(b, "es");
-  });
-}
-
-function groupByCategory(platos: CartaPlatoRow[]) {
-  const map = new Map<string, CartaPlatoRow[]>();
-  for (const p of platos) {
-    const key = p.categoria?.trim() ? p.categoria.trim() : "(Sin categoría)";
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(p);
-  }
-  for (const arr of Array.from(map.values())) {
-    arr.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  }
-  return sortCategoryKeys(Array.from(map.keys())).map((k) => ({ categoria: k, platos: map.get(k)! }));
-}
 
 function formatPrecioCOP(precio: unknown) {
   return formatCopFromDigits(precioVentaToDigits(precio));
@@ -72,18 +57,180 @@ function Feedback({ state }: { state: ActionState }) {
   );
 }
 
+function buildMenuSections(platos: CartaPlatoRow[], categorias: CartaCategoriaRow[]) {
+  const knownCatIds = new Set(categorias.map((c) => c.id));
+  const byId = new Map<string, CartaPlatoRow[]>();
+  for (const p of platos) {
+    const cid = p.categoriaId ?? "__sin__";
+    if (!byId.has(cid)) byId.set(cid, []);
+    byId.get(cid)!.push(p);
+  }
+  for (const arr of Array.from(byId.values())) {
+    arr.sort((a: CartaPlatoRow, b: CartaPlatoRow) => a.nombre.localeCompare(b.nombre, "es"));
+  }
+
+  const sections: { key: string; titulo: string; platos: CartaPlatoRow[] }[] = [];
+  for (const c of categorias) {
+    const list = byId.get(c.id) ?? [];
+    if (list.length > 0) {
+      sections.push({ key: c.id, titulo: c.nombre, platos: list });
+    }
+  }
+  for (const [cid, list] of Array.from(byId.entries())) {
+    if (cid === "__sin__" || knownCatIds.has(cid) || list.length === 0) continue;
+    const titulo = list[0]?.categoria?.nombre?.trim() || "Categoría";
+    sections.push({ key: cid, titulo, platos: list });
+  }
+  const sin = byId.get("__sin__") ?? [];
+  if (sin.length > 0) {
+    sections.push({ key: "__sin__", titulo: "Sin categoría", platos: sin });
+  }
+  return sections;
+}
+
+function CategoriaChips({
+  categorias,
+  onDeleted,
+}: {
+  categorias: CartaCategoriaRow[];
+  onDeleted: () => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [inlineOpen, setInlineOpen] = useState(false);
+  const [state, formAction] = useFormState(createCategoria, initialState);
+  const [deleteTarget, setDeleteTarget] = useState<CartaCategoriaRow | null>(null);
+
+  useEffect(() => {
+    if (state.ok) {
+      router.refresh();
+      setInlineOpen(false);
+    }
+  }, [state.ok, router]);
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", id);
+      const res = await deleteCategoria(initialState, fd);
+      if (res.ok) {
+        setDeleteTarget(null);
+        router.refresh();
+        onDeleted();
+      }
+    });
+  }, [deleteTarget, onDeleted, router]);
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
+      <h4 className="text-sm font-semibold text-[var(--foreground)]">Categorías del menú</h4>
+      <p className="mt-1 text-xs text-[var(--foreground)]/60">
+        Crea y ordena bloques para tu carta. Los platos pueden quedar sin categoría.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {categorias.map((c) => (
+          <span
+            key={c.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[#f8f9fa] px-3 py-1.5 text-sm text-[var(--foreground)]"
+          >
+            <span>{c.nombre}</span>
+            <button
+              type="button"
+              className="rounded px-1 text-base leading-none text-[var(--foreground)]/50 hover:bg-gray-200 hover:text-red-600"
+              aria-label={`Eliminar categoría ${c.nombre}`}
+              onClick={() => setDeleteTarget(c)}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+
+        {!inlineOpen ? (
+          <button
+            type="button"
+            onClick={() => setInlineOpen(true)}
+            className="inline-flex items-center rounded-full border border-dashed border-[#1a6b3c]/50 bg-white px-3 py-1.5 text-sm font-medium text-[#1a6b3c] hover:bg-emerald-50"
+          >
+            ＋ Nueva categoría
+          </button>
+        ) : (
+          <form action={formAction} className="flex flex-wrap items-center gap-2">
+            <input
+              name="nombre"
+              required
+              autoFocus
+              placeholder="Nombre"
+              className="w-40 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm outline-none focus:border-[#1a6b3c]"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-[#1a6b3c] px-3 py-1.5 text-sm font-semibold text-white"
+            >
+              Agregar
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-gray-50"
+              onClick={() => setInlineOpen(false)}
+            >
+              Cancelar
+            </button>
+            <Feedback state={state} />
+          </form>
+        )}
+      </div>
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <button type="button" className="absolute inset-0 cursor-default" aria-label="Cerrar" onClick={() => setDeleteTarget(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-[var(--foreground)]">Eliminar categoría</h3>
+            {deleteTarget._count.platos > 0 ? (
+              <p className="mt-2 text-sm text-[var(--foreground)]/85">
+                Esta categoría tiene {deleteTarget._count.platos}{" "}
+                {deleteTarget._count.platos === 1 ? "plato" : "platos"}. Si la eliminas, esos platos quedarán sin
+                categoría.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-[var(--foreground)]/85">¿Eliminar la categoría «{deleteTarget.nombre}»?</p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm hover:bg-gray-50"
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={confirmDelete}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {pending ? "Eliminando…" : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CreatePlatoModal({
   open,
   onClose,
-  platos,
+  categorias,
 }: {
   open: boolean;
   onClose: () => void;
-  platos: CartaPlatoRow[];
+  categorias: CartaCategoriaRow[];
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState(createPlato, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
   const [precioDisplay, setPrecioDisplay] = useState("");
   const [active, setActive] = useState(true);
   const [tieneReceta, setTieneReceta] = useState(true);
@@ -99,39 +246,21 @@ function CreatePlatoModal({
     if (state.ok) {
       router.refresh();
       onClose();
-      formRef.current?.reset();
       setPrecioDisplay("");
     }
   }, [state.ok, onClose, router]);
 
   const precioNumerico = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
   const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
-  const categoryOptions = useMemo(() => {
-    const predefined = new Set<string>(platoCategorias);
-    const extra = new Set<string>();
-    for (const p of platos) {
-      const c = p.categoria?.trim();
-      if (c && !predefined.has(c)) extra.add(c);
-    }
-    return [...platoCategorias, ...Array.from(extra).sort((a, b) => a.localeCompare(b, "es"))];
-  }, [platos]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-20">
       <button type="button" className="fixed inset-0 cursor-default" aria-label="Cerrar" onClick={onClose} />
-      <div
-        className="relative z-10 w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg"
-        role="dialog"
-        aria-labelledby="plato-create-title"
-      >
-        <h3 id="plato-create-title" className="text-lg font-semibold text-[var(--foreground)]">
-          Crear plato
-        </h3>
+      <div className="relative z-10 w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg" role="dialog">
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">Crear plato</h3>
         <form
-          key="create-plato"
-          ref={formRef}
           action={formAction}
           className="mt-4 grid gap-4"
           onSubmit={(e) => {
@@ -152,14 +281,14 @@ function CreatePlatoModal({
           <div>
             <label className="text-sm font-medium text-[var(--foreground)]">Categoría</label>
             <select
-              name="category"
+              name="categoriaId"
               defaultValue=""
               className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
             >
-              <option value="">Selecciona...</option>
-              {categoryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              <option value="">Sin categoría</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
                 </option>
               ))}
             </select>
@@ -171,10 +300,7 @@ function CreatePlatoModal({
               required
               inputMode="numeric"
               value={precioFormateado}
-              onChange={(e) => {
-                const digits = e.target.value.replace(/[^\d]/g, "");
-                setPrecioDisplay(digits);
-              }}
+              onChange={(e) => setPrecioDisplay(e.target.value.replace(/[^\d]/g, ""))}
               className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
               placeholder="Ej: $ 25.000"
             />
@@ -183,27 +309,27 @@ function CreatePlatoModal({
             <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]/90">
               <input
                 type="checkbox"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
-                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c] focus:ring-[#1a6b3c]"
+                checked={tieneReceta}
+                onChange={(e) => setTieneReceta(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c]"
               />
-              Activo
+              ¿Tiene receta?
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]/90">
               <input
                 type="checkbox"
-                checked={tieneReceta}
-                onChange={(e) => setTieneReceta(e.target.checked)}
-                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c] focus:ring-[#1a6b3c]"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c]"
               />
-              ¿Tiene receta?
+              Activo
             </label>
           </div>
           <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-[var(--border)] bg-white px-4 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+              className="rounded-lg border border-[var(--border)] bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
             >
               Cancelar
             </button>
@@ -226,17 +352,16 @@ function CreatePlatoModal({
 function EditPlatoModal({
   open,
   onClose,
-  platos,
+  categorias,
   initial,
 }: {
   open: boolean;
   onClose: () => void;
-  platos: CartaPlatoRow[];
+  categorias: CartaCategoriaRow[];
   initial: CartaPlatoRow | null;
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState(updatePlatoCompleto, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
   const [precioDisplay, setPrecioDisplay] = useState("");
   const [active, setActive] = useState(true);
   const [tieneReceta, setTieneReceta] = useState(true);
@@ -252,38 +377,21 @@ function EditPlatoModal({
     if (state.ok) {
       router.refresh();
       onClose();
-      formRef.current?.reset();
     }
   }, [state.ok, onClose, router]);
 
   const precioNumerico = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
   const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
-  const categoryOptions = useMemo(() => {
-    const predefined = new Set<string>(platoCategorias);
-    const extra = new Set<string>();
-    for (const p of platos) {
-      const c = p.categoria?.trim();
-      if (c && !predefined.has(c)) extra.add(c);
-    }
-    return [...platoCategorias, ...Array.from(extra).sort((a, b) => a.localeCompare(b, "es"))];
-  }, [platos]);
 
   if (!open || !initial) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-20">
       <button type="button" className="fixed inset-0 cursor-default" aria-label="Cerrar" onClick={onClose} />
-      <div
-        className="relative z-10 w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg"
-        role="dialog"
-        aria-labelledby="plato-edit-title"
-      >
-        <h3 id="plato-edit-title" className="text-lg font-semibold text-[var(--foreground)]">
-          Editar plato
-        </h3>
+      <div className="relative z-10 w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg" role="dialog">
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">Editar plato</h3>
         <form
           key={initial.id}
-          ref={formRef}
           action={formAction}
           className="mt-4 grid gap-4"
           onSubmit={(e) => {
@@ -305,14 +413,14 @@ function EditPlatoModal({
           <div>
             <label className="text-sm font-medium text-[var(--foreground)]">Categoría</label>
             <select
-              name="categoria"
-              defaultValue={initial.categoria ?? ""}
+              name="categoriaId"
+              defaultValue={initial.categoriaId ?? ""}
               className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
             >
-              <option value="">Selecciona...</option>
-              {categoryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              <option value="">Sin categoría</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
                 </option>
               ))}
             </select>
@@ -324,39 +432,35 @@ function EditPlatoModal({
               required
               inputMode="numeric"
               value={precioFormateado}
-              onChange={(e) => {
-                const digits = e.target.value.replace(/[^\d]/g, "");
-                setPrecioDisplay(digits);
-              }}
+              onChange={(e) => setPrecioDisplay(e.target.value.replace(/[^\d]/g, ""))}
               className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
-              placeholder="Ej: $ 25.000"
             />
           </div>
           <div className="flex flex-wrap items-center gap-6">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]/90">
               <input
                 type="checkbox"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
-                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c] focus:ring-[#1a6b3c]"
+                checked={tieneReceta}
+                onChange={(e) => setTieneReceta(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c]"
               />
-              Activo
+              ¿Tiene receta?
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]/90">
               <input
                 type="checkbox"
-                checked={tieneReceta}
-                onChange={(e) => setTieneReceta(e.target.checked)}
-                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c] focus:ring-[#1a6b3c]"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] text-[#1a6b3c]"
               />
-              ¿Tiene receta?
+              Activo
             </label>
           </div>
           <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-[var(--border)] bg-white px-4 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+              className="rounded-lg border border-[var(--border)] bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
             >
               Cancelar
             </button>
@@ -390,21 +494,25 @@ function DeletePlatoModal({
   pending: boolean;
 }) {
   if (!open || !plato) return null;
-  const hasRecetaRows = plato.recetas.length > 0;
+  const tieneIngredientes = plato.recetas.length > 0;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <button type="button" className="fixed inset-0 cursor-default" aria-label="Cerrar" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-white p-6 shadow-lg">
         <h3 className="text-lg font-semibold text-[var(--foreground)]">Eliminar plato</h3>
-        <p className="mt-2 text-sm text-[var(--foreground)]/80">
-          ¿Seguro que deseas eliminar <strong>{plato.nombre}</strong>?
-        </p>
-        {hasRecetaRows ? (
-          <p className="mt-2 text-sm text-amber-800">
-            Este plato tiene una receta asociada que también será eliminada.
+        {tieneIngredientes ? (
+          <>
+            <p className="mt-2 text-sm text-[var(--foreground)]/85">
+              Este plato tiene una receta asociada que también será eliminada. ¿Confirmas?
+            </p>
+            <p className="mt-1 text-sm font-medium text-[var(--foreground)]">{plato.nombre}</p>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--foreground)]/85">
+            ¿Seguro que deseas eliminar <strong>{plato.nombre}</strong>?
           </p>
-        ) : null}
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
@@ -429,22 +537,25 @@ function DeletePlatoModal({
 
 export function CartaTab({
   platos,
+  categorias,
   insumos,
   initialDishId,
 }: {
   platos: CartaPlatoRow[];
+  categorias: CartaCategoriaRow[];
   insumos: Insumo[];
   initialDishId?: string;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [pendingDeletePlato, setPendingDeletePlato] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editPlato, setEditPlato] = useState<CartaPlatoRow | null>(null);
   const [deletePlato, setDeletePlato] = useState<CartaPlatoRow | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [recipePlatoId, setRecipePlatoId] = useState<string | null>(null);
 
-  const grouped = useMemo(() => groupByCategory(platos), [platos]);
+  const menuSections = useMemo(() => buildMenuSections(platos, categorias), [platos, categorias]);
 
   const activeDishes = useMemo(() => platos.filter((p) => p.active), [platos]);
 
@@ -478,21 +589,20 @@ export function CartaTab({
     if (p?.tieneReceta) setRecipePlatoId(initialDishId);
   }, [initialDishId, platos]);
 
-  const handleCardClick = useCallback(
-    (p: CartaPlatoRow) => {
-      if (!p.tieneReceta) return;
-      setRecipePlatoId(p.id);
-    },
-    [],
-  );
+  const handleCardClick = useCallback((p: CartaPlatoRow) => {
+    if (!p.tieneReceta) return;
+    setRecipePlatoId(p.id);
+  }, []);
 
-  const handleDelete = useCallback(() => {
+  const handleDeletePlato = useCallback(() => {
     if (!deletePlato) return;
     const id = deletePlato.id;
+    setPendingDeletePlato(true);
     startTransition(async () => {
       const fd = new FormData();
       fd.set("id", id);
       const res = await deletePlatoConReceta(fd);
+      setPendingDeletePlato(false);
       if (res.ok) {
         setDeletePlato(null);
         if (recipePlatoId === id) setRecipePlatoId(null);
@@ -502,133 +612,147 @@ export function CartaTab({
   }, [deletePlato, recipePlatoId, router]);
 
   return (
-    <section className="relative rounded-xl border border-[var(--border)] bg-[#f8f9fa] p-6 shadow-sm">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-[var(--foreground)]">Carta</h3>
-          <p className="mt-1 text-sm text-[var(--foreground)]/60">
-            Tus platos por categoría; abre la receta desde cada tarjeta cuando aplique.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
-          style={{ backgroundColor: "#1a6b3c" }}
-        >
-          Crear plato
-        </button>
-      </div>
+    <div className="space-y-6">
+      <CategoriaChips categorias={categorias} onDeleted={() => router.refresh()} />
 
-      {platos.length === 0 ? (
-        <p className="text-sm text-[var(--foreground)]/60">Aún no tienes platos en tu carta. Crea el primero.</p>
-      ) : (
-        <div className="space-y-8">
-          {grouped.map(({ categoria, platos: list }) => (
-            <div key={categoria}>
-              <h4 className="mb-3 text-sm font-bold text-[var(--foreground)]">{categoria}</h4>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {list.map((p) => {
-                  const st = cardStatus(p);
-                  const clickable = p.tieneReceta;
-                  return (
-                    <div
-                      key={p.id}
-                      role={clickable ? "button" : undefined}
-                      tabIndex={clickable ? 0 : undefined}
-                      title={!clickable ? "Este plato no requiere receta" : undefined}
-                      onClick={() => handleCardClick(p)}
-                      onKeyDown={(e) => {
-                        if (!clickable) return;
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleCardClick(p);
-                        }
-                      }}
-                      className={`relative rounded-xl border border-[var(--border)] bg-white p-4 pt-10 shadow-sm transition-shadow ${
-                        clickable
-                          ? "cursor-pointer hover:shadow-md"
-                          : "cursor-default hover:shadow-sm"
-                      }`}
-                    >
-                      <span
-                        className={`absolute left-3 top-3 h-2.5 w-2.5 rounded-full ${statusDot[st]}`}
-                        title={
-                          st === "complete"
-                            ? "Receta completa"
-                            : st === "needsRecipe"
-                              ? "Falta completar la receta"
-                              : "Sin receta"
-                        }
-                      />
-                      <div className="absolute right-2 top-2">
-                        <button
-                          type="button"
-                          className="rounded-md px-2 py-1 text-lg leading-none text-[var(--foreground)]/70 hover:bg-gray-100"
-                          aria-label="Más opciones"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuId((prev) => (prev === p.id ? null : p.id));
-                          }}
-                        >
-                          ⋯
-                        </button>
-                        {menuId === p.id ? (
-                          <>
-                            <button
-                              type="button"
-                              className="fixed inset-0 z-10 cursor-default"
-                              aria-label="Cerrar menú"
-                              onClick={() => setMenuId(null)}
-                            />
-                            <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
+      <section className="relative rounded-xl border border-[var(--border)] bg-[#f8f9fa] p-6 shadow-sm">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-[var(--foreground)]">Menú</h3>
+            <p className="mt-1 text-sm text-[var(--foreground)]/60">Platos agrupados por categoría.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+            style={{ backgroundColor: "#1a6b3c" }}
+          >
+            Crear plato
+          </button>
+        </div>
+
+        {platos.length === 0 ? (
+          <p className="text-sm text-[var(--foreground)]/60">Aún no tienes platos en tu carta. Crea el primero.</p>
+        ) : menuSections.length === 0 ? (
+          <p className="text-sm text-[var(--foreground)]/60">No hay platos para mostrar en las categorías.</p>
+        ) : (
+          <div className="space-y-10">
+            {menuSections.map((sec) => (
+              <div key={sec.key}>
+                <h4 className="mb-3 text-sm font-bold text-[var(--foreground)]">{sec.titulo}</h4>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {sec.platos.map((p) => {
+                    const st = cardStatus(p);
+                    const clickable = p.tieneReceta;
+                    return (
+                      <div
+                        key={p.id}
+                        role={clickable ? "button" : undefined}
+                        tabIndex={clickable ? 0 : undefined}
+                        title={!clickable ? "Este plato no requiere receta" : undefined}
+                        onClick={() => handleCardClick(p)}
+                        onKeyDown={(e) => {
+                          if (!clickable) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleCardClick(p);
+                          }
+                        }}
+                        className={`relative rounded-xl border border-[var(--border)] bg-white p-4 pt-10 shadow-sm transition-shadow ${
+                          clickable ? "cursor-pointer hover:shadow-md" : "cursor-default hover:shadow-sm"
+                        }`}
+                      >
+                        <span
+                          className={`absolute left-3 top-3 h-2.5 w-2.5 rounded-full ${statusDot[st]}`}
+                          title={
+                            st === "complete"
+                              ? "Receta completa"
+                              : st === "needsRecipe"
+                                ? "Falta completar la receta"
+                                : "Sin receta"
+                          }
+                        />
+                        <div className="absolute right-2 top-2 flex items-start gap-1">
+                          <span
+                            className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                              p.active ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-700"
+                            }`}
+                          >
+                            {p.active ? "Activo" : "Inactivo"}
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded-md px-2 py-1 text-lg leading-none text-[var(--foreground)]/70 hover:bg-gray-100"
+                            aria-label="Más opciones"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuId((prev) => (prev === p.id ? null : p.id));
+                            }}
+                          >
+                            ⋯
+                          </button>
+                          {menuId === p.id ? (
+                            <>
                               <button
                                 type="button"
-                                className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMenuId(null);
-                                  setEditPlato(p);
-                                }}
-                              >
-                                Editar plato
-                              </button>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMenuId(null);
-                                  setDeletePlato(p);
-                                }}
-                              >
-                                Eliminar plato
-                              </button>
-                            </div>
-                          </>
-                        ) : null}
+                                className="fixed inset-0 z-10 cursor-default"
+                                aria-label="Cerrar menú"
+                                onClick={() => setMenuId(null)}
+                              />
+                              <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
+                                <button
+                                  type="button"
+                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuId(null);
+                                    setEditPlato(p);
+                                  }}
+                                >
+                                  Editar plato
+                                </button>
+                                <button
+                                  type="button"
+                                  className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuId(null);
+                                    setDeletePlato(p);
+                                  }}
+                                >
+                                  Eliminar plato
+                                </button>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                        <div className="pr-14">
+                          <div className="text-sm font-semibold text-[var(--foreground)]">{p.nombre}</div>
+                          <div className="mt-1 text-sm text-[var(--foreground)]/80">{formatPrecioCOP(p.precioVenta)}</div>
+                        </div>
                       </div>
-                      <div className="pr-6">
-                        <div className="text-sm font-semibold text-[var(--foreground)]">{p.nombre}</div>
-                        <div className="mt-1 text-sm text-[var(--foreground)]/80">{formatPrecioCOP(p.precioVenta)}</div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </section>
 
-      <CreatePlatoModal open={createOpen} onClose={() => setCreateOpen(false)} platos={platos} />
-      <EditPlatoModal open={editPlato !== null} onClose={() => setEditPlato(null)} platos={platos} initial={editPlato} />
+      <CreatePlatoModal open={createOpen} onClose={() => setCreateOpen(false)} categorias={categorias} />
+      <EditPlatoModal
+        open={editPlato !== null}
+        onClose={() => setEditPlato(null)}
+        categorias={categorias}
+        initial={editPlato}
+      />
       <DeletePlatoModal
         open={deletePlato !== null}
         plato={deletePlato}
         onClose={() => setDeletePlato(null)}
-        onConfirm={handleDelete}
-        pending={pending}
+        onConfirm={handleDeletePlato}
+        pending={pendingDeletePlato}
       />
 
       <RecipesCardsModal
@@ -640,6 +764,6 @@ export function CartaTab({
         externalPlatoId={recipePlatoId}
         onExternalClose={() => setRecipePlatoId(null)}
       />
-    </section>
+    </div>
   );
 }

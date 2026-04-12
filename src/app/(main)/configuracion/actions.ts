@@ -231,17 +231,26 @@ export async function addDish(_: ActionState, formData: FormData): Promise<Actio
   try {
     const userId = await requireUserId();
     const name = requiredString(formData, "name");
-    const category = optionalString(formData, "category");
     const salePriceRaw = requiredString(formData, "salePrice");
     const activeRaw = formData.get("active");
     const active = activeRaw === "on" || activeRaw === "true";
+    const categoriaIdRaw = optionalString(formData, "categoriaId");
+    let categoriaId: string | null = null;
+    if (categoriaIdRaw) {
+      const cat = await prisma.categoria.findFirst({
+        where: { id: categoriaIdRaw, userId },
+        select: { id: true },
+      });
+      if (!cat) return { ok: false, message: "Categoría inválida.", field: "categoriaId" };
+      categoriaId = categoriaIdRaw;
+    }
 
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
     const salePrice = toPositiveDecimal(salePriceRaw);
     if (!salePrice) return { ok: false, message: "El precio de venta debe ser mayor a 0.", field: "salePrice" };
 
     await prisma.plato.create({
-      data: { userId, nombre: name, categoria: category, precioVenta: salePrice, active },
+      data: { userId, nombre: name, categoriaId, precioVenta: salePrice, active },
     });
 
     revalidatePath("/configuracion");
@@ -273,10 +282,19 @@ export async function updatePlato(formData: FormData): Promise<ActionState> {
     const userId = await requireUserId();
     const id = requiredString(formData, "id");
     const nombre = requiredString(formData, "nombre");
-    const categoria = optionalString(formData, "categoria");
     const salePriceRaw = requiredString(formData, "salePrice");
     const activeRaw = formData.get("active");
     const active = activeRaw === "on" || activeRaw === "true";
+    const categoriaIdRaw = optionalString(formData, "categoriaId");
+    let categoriaId: string | null = null;
+    if (categoriaIdRaw) {
+      const cat = await prisma.categoria.findFirst({
+        where: { id: categoriaIdRaw, userId },
+        select: { id: true },
+      });
+      if (!cat) return { ok: false, message: "Categoría inválida." };
+      categoriaId = categoriaIdRaw;
+    }
 
     if (!id) return { ok: false, message: "Plato inválido." };
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
@@ -285,7 +303,7 @@ export async function updatePlato(formData: FormData): Promise<ActionState> {
 
     const res = await prisma.plato.updateMany({
       where: { id, userId },
-      data: { nombre, categoria: categoria ?? null, precioVenta: salePrice, active },
+      data: { nombre, categoriaId, precioVenta: salePrice, active },
     });
     if (res.count === 0) return { ok: false, message: "Plato no encontrado." };
 
@@ -304,12 +322,21 @@ export async function createPlato(_: ActionState, formData: FormData): Promise<A
   try {
     const userId = await requireUserId();
     const name = requiredString(formData, "name");
-    const category = optionalString(formData, "category");
     const salePriceRaw = requiredString(formData, "salePrice");
     const activeRaw = formData.get("active");
     const active = activeRaw === "on" || activeRaw === "true";
     const tieneRecetaRaw = formData.get("tieneReceta");
     const tieneReceta = tieneRecetaRaw === "on" || tieneRecetaRaw === "true";
+    const categoriaIdRaw = optionalString(formData, "categoriaId");
+    let categoriaId: string | null = null;
+    if (categoriaIdRaw) {
+      const cat = await prisma.categoria.findFirst({
+        where: { id: categoriaIdRaw, userId },
+        select: { id: true },
+      });
+      if (!cat) return { ok: false, message: "Categoría inválida.", field: "categoriaId" };
+      categoriaId = categoriaIdRaw;
+    }
 
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
     const salePrice = toPositiveDecimal(salePriceRaw);
@@ -319,7 +346,7 @@ export async function createPlato(_: ActionState, formData: FormData): Promise<A
       data: {
         userId,
         nombre: name,
-        categoria: category,
+        categoriaId,
         precioVenta: salePrice,
         active,
         tieneReceta,
@@ -342,12 +369,21 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
     const userId = await requireUserId();
     const id = requiredString(formData, "id");
     const nombre = requiredString(formData, "nombre");
-    const categoria = optionalString(formData, "categoria");
     const salePriceRaw = requiredString(formData, "salePrice");
     const activeRaw = formData.get("active");
     const active = activeRaw === "on" || activeRaw === "true";
     const tieneRecetaRaw = formData.get("tieneReceta");
     const tieneReceta = tieneRecetaRaw === "on" || tieneRecetaRaw === "true";
+    const categoriaIdRaw = optionalString(formData, "categoriaId");
+    let categoriaId: string | null = null;
+    if (categoriaIdRaw) {
+      const cat = await prisma.categoria.findFirst({
+        where: { id: categoriaIdRaw, userId },
+        select: { id: true },
+      });
+      if (!cat) return { ok: false, message: "Categoría inválida." };
+      categoriaId = categoriaIdRaw;
+    }
 
     if (!id) return { ok: false, message: "Plato inválido." };
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
@@ -358,7 +394,7 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
       where: { id, userId },
       data: {
         nombre,
-        categoria: categoria ?? null,
+        categoriaId,
         precioVenta: salePrice,
         active,
         tieneReceta,
@@ -374,6 +410,54 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
         ? "Ya existe un plato con ese nombre."
         : "No se pudo actualizar el plato.";
     return { ok: false, message };
+  }
+}
+
+export async function createCategoria(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const nombre = requiredString(formData, "nombre");
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
+
+    await prisma.categoria.create({
+      data: { userId, nombre },
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Categoría creada." };
+  } catch (e) {
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe una categoría con ese nombre."
+        : "No se pudo crear la categoría.";
+    return { ok: false, message };
+  }
+}
+
+export async function deleteCategoria(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Categoría inválida." };
+
+    const existing = await prisma.categoria.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!existing) return { ok: false, message: "Categoría no encontrada." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.plato.updateMany({
+        where: { userId, categoriaId: id },
+        data: { categoriaId: null },
+      });
+      await tx.categoria.deleteMany({ where: { id, userId } });
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Categoría eliminada." };
+  } catch {
+    return { ok: false, message: "No se pudo eliminar la categoría." };
   }
 }
 

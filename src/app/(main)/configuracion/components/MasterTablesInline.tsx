@@ -11,7 +11,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { insumoCategorias, platoCategorias, proveedorCategorias } from "../categories";
+import { insumoCategorias, proveedorCategorias } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
 import {
   checkInsumoEnUso,
@@ -366,7 +366,9 @@ function FilterPopover({
 
 type ProveedorRow = Pick<Proveedor, "id" | "nombre" | "telefono" | "categoria">;
 type InsumoRow = Pick<Insumo, "id" | "nombre" | "unidadBase" | "categoria">;
-type PlatoRow = Pick<Plato, "id" | "nombre" | "categoria" | "precioVenta" | "active">;
+type PlatoRow = Pick<Plato, "id" | "nombre" | "categoriaId" | "precioVenta" | "active"> & {
+  categoria: { id: string; nombre: string } | null;
+};
 
 type DeleteInsumoModalState =
   | { phase: "checking"; id: string; nombre: string }
@@ -1165,7 +1167,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<{
     nombre: string;
-    categoria: string;
+    categoriaId: string;
     precioDigits: string;
     active: boolean;
   } | null>(null);
@@ -1186,7 +1188,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
   const platoCatOptions = useMemo(() => {
     const keys = new Set<string>();
     for (const r of rows) {
-      keys.add(r.categoria?.trim() ? r.categoria.trim() : EMPTY_KEY);
+      keys.add(r.categoria?.nombre?.trim() ? r.categoria.nombre.trim() : EMPTY_KEY);
     }
     return Array.from(keys)
       .sort((a, b) => {
@@ -1198,6 +1200,16 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
         value,
         label: value === EMPTY_KEY ? "(Sin categoría)" : value,
       }));
+  }, [rows]);
+
+  const platoCategoriaSelectOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rows) {
+      if (r.categoria) m.set(r.categoria.id, r.categoria.nombre);
+    }
+    return Array.from(m.entries())
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   }, [rows]);
 
   const activoOptions = useMemo(() => {
@@ -1228,7 +1240,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     return rows.filter((d) => {
       if (!textIncludes(d.nombre, fNombre)) return false;
       if (platoCatApplied.size > 0) {
-        const key = d.categoria?.trim() ? d.categoria.trim() : EMPTY_KEY;
+        const key = d.categoria?.nombre?.trim() ? d.categoria.nombre.trim() : EMPTY_KEY;
         if (!platoCatApplied.has(key)) return false;
       }
       const precio = Number(d.precioVenta);
@@ -1286,7 +1298,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     setError(null);
     setDraft({
       nombre: r.nombre,
-      categoria: r.categoria ?? "",
+      categoriaId: r.categoriaId ?? "",
       precioDigits: precioVentaToDigits(r.precioVenta),
       active: r.active,
     });
@@ -1308,7 +1320,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
     const fd = new FormData();
     fd.set("id", editingId);
     fd.set("nombre", draft.nombre);
-    fd.set("categoria", draft.categoria);
+    fd.set("categoriaId", draft.categoriaId);
     fd.set("salePrice", salePrice);
     fd.set("active", draft.active ? "true" : "false");
     startTransition(async () => {
@@ -1460,18 +1472,18 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                       {isEdit && draft ? (
                         <select
                           className={inlineField}
-                          value={draft.categoria}
-                          onChange={(e) => setDraft((x) => (x ? { ...x, categoria: e.target.value } : x))}
+                          value={draft.categoriaId}
+                          onChange={(e) => setDraft((x) => (x ? { ...x, categoriaId: e.target.value } : x))}
                         >
-                          <option value="">Selecciona...</option>
-                          {platoCategorias.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
+                          <option value="">Sin categoría</option>
+                          {platoCategoriaSelectOptions.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nombre}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        (d.categoria ?? "—")
+                        (d.categoria?.nombre ?? "—")
                       )}
                     </td>
                     <td className="border-b border-[var(--border)] px-3 py-2 align-middle">

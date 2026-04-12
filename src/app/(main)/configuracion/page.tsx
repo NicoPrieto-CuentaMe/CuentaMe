@@ -31,7 +31,7 @@ export default async function ConfiguracionPage({
 
   const tab = normalizeTab(searchParams?.tab);
 
-  const [proveedores, insumos, platos] = await Promise.all([
+  const [proveedores, insumos, platos, categorias] = await Promise.all([
     prisma.proveedor.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -47,8 +47,14 @@ export default async function ConfiguracionPage({
           include: { insumo: true },
           orderBy: { insumo: { nombre: "asc" } },
         },
+        categoria: true,
       },
-      orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
+      orderBy: { nombre: "asc" },
+    }),
+    prisma.categoria.findMany({
+      where: { userId },
+      include: { _count: { select: { platos: true } } },
+      orderBy: { nombre: "asc" },
     }),
   ]);
 
@@ -124,7 +130,12 @@ export default async function ConfiguracionPage({
       ) : null}
 
       {tab === "carta" ? (
-        <CartaTab platos={platos} insumos={insumos} initialDishId={searchParams?.dishId} />
+        <CartaTab
+          platos={platos}
+          categorias={categorias}
+          insumos={insumos}
+          initialDishId={searchParams?.dishId}
+        />
       ) : null}
     </div>
   );
