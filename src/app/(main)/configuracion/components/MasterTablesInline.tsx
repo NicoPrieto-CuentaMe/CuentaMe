@@ -1,6 +1,6 @@
 "use client";
 
-import type { Insumo, Plato, Proveedor } from "@prisma/client";
+import type { CategoriaProveedor, Insumo, Plato, Proveedor } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
@@ -11,7 +11,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { insumoCategorias, proveedorCategorias } from "../categories";
+import { insumoCategorias, proveedorCategoriaLabel, proveedorCategoriaOptions } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
 import {
   checkInsumoEnUso,
@@ -517,17 +517,20 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   const catOptions = useMemo(() => {
     const keys = new Set<string>();
     for (const r of rows) {
-      keys.add(r.categoria?.trim() ? r.categoria.trim() : EMPTY_KEY);
+      keys.add(r.categoria ?? EMPTY_KEY);
     }
     return Array.from(keys)
       .sort((a, b) => {
-        const la = a === EMPTY_KEY ? "(Sin categoría)" : a;
-        const lb = b === EMPTY_KEY ? "(Sin categoría)" : b;
+        const la = a === EMPTY_KEY ? "(Sin categoría)" : proveedorCategoriaLabel(a as CategoriaProveedor) ?? a;
+        const lb = b === EMPTY_KEY ? "(Sin categoría)" : proveedorCategoriaLabel(b as CategoriaProveedor) ?? b;
         return la.localeCompare(lb, "es");
       })
       .map((value) => ({
         value,
-        label: value === EMPTY_KEY ? "(Sin categoría)" : value,
+        label:
+          value === EMPTY_KEY
+            ? "(Sin categoría)"
+            : proveedorCategoriaLabel(value as CategoriaProveedor) ?? value,
       }));
   }, [rows]);
 
@@ -540,7 +543,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
       if (!textIncludes(s.nombre, fNombre)) return false;
       if (!textIncludes(s.telefono ?? "", fTelefono)) return false;
       if (catApplied.size > 0) {
-        const key = s.categoria?.trim() ? s.categoria.trim() : EMPTY_KEY;
+        const key = s.categoria ?? EMPTY_KEY;
         if (!catApplied.has(key)) return false;
       }
       return true;
@@ -724,14 +727,14 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                           onChange={(e) => setDraft((d) => (d ? { ...d, categoria: e.target.value } : d))}
                         >
                           <option value="">Selecciona...</option>
-                          {proveedorCategorias.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
+                          {proveedorCategoriaOptions.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        (s.categoria ?? "—")
+                        (proveedorCategoriaLabel(s.categoria) ?? "—")
                       )}
                     </td>
                     <td className="border-b border-[var(--border)] px-3 py-2 align-middle">

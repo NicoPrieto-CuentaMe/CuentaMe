@@ -20,6 +20,16 @@ enum Unidad {
   GARRAFA
 }
 
+enum CategoriaProveedor {
+  CARNES
+  LACTEOS
+  VERDURAS_Y_FRUTAS
+  GRANOS_Y_SECOS
+  BEBIDAS
+  LIMPIEZA_Y_DESECHABLES
+  OTRO
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String   @unique
@@ -28,39 +38,49 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  proveedores  Proveedor[]
-  insumos      Insumo[]
-  platos       Plato[]
-  recetas      Receta[]
-  categorias   Categoria[]
+  proveedores   Proveedor[]
+  insumos       Insumo[]
+  platos        Plato[]
+  recetas       Receta[]
+  categorias    Categoria[]
+  compras       Compra[]
+  inventarios   Inventario[]
+  ventas        Venta[]
+  detallesVenta DetalleVenta[]
+  empleados     Empleado[]
+  nominas       Nomina[]
+  gastosFijos   GastoFijo[]
 }
 
 model Proveedor {
-  id        String   @id @default(cuid())
+  id        String              @id @default(cuid())
   userId    String
   nombre    String
   telefono  String?
-  categoria String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  categoria CategoriaProveedor?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  compras Compra[]
 
   @@index([userId])
   @@unique([userId, nombre])
 }
 
 model Insumo {
-  id        String   @id @default(cuid())
-  userId    String
+  id         String   @id @default(cuid())
+  userId     String
   nombre     String
   unidadBase Unidad
   categoria  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recetas Receta[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recetas     Receta[]
+  compras     Compra[]
+  inventarios Inventario[]
 
   @@index([userId])
   @@unique([userId, nombre])
@@ -79,19 +99,20 @@ model Categoria {
 }
 
 model Plato {
-  id        String   @id @default(cuid())
-  userId    String
-  nombre     String
-  categoriaId  String?
-  precioVenta Decimal @db.Decimal(10, 2)
-  active    Boolean  @default(true)
-  tieneReceta Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(cuid())
+  userId        String
+  nombre        String
+  categoriaId   String?
+  precioVenta   Decimal   @db.Decimal(10, 2)
+  active        Boolean   @default(true)
+  tieneReceta   Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoria    Categoria? @relation(fields: [categoriaId], references: [id])
-  recetas Receta[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoria     Categoria?     @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  recetas       Receta[]
+  detallesVenta DetalleVenta[]
 
   @@index([userId])
   @@unique([userId, nombre])
@@ -115,4 +136,130 @@ model Receta {
   @@index([platoId])
   @@index([insumoId])
   @@unique([platoId, insumoId])
+}
+
+model Compra {
+  id             String   @id @default(cuid())
+  userId         String
+  fecha          DateTime
+  proveedorId    String
+  insumoId       String
+  cantidad       Decimal  @db.Decimal(12, 4)
+  unidad         Unidad
+  precioUnitario Decimal  @db.Decimal(10, 2)
+  total          Decimal  @db.Decimal(10, 2)
+  notas          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proveedor Proveedor @relation(fields: [proveedorId], references: [id])
+  insumo    Insumo    @relation(fields: [insumoId], references: [id])
+
+  @@index([userId])
+  @@index([proveedorId])
+  @@index([insumoId])
+}
+
+model Inventario {
+  id        String   @id @default(cuid())
+  userId    String
+  insumoId  String
+  fecha     DateTime
+  stockReal Decimal  @db.Decimal(12, 4)
+  notas     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  insumo Insumo @relation(fields: [insumoId], references: [id])
+
+  @@index([userId])
+  @@index([insumoId])
+}
+
+model Venta {
+  id         String   @id @default(cuid())
+  userId     String
+  fecha      DateTime
+  hora       String
+  tipo       String
+  total      Decimal  @db.Decimal(10, 2)
+  metodoPago String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  detalles DetalleVenta[]
+
+  @@index([userId])
+}
+
+model DetalleVenta {
+  id             String   @id @default(cuid())
+  userId         String
+  ventaId        String
+  platoId        String
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venta Venta @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  plato Plato @relation(fields: [platoId], references: [id])
+
+  @@index([userId])
+  @@index([ventaId])
+}
+
+model Empleado {
+  id           String   @id @default(cuid())
+  userId       String
+  nombre       String
+  rol          String
+  tipoContrato String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nominas Nomina[]
+
+  @@index([userId])
+}
+
+model Nomina {
+  id          String   @id @default(cuid())
+  userId      String
+  empleadoId  String
+  fecha       DateTime
+  salarioBase Decimal  @db.Decimal(10, 2)
+  horasExtra  Decimal  @db.Decimal(10, 2) @default(0)
+  deducciones Decimal  @db.Decimal(10, 2) @default(0)
+  totalPagado Decimal  @db.Decimal(10, 2)
+  notas       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  empleado Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@index([userId])
+}
+
+model GastoFijo {
+  id           String   @id @default(cuid())
+  userId       String
+  fecha        DateTime
+  categoria    String
+  descripcion  String?
+  monto        Decimal  @db.Decimal(10, 2)
+  periodicidad String
+  metodoPago   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

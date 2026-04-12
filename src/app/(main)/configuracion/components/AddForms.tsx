@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState } from "react-dom";
 import type { ActionState } from "../actions";
 import { addDish, addSupplier, addSupply, saveRecipeComplete } from "../actions";
-import { insumoCategorias, proveedorCategorias } from "../categories";
+import { insumoCategorias, proveedorCategoriaOptions } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits } from "../cop-price";
 import { UNIT_OPTIONS } from "../units";
 import type { Insumo, Plato } from "@prisma/client";
@@ -58,9 +58,9 @@ export function AddSupplierForm() {
           className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
         >
           <option value="">Selecciona...</option>
-          {proveedorCategorias.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {proveedorCategoriaOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
             </option>
           ))}
         </select>
