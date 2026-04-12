@@ -231,16 +231,9 @@ function RecipeInsumoUnitHints({ unidadBase }: { unidadBase: Unidad }) {
     .map((code) => UNIT_OPTIONS.find((u) => u.value === code)?.label ?? code)
     .join(", ");
   return (
-    <>
-      <p className="mt-1 text-[10px] leading-tight text-text-tertiary sm:text-xs">
-        Este insumo se mide en {FAMILIA_LABEL_ES[familia]}: {list}
-      </p>
-      {familia === "CONTEO" ? (
-        <p className="mt-0.5 text-[10px] leading-tight text-warning sm:text-xs">
-          ⚠ Unidad de empaque — verifica que las cantidades sean consistentes
-        </p>
-      ) : null}
-    </>
+    <p className="mt-1 text-[10px] leading-tight text-text-tertiary sm:text-xs">
+      Este insumo se mide en {FAMILIA_LABEL_ES[familia]}: {list}
+    </p>
   );
 }
 

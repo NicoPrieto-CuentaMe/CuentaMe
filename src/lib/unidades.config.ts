@@ -31,5 +31,5 @@ export function getUnidadesCompatibles(unidadBase: string): string[] {
 export const FAMILIA_LABEL_ES: Record<FamiliaUnidad, string> = {
   PESO: "Peso",
   VOLUMEN: "Volumen",
-  CONTEO: "Conteo (empaque)",
+  CONTEO: "Conteo",
 };
