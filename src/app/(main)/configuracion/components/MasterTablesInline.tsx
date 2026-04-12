@@ -24,6 +24,7 @@ import {
 } from "../actions";
 import { UNIT_OPTIONS } from "../units";
 import { ConfirmSubmitButton } from "./ConfirmSubmitButton";
+import { ProveedorCategoriasMultiSelect } from "./ProveedorCategoriasMultiSelect";
 
 const inlineField =
   "w-full min-w-0 rounded border border-border bg-surface-elevated px-1.5 py-1 text-sm text-text-primary outline-none focus:border-accent";
@@ -725,32 +726,14 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                     </td>
                     <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
-                        <div className="w-full max-w-xl rounded-lg border border-border bg-surface-elevated p-2">
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {proveedorCategoriaOptions.map((o) => (
-                              <label
-                                key={o.value}
-                                className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-surface px-1.5 py-1.5 text-xs text-text-primary has-[:checked]:border-accent has-[:checked]:bg-accent-light/40"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={draft.categorias.includes(o.value)}
-                                  onChange={() =>
-                                    setDraft((d) => {
-                                      if (!d) return d;
-                                      const next = d.categorias.includes(o.value)
-                                        ? d.categorias.filter((x) => x !== o.value)
-                                        : [...d.categorias, o.value];
-                                      return { ...d, categorias: next };
-                                    })
-                                  }
-                                  className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-2 border-border bg-surface accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                />
-                                <span className="min-w-0 select-none leading-tight">{o.label}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
+                        <ProveedorCategoriasMultiSelect
+                          variant="inline"
+                          className="min-w-[10rem] max-w-[14rem]"
+                          value={draft.categorias}
+                          onChange={(next) =>
+                            setDraft((d) => (d ? { ...d, categorias: next } : d))
+                          }
+                        />
                       ) : s.categorias.length === 0 ? (
                         "—"
                       ) : (
