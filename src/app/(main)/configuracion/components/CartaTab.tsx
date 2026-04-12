@@ -15,7 +15,8 @@ import {
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
 import { RecipesCardsModal, type RecipeCardGroup } from "./RecipeCardsModal";
 
-const initialState: ActionState = { ok: true };
+/** Estado inicial para useFormState: no marcar éxito hasta que el server devuelva resultado explícito. */
+const formIdleState: ActionState = { ok: false, message: "" };
 
 export type CartaCategoriaRow = Categoria & {
   _count: { platos: number };
@@ -50,6 +51,7 @@ const statusDot: Record<CardStatus, string> = {
 
 function Feedback({ state }: { state: ActionState }) {
   if (!("ok" in state) || state.ok) return null;
+  if (!state.message?.trim()) return null;
   return (
     <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {state.message}
@@ -98,15 +100,15 @@ function CategoriaChips({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [inlineOpen, setInlineOpen] = useState(false);
-  const [state, formAction] = useFormState(createCategoria, initialState);
+  const [state, formAction] = useFormState(createCategoria, formIdleState);
   const [deleteTarget, setDeleteTarget] = useState<CartaCategoriaRow | null>(null);
 
   useEffect(() => {
-    if (state.ok) {
+    if (state.ok && state.message) {
       router.refresh();
       setInlineOpen(false);
     }
-  }, [state.ok, router]);
+  }, [state.ok, state.message, router]);
 
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) return;
@@ -114,7 +116,7 @@ function CategoriaChips({
     startTransition(async () => {
       const fd = new FormData();
       fd.set("id", id);
-      const res = await deleteCategoria(initialState, fd);
+      const res = await deleteCategoria(formIdleState, fd);
       if (res.ok) {
         setDeleteTarget(null);
         router.refresh();
@@ -126,7 +128,21 @@ function CategoriaChips({
   return (
     <div className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
       <h4 className="text-sm font-semibold text-[var(--foreground)]">Categorías del menú</h4>
-      <p className="mt-1 text-xs text-[var(--foreground)]/60">
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+          Receta completa
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden />
+          Receta pendiente
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-gray-400" aria-hidden />
+          No requiere receta
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-[var(--foreground)]/60">
         Crea y ordena bloques para tu carta. Los platos pueden quedar sin categoría.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -230,7 +246,7 @@ function CreatePlatoModal({
   categorias: CartaCategoriaRow[];
 }) {
   const router = useRouter();
-  const [state, formAction] = useFormState(createPlato, initialState);
+  const [state, formAction] = useFormState(createPlato, formIdleState);
   const [precioDisplay, setPrecioDisplay] = useState("");
   const [active, setActive] = useState(true);
   const [tieneReceta, setTieneReceta] = useState(true);
@@ -243,12 +259,12 @@ function CreatePlatoModal({
   }, [open]);
 
   useEffect(() => {
-    if (state.ok) {
+    if (state.ok && state.message) {
       router.refresh();
       onClose();
       setPrecioDisplay("");
     }
-  }, [state.ok, onClose, router]);
+  }, [state.ok, state.message, onClose, router]);
 
   const precioNumerico = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
   const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
@@ -361,7 +377,7 @@ function EditPlatoModal({
   initial: CartaPlatoRow | null;
 }) {
   const router = useRouter();
-  const [state, formAction] = useFormState(updatePlatoCompleto, initialState);
+  const [state, formAction] = useFormState(updatePlatoCompleto, formIdleState);
   const [precioDisplay, setPrecioDisplay] = useState("");
   const [active, setActive] = useState(true);
   const [tieneReceta, setTieneReceta] = useState(true);
@@ -374,11 +390,11 @@ function EditPlatoModal({
   }, [open, initial]);
 
   useEffect(() => {
-    if (state.ok) {
+    if (state.ok && state.message) {
       router.refresh();
       onClose();
     }
-  }, [state.ok, onClose, router]);
+  }, [state.ok, state.message, onClose, router]);
 
   const precioNumerico = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
   const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
@@ -550,6 +566,8 @@ export function CartaTab({
   const [, startTransition] = useTransition();
   const [pendingDeletePlato, setPendingDeletePlato] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createModalKey, setCreateModalKey] = useState(0);
+  const [editModalKey, setEditModalKey] = useState(0);
   const [editPlato, setEditPlato] = useState<CartaPlatoRow | null>(null);
   const [deletePlato, setDeletePlato] = useState<CartaPlatoRow | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -594,6 +612,9 @@ export function CartaTab({
     setRecipePlatoId(p.id);
   }, []);
 
+  const closeCreateModal = useCallback(() => setCreateOpen(false), []);
+  const closeEditModal = useCallback(() => setEditPlato(null), []);
+
   const handleDeletePlato = useCallback(() => {
     if (!deletePlato) return;
     const id = deletePlato.id;
@@ -623,7 +644,10 @@ export function CartaTab({
           </div>
           <button
             type="button"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              setCreateModalKey((k) => k + 1);
+              setCreateOpen(true);
+            }}
             className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
             style={{ backgroundColor: "#1a6b3c" }}
           >
@@ -706,6 +730,7 @@ export function CartaTab({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setMenuId(null);
+                                    setEditModalKey((k) => k + 1);
                                     setEditPlato(p);
                                   }}
                                 >
@@ -740,10 +765,16 @@ export function CartaTab({
         )}
       </section>
 
-      <CreatePlatoModal open={createOpen} onClose={() => setCreateOpen(false)} categorias={categorias} />
+      <CreatePlatoModal
+        key={createModalKey}
+        open={createOpen}
+        onClose={closeCreateModal}
+        categorias={categorias}
+      />
       <EditPlatoModal
+        key={editPlato ? `edit-${editPlato.id}-${editModalKey}` : "edit-closed"}
         open={editPlato !== null}
-        onClose={() => setEditPlato(null)}
+        onClose={closeEditModal}
         categorias={categorias}
         initial={editPlato}
       />
