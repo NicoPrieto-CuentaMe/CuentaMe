@@ -51,14 +51,28 @@ export function AddSupplierForm() {
         />
       </div>
       <div className="md:col-span-3">
-        <span className="text-sm font-medium text-text-secondary">Categorías</span>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
-          {proveedorCategoriaOptions.map((o) => (
-            <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
-              <input type="checkbox" name="categorias" value={o.value} className="rounded border-border text-accent focus:ring-accent" />
-              {o.label}
-            </label>
-          ))}
+        <label className="text-sm font-medium text-text-secondary">Categorías</label>
+        <div
+          className="mt-2 rounded-lg border border-border bg-surface-elevated p-3"
+          role="group"
+          aria-label="Categorías del proveedor"
+        >
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            {proveedorCategoriaOptions.map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm text-text-primary transition-colors hover:bg-surface-elevated has-[:checked]:border-accent has-[:checked]:bg-accent-light/40"
+              >
+                <input
+                  type="checkbox"
+                  name="categorias"
+                  value={o.value}
+                  className="h-4 w-4 shrink-0 cursor-pointer rounded border-2 border-border bg-surface accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                />
+                <span className="select-none leading-snug">{o.label}</span>
+              </label>
+            ))}
+          </div>
         </div>
       </div>
       <div className="md:col-span-3 flex items-center justify-between gap-3">

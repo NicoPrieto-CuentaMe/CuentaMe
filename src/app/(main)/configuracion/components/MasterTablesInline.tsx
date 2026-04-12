@@ -725,26 +725,31 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                     </td>
                     <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
-                        <div className="flex max-w-md flex-col gap-1.5 sm:flex-row sm:flex-wrap">
-                          {proveedorCategoriaOptions.map((o) => (
-                            <label key={o.value} className="flex min-w-0 items-center gap-1.5 text-xs text-text-primary">
-                              <input
-                                type="checkbox"
-                                checked={draft.categorias.includes(o.value)}
-                                onChange={() =>
-                                  setDraft((d) => {
-                                    if (!d) return d;
-                                    const next = d.categorias.includes(o.value)
-                                      ? d.categorias.filter((x) => x !== o.value)
-                                      : [...d.categorias, o.value];
-                                    return { ...d, categorias: next };
-                                  })
-                                }
-                                className="rounded border-border text-accent focus:ring-accent"
-                              />
-                              {o.label}
-                            </label>
-                          ))}
+                        <div className="w-full max-w-xl rounded-lg border border-border bg-surface-elevated p-2">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {proveedorCategoriaOptions.map((o) => (
+                              <label
+                                key={o.value}
+                                className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-surface px-1.5 py-1.5 text-xs text-text-primary has-[:checked]:border-accent has-[:checked]:bg-accent-light/40"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={draft.categorias.includes(o.value)}
+                                  onChange={() =>
+                                    setDraft((d) => {
+                                      if (!d) return d;
+                                      const next = d.categorias.includes(o.value)
+                                        ? d.categorias.filter((x) => x !== o.value)
+                                        : [...d.categorias, o.value];
+                                      return { ...d, categorias: next };
+                                    })
+                                  }
+                                  className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-2 border-border bg-surface accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                />
+                                <span className="min-w-0 select-none leading-tight">{o.label}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       ) : s.categorias.length === 0 ? (
                         "—"
