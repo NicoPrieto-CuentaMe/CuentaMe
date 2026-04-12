@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Insumo, Plato, Unidad } from "@prisma/client";
+import { FAMILIA_LABEL_ES, getFamiliaUnidad, getUnidadesCompatibles } from "@/lib/unidades.config";
 import { RecipeBuilderForm } from "./AddForms";
 import { UNIT_OPTIONS } from "../units";
 import { updateReceta } from "../actions";
@@ -29,6 +30,26 @@ type EditRow = {
 
 function unitLabel(unidad: Unidad) {
   return UNIT_OPTIONS.find((u) => u.value === unidad)?.label ?? String(unidad);
+}
+
+function RecipeInsumoUnitHints({ unidadBase }: { unidadBase: Unidad }) {
+  const familia = getFamiliaUnidad(unidadBase as string);
+  if (!familia) return null;
+  const list = getUnidadesCompatibles(unidadBase as string)
+    .map((code) => UNIT_OPTIONS.find((u) => u.value === code)?.label ?? code)
+    .join(", ");
+  return (
+    <>
+      <p className="mt-1 text-[10px] leading-tight text-text-tertiary sm:text-xs">
+        Este insumo se mide en {FAMILIA_LABEL_ES[familia]}: {list}
+      </p>
+      {familia === "CONTEO" ? (
+        <p className="mt-0.5 text-[10px] leading-tight text-warning sm:text-xs">
+          ⚠ Unidad de empaque — verifica que las cantidades sean consistentes
+        </p>
+      ) : null}
+    </>
+  );
 }
 
 const cellInput =
@@ -192,9 +213,22 @@ export function RecipesCardsModal({
     setEditRows((rows) => rows.filter((_, i) => i !== index));
   }, []);
 
-  const updateRow = useCallback((index: number, patch: Partial<EditRow>) => {
-    setEditRows((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }, []);
+  const updateRow = useCallback(
+    (index: number, patch: Partial<EditRow>) => {
+      setEditRows((rows) =>
+        rows.map((r, i) => {
+          if (i !== index) return r;
+          const next = { ...r, ...patch };
+          if (patch.insumoId !== undefined) {
+            const sup = supplies.find((s) => s.id === patch.insumoId);
+            next.unidad = sup ? sup.unidadBase : "";
+          }
+          return next;
+        }),
+      );
+    },
+    [supplies],
+  );
 
   return (
     <div className="space-y-4">
@@ -346,60 +380,69 @@ export function RecipesCardsModal({
                       <div className="col-span-1 text-center"> </div>
                     </div>
                     <div className="divide-y divide-border">
-                      {editRows.map((row, idx) => (
-                        <div key={idx} className="grid grid-cols-12 items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3">
-                          <div className="col-span-5">
-                            <select
-                              className={cellInput}
-                              value={row.insumoId}
-                              onChange={(e) => updateRow(idx, { insumoId: e.target.value })}
-                            >
-                              <option value="">Selecciona...</option>
-                              {suppliesSorted.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.nombre}
-                                </option>
-                              ))}
-                            </select>
+                      {editRows.map((row, idx) => {
+                        const ins = row.insumoId ? suppliesSorted.find((s) => s.id === row.insumoId) : undefined;
+                        const compatCodes = ins ? getUnidadesCompatibles(ins.unidadBase as string) : [];
+                        const unitOpts =
+                          compatCodes.length > 0
+                            ? UNIT_OPTIONS.filter((u) => compatCodes.includes(u.value))
+                            : UNIT_OPTIONS;
+                        return (
+                          <div key={idx} className="grid grid-cols-12 items-start gap-1 px-2 py-1.5 sm:gap-2 sm:px-3">
+                            <div className="col-span-5">
+                              <select
+                                className={cellInput}
+                                value={row.insumoId}
+                                onChange={(e) => updateRow(idx, { insumoId: e.target.value })}
+                              >
+                                <option value="">Selecciona...</option>
+                                {suppliesSorted.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="col-span-2">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.0001"
+                                min="0"
+                                className={cellInput}
+                                value={row.cantidad}
+                                onChange={(e) => updateRow(idx, { cantidad: e.target.value })}
+                              />
+                            </div>
+                            <div className="col-span-4 flex min-w-0 flex-col">
+                              <select
+                                className={cellInput}
+                                value={row.unidad}
+                                onChange={(e) => updateRow(idx, { unidad: e.target.value })}
+                              >
+                                <option value="">—</option>
+                                {unitOpts.map((u) => (
+                                  <option key={u.value} value={u.value}>
+                                    {u.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {ins ? <RecipeInsumoUnitHints unidadBase={ins.unidadBase} /> : null}
+                            </div>
+                            <div className="col-span-1 flex justify-center pt-0.5">
+                              <button
+                                type="button"
+                                disabled={editRows.length <= 1}
+                                title={editRows.length <= 1 ? "Debe quedar al menos una fila" : "Quitar fila"}
+                                onClick={() => removeRow(idx)}
+                                className="rounded px-1.5 py-0.5 text-lg leading-none text-danger hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                ×
+                              </button>
+                            </div>
                           </div>
-                          <div className="col-span-2">
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              step="0.0001"
-                              min="0"
-                              className={cellInput}
-                              value={row.cantidad}
-                              onChange={(e) => updateRow(idx, { cantidad: e.target.value })}
-                            />
-                          </div>
-                          <div className="col-span-4">
-                            <select
-                              className={cellInput}
-                              value={row.unidad}
-                              onChange={(e) => updateRow(idx, { unidad: e.target.value })}
-                            >
-                              <option value="">—</option>
-                              {UNIT_OPTIONS.map((u) => (
-                                <option key={u.value} value={u.value}>
-                                  {u.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="col-span-1 flex justify-center">
-                            <button
-                              type="button"
-                              disabled={editRows.length <= 1}
-                              title={editRows.length <= 1 ? "Debe quedar al menos una fila" : "Quitar fila"}
-                              onClick={() => removeRow(idx)}
-                              className="rounded px-1.5 py-0.5 text-lg leading-none text-danger hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

@@ -9,6 +9,7 @@ import {
   createPlato,
   deleteCategoria,
   deletePlatoConReceta,
+  updateCategoria,
   updatePlatoCompleto,
   type ActionState,
 } from "../actions";
@@ -99,9 +100,13 @@ function CategoriaChips({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [renamePending, startRenameTransition] = useTransition();
   const [inlineOpen, setInlineOpen] = useState(false);
   const [state, formAction] = useFormState(createCategoria, formIdleState);
   const [deleteTarget, setDeleteTarget] = useState<CartaCategoriaRow | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.ok && state.message) {
@@ -125,6 +130,37 @@ function CategoriaChips({
     });
   }, [deleteTarget, onDeleted, router]);
 
+  const cancelRename = useCallback(() => {
+    setRenameId(null);
+    setRenameDraft("");
+    setRenameError(null);
+  }, []);
+
+  const commitRename = useCallback(
+    (c: CartaCategoriaRow) => {
+      if (renameId !== c.id) return;
+      const next = renameDraft.trim();
+      if (!next) {
+        cancelRename();
+        return;
+      }
+      if (next === c.nombre) {
+        cancelRename();
+        return;
+      }
+      startRenameTransition(async () => {
+        const res = await updateCategoria(c.id, next);
+        if (!res.ok) {
+          setRenameError(res.message);
+          return;
+        }
+        cancelRename();
+        router.refresh();
+      });
+    },
+    [renameDraft, renameId, cancelRename, router],
+  );
+
   return (
     <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h4 className="text-sm font-semibold text-text-primary">Categorías del menú</h4>
@@ -147,20 +183,59 @@ function CategoriaChips({
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {categorias.map((c) => (
-          <span
-            key={c.id}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-secondary"
-          >
-            <span>{c.nombre}</span>
-            <button
-              type="button"
-              className="rounded px-1 text-base leading-none text-text-tertiary hover:bg-border hover:text-danger"
-              aria-label={`Eliminar categoría ${c.nombre}`}
-              onClick={() => setDeleteTarget(c)}
-            >
-              ×
-            </button>
-          </span>
+          <div key={c.id} className="inline-flex max-w-full flex-col gap-0.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-secondary">
+              {renameId === c.id ? (
+                <input
+                  autoFocus
+                  disabled={renamePending}
+                  value={renameDraft}
+                  onChange={(e) => {
+                    setRenameDraft(e.target.value);
+                    setRenameError(null);
+                  }}
+                  onBlur={() => commitRename(c)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setRenameDraft(c.nombre);
+                      cancelRename();
+                    }
+                  }}
+                  className="min-h-[1.875rem] min-w-[80px] max-w-[200px] rounded-full border border-accent bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:ring-2 focus:ring-accent/30"
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="max-w-[200px] truncate text-left font-medium text-text-primary hover:underline"
+                    onClick={() => {
+                      setRenameId(c.id);
+                      setRenameDraft(c.nombre);
+                      setRenameError(null);
+                    }}
+                  >
+                    {c.nombre}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded px-1 text-base leading-none text-text-tertiary hover:bg-border hover:text-danger"
+                    aria-label={`Eliminar categoría ${c.nombre}`}
+                    onClick={() => setDeleteTarget(c)}
+                  >
+                    ×
+                  </button>
+                </>
+              )}
+            </span>
+            {renameError && renameId === c.id ? (
+              <p className="max-w-[220px] pl-1 text-xs text-danger">{renameError}</p>
+            ) : null}
+          </div>
         ))}
 
         {!inlineOpen ? (

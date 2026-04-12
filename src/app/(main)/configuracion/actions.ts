@@ -4,6 +4,17 @@ import { revalidatePath } from "next/cache";
 import { CategoriaProveedor, Prisma, Unidad } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getFamiliaUnidad, sonUnidadesCompatibles } from "@/lib/unidades.config";
+import { UNIT_OPTIONS } from "./units";
+
+function recetaUnidadIncompatibleMsg(nombreInsumo: string, unidadBase: string, unidadReceta: string): string {
+  const fam = getFamiliaUnidad(unidadBase);
+  const famTxt =
+    fam === "PESO" ? "peso" : fam === "VOLUMEN" ? "volumen" : fam === "CONTEO" ? "conteo" : "—";
+  const baseLabel = UNIT_OPTIONS.find((u) => u.value === (unidadBase as Unidad))?.label ?? unidadBase;
+  const recLabel = UNIT_OPTIONS.find((u) => u.value === (unidadReceta as Unidad))?.label ?? unidadReceta;
+  return `El insumo '${nombreInsumo}' se compra en ${baseLabel} (${famTxt}). No puedes usar ${recLabel} en la receta.`;
+}
 
 const CATEGORIA_PROVEEDOR_SET = new Set<string>(Object.values(CategoriaProveedor));
 
@@ -457,6 +468,46 @@ export async function createCategoria(_: ActionState, formData: FormData): Promi
   }
 }
 
+export async function updateCategoria(id: string, nombre: string): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const trimmed = nombre.trim();
+    if (!id.trim()) return { ok: false, message: "Categoría inválida." };
+    if (!trimmed) return { ok: false, message: "El nombre no puede quedar vacío." };
+
+    const existing = await prisma.categoria.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!existing) return { ok: false, message: "Categoría no encontrada." };
+
+    const dup = await prisma.categoria.findFirst({
+      where: {
+        userId,
+        nombre: { equals: trimmed, mode: "insensitive" },
+        NOT: { id },
+      },
+      select: { id: true },
+    });
+    if (dup) return { ok: false, message: "Ya existe una categoría con ese nombre." };
+
+    const res = await prisma.categoria.updateMany({
+      where: { id, userId },
+      data: { nombre: trimmed },
+    });
+    if (res.count === 0) return { ok: false, message: "Categoría no encontrada." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Categoría actualizada." };
+  } catch (e) {
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe una categoría con ese nombre."
+        : "No se pudo actualizar la categoría.";
+    return { ok: false, message };
+  }
+}
+
 export async function deleteCategoria(_: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const userId = await requireUserId();
@@ -583,10 +634,22 @@ export async function saveRecipeComplete(_: ActionState, formData: FormData): Pr
     const insumoIds = Array.from(uniqueInsumos);
     const existing = await prisma.insumo.findMany({
       where: { userId, id: { in: insumoIds } },
-      select: { id: true },
+      select: { id: true, nombre: true, unidadBase: true },
     });
     if (existing.length !== insumoIds.length) {
       return { ok: false, message: "Uno o más insumos no son válidos." };
+    }
+    const insumoById = new Map(existing.map((i) => [i.id, i]));
+
+    for (const r of rows) {
+      const ins = insumoById.get(r.insumoId);
+      if (!ins) continue;
+      if (!sonUnidadesCompatibles(ins.unidadBase as string, r.unidadRaw)) {
+        return {
+          ok: false,
+          message: recetaUnidadIncompatibleMsg(ins.nombre, ins.unidadBase as string, r.unidadRaw),
+        };
+      }
     }
 
     const ops = rows.map((r) => {
@@ -662,10 +725,23 @@ export async function updateReceta(payload: {
     const uniqueIds = Array.from(new Set(insumoIds));
     const insumosOk = await prisma.insumo.findMany({
       where: { userId, id: { in: uniqueIds } },
-      select: { id: true },
+      select: { id: true, nombre: true, unidadBase: true },
     });
     if (insumosOk.length !== uniqueIds.length) {
       return { ok: false, message: "Uno o más insumos no son válidos." };
+    }
+    const insumoById = new Map(insumosOk.map((i) => [i.id, i]));
+
+    for (const r of ingredientes) {
+      const ins = insumoById.get(r.insumoId.trim());
+      if (!ins) continue;
+      const uRec = r.unidad.trim();
+      if (!sonUnidadesCompatibles(ins.unidadBase as string, uRec)) {
+        return {
+          ok: false,
+          message: recetaUnidadIncompatibleMsg(ins.nombre, ins.unidadBase as string, uRec),
+        };
+      }
     }
 
     const data = ingredientes.map((r) => {

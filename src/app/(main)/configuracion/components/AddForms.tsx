@@ -6,8 +6,9 @@ import type { ActionState } from "../actions";
 import { addDish, addSupplier, addSupply, saveRecipeComplete } from "../actions";
 import { insumoCategorias } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits } from "../cop-price";
+import { FAMILIA_LABEL_ES, getFamiliaUnidad, getUnidadesCompatibles } from "@/lib/unidades.config";
 import { UNIT_OPTIONS } from "../units";
-import type { CategoriaProveedor, Insumo, Plato } from "@prisma/client";
+import type { CategoriaProveedor, Insumo, Plato, Unidad } from "@prisma/client";
 import { ProveedorCategoriasMultiSelect } from "./ProveedorCategoriasMultiSelect";
 
 const initialState: ActionState = { ok: true };
@@ -223,6 +224,26 @@ function emptyRow(): RecipeRow {
   return { supplyId: "", quantity: "", unit: "" };
 }
 
+function RecipeInsumoUnitHints({ unidadBase }: { unidadBase: Unidad }) {
+  const familia = getFamiliaUnidad(unidadBase as string);
+  if (!familia) return null;
+  const list = getUnidadesCompatibles(unidadBase as string)
+    .map((code) => UNIT_OPTIONS.find((u) => u.value === code)?.label ?? code)
+    .join(", ");
+  return (
+    <>
+      <p className="mt-1 text-[10px] leading-tight text-text-tertiary sm:text-xs">
+        Este insumo se mide en {FAMILIA_LABEL_ES[familia]}: {list}
+      </p>
+      {familia === "CONTEO" ? (
+        <p className="mt-0.5 text-[10px] leading-tight text-warning sm:text-xs">
+          ⚠ Unidad de empaque — verifica que las cantidades sean consistentes
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function RecipeBuilderForm({
   activeDishes,
   supplies,
@@ -350,70 +371,86 @@ export function RecipeBuilderForm({
             <div className="col-span-4">Unidad</div>
           </div>
           <div className="divide-y divide-border">
-            {rows.map((r, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 bg-surface px-3 py-2 hover:bg-surface-elevated">
-                <div className="col-span-5">
-                  <select
-                    required
-                    name={`supplyId_${i}`}
-                    value={r.supplyId}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, supplyId: v } : p)));
-                    }}
-                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                  >
-                    <option value="">
-                      Selecciona...
-                    </option>
-                    {suppliesSorted.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            {rows.map((r, i) => {
+              const ins = r.supplyId ? suppliesSorted.find((s) => s.id === r.supplyId) : undefined;
+              const compatCodes = ins ? getUnidadesCompatibles(ins.unidadBase as string) : [];
+              const unitOpts =
+                compatCodes.length > 0
+                  ? UNIT_OPTIONS.filter((u) => compatCodes.includes(u.value))
+                  : UNIT_OPTIONS;
+              return (
+                <div key={i} className="grid grid-cols-12 gap-2 bg-surface px-3 py-2 hover:bg-surface-elevated">
+                  <div className="col-span-5">
+                    <select
+                      required
+                      name={`supplyId_${i}`}
+                      value={r.supplyId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const sup = suppliesSorted.find((s) => s.id === v);
+                        setRows((prev) =>
+                          prev.map((p, idx) =>
+                            idx === i
+                              ? {
+                                  ...p,
+                                  supplyId: v,
+                                  unit: sup ? sup.unidadBase : "",
+                                }
+                              : p,
+                          ),
+                        );
+                      }}
+                      className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+                    >
+                      <option value="">Selecciona...</option>
+                      {suppliesSorted.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div className="col-span-3">
-                  <input
-                    required
-                    name={`quantity_${i}`}
-                    inputMode="decimal"
-                    type="number"
-                    step="0.0001"
-                    min="0"
-                    value={r.quantity}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, quantity: v } : p)));
-                    }}
-                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                  />
-                </div>
+                  <div className="col-span-3">
+                    <input
+                      required
+                      name={`quantity_${i}`}
+                      inputMode="decimal"
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      value={r.quantity}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, quantity: v } : p)));
+                      }}
+                      className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+                    />
+                  </div>
 
-                <div className="col-span-4">
-                  <select
-                    required
-                    name={`unit_${i}`}
-                    value={r.unit}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, unit: v } : p)));
-                    }}
-                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                  >
-                    <option value="">
-                      Selecciona...
-                    </option>
-                    {UNIT_OPTIONS.map((u) => (
-                      <option key={u.value} value={u.value}>
-                        {u.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="col-span-4 flex min-w-0 flex-col">
+                    <select
+                      required
+                      name={`unit_${i}`}
+                      value={r.unit}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, unit: v } : p)));
+                      }}
+                      className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+                    >
+                      <option value="">Selecciona...</option>
+                      {unitOpts.map((u) => (
+                        <option key={u.value} value={u.value}>
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                    {ins ? <RecipeInsumoUnitHints unidadBase={ins.unidadBase} /> : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
