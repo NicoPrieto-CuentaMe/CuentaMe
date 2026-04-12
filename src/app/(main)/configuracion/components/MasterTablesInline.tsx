@@ -25,20 +25,18 @@ import {
 import { UNIT_OPTIONS } from "../units";
 import { ConfirmSubmitButton } from "./ConfirmSubmitButton";
 
-const ACCENT = "#1a6b3c";
-
 const inlineField =
-  "w-full min-w-0 rounded border border-[var(--border)]/50 bg-white/90 px-1.5 py-1 text-sm text-[var(--foreground)] outline-none focus:border-accent";
+  "w-full min-w-0 rounded border border-border bg-surface-elevated px-1.5 py-1 text-sm text-text-primary outline-none focus:border-accent";
 
 const btnSave =
-  "rounded bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-60";
+  "rounded bg-accent px-2 py-1 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60";
 const btnCancel =
-  "rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50";
+  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
 const btnEdit =
-  "rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50";
+  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
 
 const popoverPanel =
-  "min-w-[200px] max-w-[min(100vw-2rem,320px)] rounded-lg border border-[var(--border)] bg-white p-3 text-sm text-[var(--foreground)] shadow-md outline-none";
+  "min-w-[200px] max-w-[min(100vw-2rem,320px)] rounded-lg border border-border bg-surface p-3 text-sm text-text-primary shadow-md outline-none";
 
 const listScroll = "max-h-[9rem] overflow-y-auto pr-1";
 
@@ -122,14 +120,14 @@ function TextFilterMenu({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
+        className="w-full rounded border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary outline-none focus:border-accent"
         autoFocus
       />
       <div className="flex justify-end">
         <button
           type="button"
           onClick={onClear}
-          className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+          className="rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border"
         >
           Limpiar
         </button>
@@ -186,7 +184,7 @@ function CategoricalFilterMenu({
   };
 
   if (options.length === 0) {
-    return <p className="text-sm text-[var(--foreground)]/60">Sin datos disponibles</p>;
+    return <p className="text-sm text-text-tertiary">Sin datos disponibles</p>;
   }
 
   return (
@@ -196,32 +194,30 @@ function CategoricalFilterMenu({
         value={optionSearch}
         onChange={(e) => setOptionSearch(e.target.value)}
         placeholder="Buscar opciones…"
-        className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
+        className="w-full rounded border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary outline-none focus:border-accent"
       />
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
         <input
           type="checkbox"
           checked={allVisibleSelected && visible.length > 0}
           onChange={toggleVisibleAll}
-          className="h-4 w-4 rounded border-[var(--border)]"
-          style={{ accentColor: ACCENT }}
+          className="h-4 w-4 rounded border-border text-accent"
         />
         <span>Seleccionar todo</span>
       </label>
       <div className={listScroll}>
         {visible.length === 0 ? (
-          <p className="py-1 text-xs text-[var(--foreground)]/50">Sin coincidencias</p>
+          <p className="py-1 text-xs text-text-tertiary">Sin coincidencias</p>
         ) : (
           <ul className="space-y-1">
             {visible.map((o) => (
               <li key={o.value}>
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
                   <input
                     type="checkbox"
                     checked={draft.has(o.value)}
                     onChange={() => toggleOne(o.value)}
-                    className="h-4 w-4 rounded border-[var(--border)]"
-                    style={{ accentColor: ACCENT }}
+                    className="h-4 w-4 rounded border-border text-accent"
                   />
                   <span className="truncate">{o.label}</span>
                 </label>
@@ -230,19 +226,18 @@ function CategoricalFilterMenu({
           </ul>
         )}
       </div>
-      <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-2">
+      <div className="flex justify-end gap-2 border-t border-border pt-2">
         <button
           type="button"
           onClick={onClearDraft}
-          className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+          className="rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border"
         >
           Limpiar
         </button>
         <button
           type="button"
           onClick={onApply}
-          className="rounded px-3 py-1 text-xs font-semibold text-white"
-          style={{ backgroundColor: ACCENT }}
+          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent-hover"
         >
           Aplicar
         </button>
@@ -269,40 +264,39 @@ function PriceFilterMenu({
   return (
     <div className="space-y-2">
       <div>
-        <label className="mb-0.5 block text-xs text-[var(--foreground)]/70">Desde $</label>
+        <label className="mb-0.5 block text-xs text-text-secondary">Desde $</label>
         <input
           type="number"
           inputMode="decimal"
           min={0}
           value={desde}
           onChange={(e) => setDesde(e.target.value)}
-          className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
+          className="w-full rounded border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary outline-none focus:border-accent"
         />
       </div>
       <div>
-        <label className="mb-0.5 block text-xs text-[var(--foreground)]/70">Hasta $</label>
+        <label className="mb-0.5 block text-xs text-text-secondary">Hasta $</label>
         <input
           type="number"
           inputMode="decimal"
           min={0}
           value={hasta}
           onChange={(e) => setHasta(e.target.value)}
-          className="w-full rounded border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm outline-none focus:border-accent"
+          className="w-full rounded border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary outline-none focus:border-accent"
         />
       </div>
-      <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-2">
+      <div className="flex justify-end gap-2 border-t border-border pt-2">
         <button
           type="button"
           onClick={onClear}
-          className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-[var(--foreground)]/80 hover:bg-gray-50"
+          className="rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border"
         >
           Limpiar
         </button>
         <button
           type="button"
           onClick={onApply}
-          className="rounded px-3 py-1 text-xs font-semibold text-white"
-          style={{ backgroundColor: ACCENT }}
+          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent-hover"
         >
           Aplicar
         </button>
@@ -364,7 +358,7 @@ function FilterPopover({
   );
 }
 
-type ProveedorRow = Pick<Proveedor, "id" | "nombre" | "telefono" | "categoria">;
+type ProveedorRow = Pick<Proveedor, "id" | "nombre" | "telefono" | "categorias">;
 type InsumoRow = Pick<Insumo, "id" | "nombre" | "unidadBase" | "categoria">;
 type PlatoRow = Pick<Plato, "id" | "nombre" | "categoriaId" | "precioVenta" | "active"> & {
   categoria: { id: string; nombre: string } | null;
@@ -390,7 +384,7 @@ function DeleteInsumoDialog({
     <div className="fixed inset-0 z-[220] flex items-start justify-center px-4 pt-[18vh]">
       <button
         type="button"
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/70"
         onClick={onCancel}
         aria-label="Cerrar"
       />
@@ -398,21 +392,21 @@ function DeleteInsumoDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-insumo-title"
-        className="relative w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-lg"
+        className="relative w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-lg"
       >
-        <h3 id="delete-insumo-title" className="text-base font-semibold text-[var(--foreground)]">
+        <h3 id="delete-insumo-title" className="text-base font-semibold text-text-primary">
           Eliminar insumo
         </h3>
         {state.phase === "checking" ? (
-          <p className="mt-3 text-sm text-[var(--foreground)]/80">Comprobando uso en recetas…</p>
+          <p className="mt-3 text-sm text-text-secondary">Comprobando uso en recetas…</p>
         ) : (
-          <div className="mt-3 space-y-2 text-sm text-[var(--foreground)]/90">
+          <div className="mt-3 space-y-2 text-sm text-text-primary">
             {inUse ? (
               <>
                 <p>¿Seguro que quieres eliminar el insumo «{state.nombre}»?</p>
                 <p>
                   Está siendo usado en las siguientes recetas:{" "}
-                  <span className="font-medium text-[var(--foreground)]">
+                  <span className="font-medium text-text-primary">
                     {state.platoNames.join(", ")}
                   </span>
                   . Si lo eliminas, deberás editar esas recetas.
@@ -430,7 +424,7 @@ function DeleteInsumoDialog({
             type="button"
             onClick={onCancel}
             disabled={pendingDelete}
-            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 disabled:opacity-60"
+            className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm font-medium text-text-primary hover:bg-border disabled:opacity-60"
           >
             Cancelar
           </button>
@@ -439,7 +433,7 @@ function DeleteInsumoDialog({
               type="button"
               onClick={onConfirm}
               disabled={pendingDelete}
-              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              className="rounded-lg bg-danger px-3 py-2 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-60"
             >
               {pendingDelete ? "Eliminando…" : inUse ? "Eliminar de todas formas" : "Eliminar"}
             </button>
@@ -470,7 +464,7 @@ function HeaderWithFunnel({
         {showClear ? (
           <button
             type="button"
-            className="flex h-6 min-w-[1.25rem] items-center justify-center rounded px-0.5 text-base font-light leading-none text-red-400/90 hover:bg-red-50 hover:text-red-600"
+            className="flex h-6 min-w-[1.25rem] items-center justify-center rounded px-0.5 text-base font-light leading-none text-danger hover:bg-danger-light hover:text-danger"
             aria-label={`Quitar filtro de ${label}`}
             onClick={(e) => {
               e.stopPropagation();
@@ -488,10 +482,10 @@ function HeaderWithFunnel({
             e.stopPropagation();
             onFunnelClick(e);
           }}
-          className="rounded p-0.5 hover:bg-gray-100"
+          className="rounded p-0.5 hover:bg-surface-elevated"
           aria-label={`Filtrar ${label}`}
         >
-          <FunnelIcon className={funnelActive ? "text-[#1a6b3c]" : "text-gray-400"} />
+          <FunnelIcon className={funnelActive ? "text-accent" : "text-text-tertiary"} />
         </button>
       </div>
     </>
@@ -503,7 +497,11 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   const [pending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ nombre: string; telefono: string; categoria: string } | null>(null);
+  const [draft, setDraft] = useState<{
+    nombre: string;
+    telefono: string;
+    categorias: CategoriaProveedor[];
+  } | null>(null);
 
   const [fNombre, setFNombre] = useState("");
   const [fTelefono, setFTelefono] = useState("");
@@ -517,7 +515,8 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   const catOptions = useMemo(() => {
     const keys = new Set<string>();
     for (const r of rows) {
-      keys.add(r.categoria ?? EMPTY_KEY);
+      if (r.categorias.length === 0) keys.add(EMPTY_KEY);
+      else for (const c of r.categorias) keys.add(c);
     }
     return Array.from(keys)
       .sort((a, b) => {
@@ -543,8 +542,11 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
       if (!textIncludes(s.nombre, fNombre)) return false;
       if (!textIncludes(s.telefono ?? "", fTelefono)) return false;
       if (catApplied.size > 0) {
-        const key = s.categoria ?? EMPTY_KEY;
-        if (!catApplied.has(key)) return false;
+        let match = false;
+        if (catApplied.has(EMPTY_KEY) && s.categorias.length === 0) match = true;
+        const enums = Array.from(catApplied).filter((k) => k !== EMPTY_KEY) as CategoriaProveedor[];
+        if (s.categorias.some((c) => enums.includes(c))) match = true;
+        if (!match) return false;
       }
       return true;
     });
@@ -585,7 +587,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
     setDraft({
       nombre: r.nombre,
       telefono: r.telefono ?? "",
-      categoria: r.categoria ?? "",
+      categorias: [...r.categorias],
     });
   }, []);
 
@@ -601,7 +603,9 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
     fd.set("id", editingId);
     fd.set("nombre", draft.nombre);
     fd.set("telefono", draft.telefono);
-    fd.set("categoria", draft.categoria);
+    for (const c of draft.categorias) {
+      fd.append("categorias", c);
+    }
     startTransition(async () => {
       const res = await updateProveedor(fd);
       if (!res.ok) {
@@ -651,14 +655,14 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   return (
     <div className="space-y-2">
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">{error}</div>
       ) : null}
       {renderPopover()}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-sm">
-          <thead>
-            <tr className="text-[var(--foreground)]/70">
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+          <thead className="bg-surface-elevated">
+            <tr className="text-text-secondary">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
@@ -666,7 +670,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                   onClearColumnFilter={() => setFNombre("")}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Teléfono"
                   funnelActive={funnelTel}
@@ -674,21 +678,21 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                   onClearColumnFilter={() => setFTelefono("")}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
-                  label="Categoría"
+                  label="Categorías"
                   funnelActive={funnelCat}
                   onFunnelClick={toggleProvMenu("prov-categoria")}
                   onClearColumnFilter={() => setCatApplied(new Set())}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
+              <th className="border-b border-border px-3 py-2 font-semibold">Acciones</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="[&_tr]:bg-surface [&_tr:hover]:bg-surface-elevated">
             {filteredProveedores.length === 0 ? (
               <tr>
-                <td colSpan={4} className="border-b border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--foreground)]/60">
+                <td colSpan={4} className="border-b border-border px-3 py-6 text-center text-sm text-text-tertiary">
                   No se encontraron resultados para los filtros aplicados
                 </td>
               </tr>
@@ -696,8 +700,8 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
               filteredProveedores.map((s) => {
                 const isEdit = editingId === s.id;
                 return (
-                  <tr key={s.id} className="text-[var(--foreground)]/90">
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                  <tr key={s.id} className="text-text-primary">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <input
                           className={inlineField}
@@ -708,7 +712,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                         s.nombre
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <input
                           className={inlineField}
@@ -719,25 +723,47 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                         (s.telefono ?? "—")
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
-                        <select
-                          className={inlineField}
-                          value={draft.categoria}
-                          onChange={(e) => setDraft((d) => (d ? { ...d, categoria: e.target.value } : d))}
-                        >
-                          <option value="">Selecciona...</option>
+                        <div className="flex max-w-md flex-col gap-1.5 sm:flex-row sm:flex-wrap">
                           {proveedorCategoriaOptions.map((o) => (
-                            <option key={o.value} value={o.value}>
+                            <label key={o.value} className="flex min-w-0 items-center gap-1.5 text-xs text-text-primary">
+                              <input
+                                type="checkbox"
+                                checked={draft.categorias.includes(o.value)}
+                                onChange={() =>
+                                  setDraft((d) => {
+                                    if (!d) return d;
+                                    const next = d.categorias.includes(o.value)
+                                      ? d.categorias.filter((x) => x !== o.value)
+                                      : [...d.categorias, o.value];
+                                    return { ...d, categorias: next };
+                                  })
+                                }
+                                className="rounded border-border text-accent focus:ring-accent"
+                              />
                               {o.label}
-                            </option>
+                            </label>
                           ))}
-                        </select>
+                        </div>
+                      ) : s.categorias.length === 0 ? (
+                        "—"
                       ) : (
-                        (proveedorCategoriaLabel(s.categoria) ?? "—")
+                        <div className="flex flex-wrap gap-1">
+                          {[...s.categorias]
+                            .sort((a, b) => a.localeCompare(b, "es"))
+                            .map((c) => (
+                              <span
+                                key={c}
+                                className="inline-flex items-center rounded-full border border-border bg-surface-elevated px-2 py-0.5 text-xs text-text-secondary"
+                              >
+                                {proveedorCategoriaLabel(c) ?? c}
+                              </span>
+                            ))}
+                        </div>
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit ? (
                         <div className="flex flex-wrap items-center gap-1.5">
                           <button type="button" className={btnSave} disabled={pending} onClick={() => void save()}>
@@ -756,7 +782,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                             <input type="hidden" name="id" value={s.id} />
                             <ConfirmSubmitButton
                               confirmMessage="¿Eliminar este proveedor? Esta acción no se puede deshacer."
-                              className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                              className="text-danger hover:text-danger border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium hover:bg-danger/20"
                             >
                               Eliminar
                             </ConfirmSubmitButton>
@@ -954,7 +980,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
   return (
     <div className="space-y-2">
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">{error}</div>
       ) : null}
       {deleteModal ? (
         <DeleteInsumoDialog
@@ -1015,9 +1041,9 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-sm">
-          <thead>
-            <tr className="text-[var(--foreground)]/70">
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+          <thead className="bg-surface-elevated">
+            <tr className="text-text-secondary">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
@@ -1025,7 +1051,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                   onClearColumnFilter={() => setFNombre("")}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Unidad base"
                   funnelActive={funnelUnidad}
@@ -1033,7 +1059,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                   onClearColumnFilter={() => setUnidadApplied(new Set())}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelInsCat}
@@ -1041,13 +1067,13 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                   onClearColumnFilter={() => setInsCatApplied(new Set())}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
+              <th className="border-b border-border px-3 py-2 font-semibold">Acciones</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="[&_tr]:bg-surface [&_tr:hover]:bg-surface-elevated">
             {filteredInsumos.length === 0 ? (
               <tr>
-                <td colSpan={4} className="border-b border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--foreground)]/60">
+                <td colSpan={4} className="border-b border-border px-3 py-6 text-center text-sm text-text-tertiary">
                   No se encontraron resultados para los filtros aplicados
                 </td>
               </tr>
@@ -1055,8 +1081,8 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
               filteredInsumos.map((s) => {
                 const isEdit = editingId === s.id;
                 return (
-                  <tr key={s.id} className="text-[var(--foreground)]/90">
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                  <tr key={s.id} className="text-text-primary">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <input
                           className={inlineField}
@@ -1067,7 +1093,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                         s.nombre
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <select
                           className={inlineField}
@@ -1087,7 +1113,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                         (unitLabel.get(s.unidadBase) ?? s.unidadBase)
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <select
                           className={inlineField}
@@ -1105,7 +1131,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                         (s.categoria ?? "—")
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit ? (
                         <div className="flex flex-wrap items-center gap-1.5">
                           <button type="button" className={btnSave} disabled={pending} onClick={() => void save()}>
@@ -1122,7 +1148,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                            className="text-danger hover:text-danger border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium hover:bg-danger/20 disabled:opacity-60"
                             disabled={!!deleteModal}
                             onClick={() => beginDeleteInsumo(s.id, s.nombre)}
                           >
@@ -1342,7 +1368,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
   return (
     <div className="space-y-2">
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">{error}</div>
       ) : null}
       {openMenu && menuAnchor ? (
         <FilterPopover
@@ -1411,9 +1437,9 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
       ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-separate border-spacing-0 text-left text-sm">
-          <thead>
-            <tr className="text-[var(--foreground)]/70">
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+          <thead className="bg-surface-elevated">
+            <tr className="text-text-secondary">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Nombre"
                   funnelActive={funnelNombre}
@@ -1421,7 +1447,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                   onClearColumnFilter={() => setFNombre("")}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Categoría"
                   funnelActive={funnelPlatoCat}
@@ -1429,7 +1455,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                   onClearColumnFilter={() => setPlatoCatApplied(new Set())}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Precio"
                   funnelActive={funnelPrecio}
@@ -1437,7 +1463,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                   onClearColumnFilter={() => setPrecioApplied({ desde: "", hasta: "" })}
                 />
               </th>
-              <th className="relative border-b border-[var(--border)] px-3 py-2 text-center">
+              <th className="relative border-b border-border px-3 py-2 text-center">
                 <HeaderWithFunnel
                   label="Activo"
                   funnelActive={funnelActivo}
@@ -1445,13 +1471,13 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                   onClearColumnFilter={() => setActivoApplied(new Set())}
                 />
               </th>
-              <th className="border-b border-[var(--border)] px-3 py-2 font-semibold">Acciones</th>
+              <th className="border-b border-border px-3 py-2 font-semibold">Acciones</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="[&_tr]:bg-surface [&_tr:hover]:bg-surface-elevated">
             {filteredPlatos.length === 0 ? (
               <tr>
-                <td colSpan={5} className="border-b border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--foreground)]/60">
+                <td colSpan={5} className="border-b border-border px-3 py-6 text-center text-sm text-text-tertiary">
                   No se encontraron resultados para los filtros aplicados
                 </td>
               </tr>
@@ -1459,8 +1485,8 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
               filteredPlatos.map((d) => {
                 const isEdit = editingId === d.id;
                 return (
-                  <tr key={d.id} className="text-[var(--foreground)]/90">
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                  <tr key={d.id} className="text-text-primary">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <input
                           className={inlineField}
@@ -1471,7 +1497,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                         d.nombre
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <select
                           className={inlineField}
@@ -1489,7 +1515,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                         (d.categoria?.nombre ?? "—")
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <PlatoPrecioInline
                           precioDigits={draft.precioDigits}
@@ -1499,28 +1525,28 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                         money.format(Number(d.precioVenta))
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit && draft ? (
                         <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)]"
+                            className="h-4 w-4 rounded border-border text-accent"
                             checked={draft.active}
                             onChange={(e) => setDraft((x) => (x ? { ...x, active: e.target.checked } : x))}
                           />
                           <span>{draft.active ? "Activo" : "Inactivo"}</span>
                         </label>
                       ) : d.active ? (
-                        <span className="rounded-full bg-accent/10 px-2 py-1 text-xs font-semibold text-accent">
+                        <span className="rounded-full bg-accent-light px-2 py-1 text-xs font-semibold text-accent">
                           Activo
                         </span>
                       ) : (
-                        <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-[var(--foreground)]/70">
+                        <span className="rounded-full bg-surface-elevated px-2 py-1 text-xs font-semibold text-text-tertiary">
                           Inactivo
                         </span>
                       )}
                     </td>
-                    <td className="border-b border-[var(--border)] px-3 py-2 align-middle">
+                    <td className="border-b border-border px-3 py-2 align-middle">
                       {isEdit ? (
                         <div className="flex flex-wrap items-center gap-1.5">
                           <button type="button" className={btnSave} disabled={pending} onClick={() => void save()}>
@@ -1539,7 +1565,7 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                             <input type="hidden" name="id" value={d.id} />
                             <ConfirmSubmitButton
                               confirmMessage="¿Eliminar este plato? Si tiene receta, puede fallar."
-                              className="rounded border border-[var(--border)] bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                              className="text-danger hover:text-danger border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium hover:bg-danger/20"
                             >
                               Eliminar
                             </ConfirmSubmitButton>

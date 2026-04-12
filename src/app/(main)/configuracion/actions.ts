@@ -7,24 +7,23 @@ import { prisma } from "@/lib/prisma";
 
 const CATEGORIA_PROVEEDOR_SET = new Set<string>(Object.values(CategoriaProveedor));
 
-function parseCategoriaProveedorOrNull(raw: string | undefined): CategoriaProveedor | null {
-  if (raw === undefined || raw === "") return null;
-  const t = raw.trim();
-  if (!t) return null;
-  return CATEGORIA_PROVEEDOR_SET.has(t) ? (t as CategoriaProveedor) : null;
-}
-
-function parseCategoriaProveedorField(
+function parseCategoriasProveedorForm(
   formData: FormData,
   key: string,
-): { ok: true; value: CategoriaProveedor | null } | { ok: false; message: string } {
-  const v = formData.get(key);
-  const s = typeof v === "string" ? v.trim() : "";
-  if (!s) return { ok: true, value: null };
-  if (!CATEGORIA_PROVEEDOR_SET.has(s)) {
-    return { ok: false, message: "Categoría inválida." };
+): { ok: true; value: CategoriaProveedor[] } | { ok: false; message: string } {
+  const raw = formData.getAll(key);
+  const out: CategoriaProveedor[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const t = item.trim();
+    if (!t) continue;
+    if (!CATEGORIA_PROVEEDOR_SET.has(t)) {
+      return { ok: false, message: "Categoría inválida." };
+    }
+    const v = t as CategoriaProveedor;
+    if (!out.includes(v)) out.push(v);
   }
-  return { ok: true, value: s as CategoriaProveedor };
+  return { ok: true, value: out };
 }
 
 export type ActionState =
@@ -63,11 +62,11 @@ export async function addSupplier(_: ActionState, formData: FormData): Promise<A
     const phone = optionalString(formData, "phone");
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
 
-    const catParsed = parseCategoriaProveedorField(formData, "category");
-    if (!catParsed.ok) return { ok: false, message: catParsed.message, field: "category" };
+    const catParsed = parseCategoriasProveedorForm(formData, "categorias");
+    if (!catParsed.ok) return { ok: false, message: catParsed.message, field: "categorias" };
 
     await prisma.proveedor.create({
-      data: { userId, nombre: name, telefono: phone, categoria: catParsed.value },
+      data: { userId, nombre: name, telefono: phone, categorias: catParsed.value },
     });
 
     revalidatePath("/configuracion");
@@ -100,7 +99,7 @@ export async function updateProveedor(formData: FormData): Promise<ActionState> 
     const id = requiredString(formData, "id");
     const nombre = requiredString(formData, "nombre");
     const telefono = optionalString(formData, "telefono");
-    const catParsed = parseCategoriaProveedorField(formData, "categoria");
+    const catParsed = parseCategoriasProveedorForm(formData, "categorias");
     if (!catParsed.ok) return { ok: false, message: catParsed.message };
 
     if (!id) return { ok: false, message: "Proveedor inválido." };
@@ -108,7 +107,7 @@ export async function updateProveedor(formData: FormData): Promise<ActionState> 
 
     const res = await prisma.proveedor.updateMany({
       where: { id, userId },
-      data: { nombre, telefono: telefono ?? null, categoria: catParsed.value },
+      data: { nombre, telefono: telefono ?? null, categorias: catParsed.value },
     });
     if (res.count === 0) return { ok: false, message: "Proveedor no encontrado." };
 

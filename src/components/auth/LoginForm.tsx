@@ -39,15 +39,15 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-[400px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm">
+    <div className="w-full max-w-[400px] rounded-2xl border border-border bg-surface p-8 shadow-sm">
       <div className="mb-8 text-center">
-        <p className="text-2xl font-semibold tracking-tight text-[#1a6b3c]">{APP_NAME}</p>
-        <p className="mt-2 text-sm text-[var(--foreground)]/60">Ingresa a tu cuenta</p>
+        <p className="text-2xl font-semibold tracking-tight text-accent">{APP_NAME}</p>
+        <p className="mt-2 text-sm text-text-secondary">Ingresa a tu cuenta</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="email" className="text-sm font-medium text-[var(--foreground)]">
+          <label htmlFor="email" className="text-sm font-medium text-text-secondary">
             Correo electrónico
           </label>
           <input
@@ -56,11 +56,11 @@ export function LoginForm() {
             type="email"
             autoComplete="email"
             required
-            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2.5 text-sm text-[var(--foreground)] outline-none ring-accent/30 transition-shadow focus:border-accent focus:ring-2"
+            className="rounded-lg border border-border bg-surface-elevated px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none ring-accent/30 transition-shadow focus:border-accent focus:ring-2"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="password" className="text-sm font-medium text-[var(--foreground)]">
+          <label htmlFor="password" className="text-sm font-medium text-text-secondary">
             Contraseña
           </label>
           <input
@@ -69,13 +69,13 @@ export function LoginForm() {
             type="password"
             autoComplete="current-password"
             required
-            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2.5 text-sm text-[var(--foreground)] outline-none ring-accent/30 transition-shadow focus:border-accent focus:ring-2"
+            className="rounded-lg border border-border bg-surface-elevated px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none ring-accent/30 transition-shadow focus:border-accent focus:ring-2"
           />
         </div>
 
         {error ? (
           <p
-            className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800"
+            className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger"
             role="alert"
           >
             {error}
@@ -85,7 +85,7 @@ export function LoginForm() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-[#1a6b3c] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#155a33] disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
         >
           {pending ? "Ingresando…" : "Ingresar"}
         </button>

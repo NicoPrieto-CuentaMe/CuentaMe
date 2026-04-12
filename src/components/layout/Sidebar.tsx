@@ -40,8 +40,8 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex h-14 items-center border-b border-[var(--border)] px-5">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-surface">
+      <div className="flex h-14 items-center border-b border-border px-5">
         <Link href="/dashboard" className="text-lg font-semibold tracking-tight text-accent">
           {APP_NAME}
         </Link>
@@ -56,8 +56,8 @@ export function Sidebar() {
               href={item.href}
               className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-accent/10 text-accent"
-                  : "text-[var(--foreground)]/80 hover:bg-gray-100 hover:text-[var(--foreground)]"
+                  ? "bg-accent-light text-accent"
+                  : "text-text-secondary hover:bg-surface-elevated hover:text-text-primary"
               }`}
             >
               <span className="flex items-center gap-2">

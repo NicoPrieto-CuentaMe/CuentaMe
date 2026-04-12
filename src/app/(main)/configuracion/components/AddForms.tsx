@@ -14,7 +14,7 @@ const initialState: ActionState = { ok: true };
 function Feedback({ state }: { state: ActionState }) {
   if (!("ok" in state) || state.ok) return null;
   return (
-    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <div className="mt-3 rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">
       {state.message}
     </div>
   );
@@ -34,42 +34,38 @@ export function AddSupplierForm() {
   return (
     <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-3">
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Nombre *</label>
+        <label className="text-sm font-medium text-text-secondary">Nombre *</label>
         <input
           name="name"
           required
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
           placeholder="Ej: Distribuidora San Juan"
         />
       </div>
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Teléfono</label>
+        <label className="text-sm font-medium text-text-secondary">Teléfono</label>
         <input
           name="phone"
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
           placeholder="Ej: 3001234567"
         />
       </div>
-      <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Categoría</label>
-        <select
-          name="category"
-          defaultValue=""
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
-        >
-          <option value="">Selecciona...</option>
+      <div className="md:col-span-3">
+        <span className="text-sm font-medium text-text-secondary">Categorías</span>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {proveedorCategoriaOptions.map((o) => (
-            <option key={o.value} value={o.value}>
+            <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
+              <input type="checkbox" name="categorias" value={o.value} className="rounded border-border text-accent focus:ring-accent" />
               {o.label}
-            </option>
+            </label>
           ))}
-        </select>
+        </div>
       </div>
       <div className="md:col-span-3 flex items-center justify-between gap-3">
         <Feedback state={state} />
         <button
           type="submit"
-          className="ml-auto rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)]"
+          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
         >
           Agregar proveedor
         </button>
@@ -86,21 +82,21 @@ export function AddSupplyForm() {
   return (
     <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-3">
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Nombre *</label>
+        <label className="text-sm font-medium text-text-secondary">Nombre *</label>
         <input
           name="name"
           required
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
           placeholder="Ej: Pechuga de pollo"
         />
       </div>
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Unidad base *</label>
+        <label className="text-sm font-medium text-text-secondary">Unidad base *</label>
         <select
           name="baseUnit"
           required
           defaultValue=""
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
         >
           <option value="" disabled>
             Selecciona...
@@ -113,11 +109,11 @@ export function AddSupplyForm() {
         </select>
       </div>
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Categoría</label>
+        <label className="text-sm font-medium text-text-secondary">Categoría</label>
         <select
           name="category"
           defaultValue=""
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
         >
           <option value="">Selecciona...</option>
           {insumoCategorias.map((c) => (
@@ -131,7 +127,7 @@ export function AddSupplyForm() {
         <Feedback state={state} />
         <button
           type="submit"
-          className="ml-auto rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)]"
+          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
         >
           Agregar insumo
         </button>
@@ -159,16 +155,16 @@ export function AddDishForm() {
   return (
     <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-3">
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Nombre *</label>
+        <label className="text-sm font-medium text-text-secondary">Nombre *</label>
         <input
           name="name"
           required
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
           placeholder="Ej: Hamburguesa"
         />
       </div>
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Precio de venta *</label>
+        <label className="text-sm font-medium text-text-secondary">Precio de venta *</label>
         <input type="hidden" name="salePrice" value={precioNumerico} />
         <input
           required
@@ -179,21 +175,21 @@ export function AddDishForm() {
             const digits = raw.replace(/[^\d]/g, "");
             setPrecioDisplay(digits);
           }}
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
           placeholder="Ej: $ 25.000"
         />
       </div>
       <div className="md:col-span-1">
-        <label className="text-sm font-medium text-[var(--foreground)]">Activo</label>
+        <label className="text-sm font-medium text-text-secondary">Activo</label>
         <div className="mt-2 flex items-center gap-2">
           <input
             id="dish-active"
             name="active"
             type="checkbox"
             defaultChecked
-            className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)]"
+            className="h-4 w-4 rounded border-border text-accent"
           />
-          <label htmlFor="dish-active" className="text-sm text-[var(--foreground)]/80">
+          <label htmlFor="dish-active" className="text-sm text-text-secondary">
             Sí
           </label>
         </div>
@@ -202,7 +198,7 @@ export function AddDishForm() {
         <Feedback state={state} />
         <button
           type="submit"
-          className="ml-auto rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)]"
+          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
         >
           Agregar plato
         </button>
@@ -283,14 +279,14 @@ export function RecipeBuilderForm({
     <form ref={formRef} action={formAction} className="grid gap-3">
       <div className="grid gap-3 md:grid-cols-5">
         <div className="md:col-span-2">
-          <label className="text-sm font-medium text-[var(--foreground)]">Plato</label>
+          <label className="text-sm font-medium text-text-secondary">Plato</label>
           <select
             name="dishId"
             required
             value={dishId}
             disabled={lockDish}
             onChange={(e) => setDishId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+            className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
           >
             <option value="" disabled>
               Selecciona...
@@ -304,7 +300,7 @@ export function RecipeBuilderForm({
         </div>
 
         <div className="md:col-span-1">
-          <label className="text-sm font-medium text-[var(--foreground)]"># de insumos</label>
+          <label className="text-sm font-medium text-text-secondary"># de insumos</label>
           <div className="mt-1 flex gap-2">
             <input
               inputMode="numeric"
@@ -319,14 +315,14 @@ export function RecipeBuilderForm({
                 setCountDraft(raw);
               }}
               onBlur={commitCountFromDraft}
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
               placeholder="1 a 20"
             />
             <input type="hidden" name="count" value={String(count)} />
             <button
               type="button"
               onClick={commitCountFromDraft}
-              className="shrink-0 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 hover:text-[var(--foreground)]"
+              className="shrink-0 rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm font-medium text-text-primary hover:bg-border"
             >
               Generar
             </button>
@@ -337,15 +333,15 @@ export function RecipeBuilderForm({
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[820px] rounded-lg border border-[var(--border)] bg-white">
-          <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--foreground)]/70">
+        <div className="min-w-[820px] rounded-lg border border-border bg-surface">
+          <div className="grid grid-cols-12 gap-2 border-b border-border bg-surface-elevated px-3 py-2 text-sm font-semibold text-text-secondary">
             <div className="col-span-5">Insumo</div>
             <div className="col-span-3">Cantidad</div>
             <div className="col-span-4">Unidad</div>
           </div>
-          <div className="divide-y divide-[var(--border)]">
+          <div className="divide-y divide-border">
             {rows.map((r, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 px-3 py-2">
+              <div key={i} className="grid grid-cols-12 gap-2 bg-surface px-3 py-2 hover:bg-surface-elevated">
                 <div className="col-span-5">
                   <select
                     required
@@ -355,7 +351,7 @@ export function RecipeBuilderForm({
                       const v = e.target.value;
                       setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, supplyId: v } : p)));
                     }}
-                    className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                   >
                     <option value="">
                       Selecciona...
@@ -381,7 +377,7 @@ export function RecipeBuilderForm({
                       const v = e.target.value;
                       setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, quantity: v } : p)));
                     }}
-                    className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                   />
                 </div>
 
@@ -394,7 +390,7 @@ export function RecipeBuilderForm({
                       const v = e.target.value;
                       setRows((prev) => prev.map((p, idx) => (idx === i ? { ...p, unit: v } : p)));
                     }}
-                    className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                   >
                     <option value="">
                       Selecciona...
@@ -416,7 +412,7 @@ export function RecipeBuilderForm({
         <Feedback state={state} />
         <button
           type="submit"
-          className="ml-auto rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)]"
+          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
         >
           Guardar receta completa
         </button>

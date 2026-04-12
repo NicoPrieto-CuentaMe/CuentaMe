@@ -53,13 +53,13 @@ model User {
 }
 
 model Proveedor {
-  id        String              @id @default(cuid())
-  userId    String
-  nombre    String
-  telefono  String?
-  categoria CategoriaProveedor?
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  id         String               @id @default(cuid())
+  userId     String
+  nombre     String
+  telefono   String?
+  categorias CategoriaProveedor[] @default([])
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   compras Compra[]

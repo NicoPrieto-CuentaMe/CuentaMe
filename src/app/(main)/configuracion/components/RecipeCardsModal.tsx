@@ -32,7 +32,7 @@ function unitLabel(unidad: Unidad) {
 }
 
 const cellInput =
-  "w-full min-w-0 rounded border border-[var(--border)]/70 bg-white px-1.5 py-1 text-xs text-[var(--foreground)] outline-none focus:border-accent sm:text-sm";
+  "w-full min-w-0 rounded border border-border bg-surface-elevated px-1.5 py-1 text-xs text-text-primary outline-none focus:border-accent sm:text-sm";
 
 export function RecipesCardsModal({
   groups,
@@ -199,7 +199,7 @@ export function RecipesCardsModal({
   return (
     <div className="space-y-4">
       {!embedded && platosSinReceta.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-warning bg-warning-light px-4 py-3 text-sm text-warning">
           <span className="font-semibold">
             {platosSinReceta.length} platos aún no tienen receta:
           </span>{" "}
@@ -213,7 +213,7 @@ export function RecipesCardsModal({
                 params.set("dishId", p.id);
                 router.replace(`/configuracion?${params.toString()}`);
               }}
-              className="underline decoration-amber-400 underline-offset-2 hover:decoration-amber-600"
+              className="underline decoration-warning underline-offset-2 hover:opacity-90"
             >
               {p.nombre}
               {idx < platosSinReceta.length - 1 ? ", " : ""}
@@ -231,7 +231,7 @@ export function RecipesCardsModal({
       {!embedded ? (
         <div className="grid gap-3 md:grid-cols-2">
           {groups.length === 0 ? (
-            <p className="text-sm text-[var(--foreground)]/60">Aún no tienes recetas registradas</p>
+            <p className="text-sm text-text-tertiary">Aún no tienes recetas registradas</p>
           ) : (
             groups.map((g) => (
               <button
@@ -243,16 +243,16 @@ export function RecipesCardsModal({
                   setEditRows([]);
                   setEditError(null);
                 }}
-                className="rounded-xl border border-[var(--border)] bg-white p-4 text-left shadow-sm hover:bg-gray-50"
+                className="rounded-xl border border-border bg-surface p-4 text-left shadow-sm hover:bg-surface-elevated"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-[var(--foreground)]">{g.platoNombre}</div>
-                    <div className="mt-1 text-sm text-[var(--foreground)]/60">
+                    <div className="truncate text-sm font-semibold text-text-primary">{g.platoNombre}</div>
+                    <div className="mt-1 text-sm text-text-tertiary">
                       {g.ingredientes.length} ingredientes
                     </div>
                   </div>
-                  <div className="rounded-full bg-accent/10 px-2 py-1 text-xs font-semibold text-accent">
+                  <div className="rounded-full bg-accent-light px-2 py-1 text-xs font-semibold text-accent">
                     Ver
                   </div>
                 </div>
@@ -266,22 +266,22 @@ export function RecipesCardsModal({
         <div className="fixed inset-0 z-50">
           <button
             type="button"
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/70"
             onClick={closeModal}
             aria-label="Cerrar"
           />
-          <div className="relative mx-auto mt-16 max-h-[calc(100vh-5rem)] w-[min(760px,calc(100%-2rem))] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg">
+          <div className="relative mx-auto mt-16 max-h-[calc(100vh-5rem)] w-[min(760px,calc(100%-2rem))] overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h4 className="truncate text-base font-semibold text-[var(--foreground)]">{openGroup.platoNombre}</h4>
-                <p className="mt-1 text-sm text-[var(--foreground)]/60">
+                <h4 className="truncate text-base font-semibold text-text-primary">{openGroup.platoNombre}</h4>
+                <p className="mt-1 text-sm text-text-tertiary">
                   {openGroup.ingredientes.length} ingredientes
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 hover:text-[var(--foreground)]"
+                className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm font-medium text-text-primary hover:bg-border"
               >
                 Cerrar
               </button>
@@ -289,15 +289,15 @@ export function RecipesCardsModal({
 
             {openGroup.ingredientes.length > 0 && !editing ? (
               <div className="mt-4 space-y-2">
-                <div className="rounded-lg border border-[var(--border)] bg-white">
-                  <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--foreground)]/70">
+                <div className="rounded-lg border border-border bg-surface">
+                  <div className="grid grid-cols-12 gap-2 border-b border-border bg-surface-elevated px-3 py-2 text-sm font-semibold text-text-secondary">
                     <div className="col-span-6">Insumo</div>
                     <div className="col-span-3">Cantidad</div>
                     <div className="col-span-3">Unidad</div>
                   </div>
-                  <div className="divide-y divide-[var(--border)]">
+                  <div className="divide-y divide-border">
                     {openGroup.ingredientes.map((i) => (
-                      <div key={i.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm text-[var(--foreground)]/90">
+                      <div key={i.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm text-text-primary">
                         <div className="col-span-6">{i.insumoNombre}</div>
                         <div className="col-span-3">{i.cantidad}</div>
                         <div className="col-span-3">{unitLabel(i.unidad)}</div>
@@ -310,42 +310,42 @@ export function RecipesCardsModal({
                   <button
                     type="button"
                     onClick={beginEdit}
-                    className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)]"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
                   >
                     Editar receta
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-lg border-2 border-amber-200/90 bg-amber-50/50 p-3 shadow-inner">
+              <div className="mt-4 rounded-lg border-2 border-warning bg-warning-light p-3 shadow-inner">
                 {editError ? (
-                  <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <div className="mb-3 rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">
                     {editError}
                   </div>
                 ) : null}
 
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]/60">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                     Modo edición
                   </span>
                   <button
                     type="button"
                     onClick={addRow}
-                    className="rounded border border-dashed border-amber-400/80 bg-white px-2.5 py-1 text-xs font-medium text-[var(--foreground)]/90 hover:bg-amber-50"
+                    className="rounded border border-dashed border-warning bg-surface px-2.5 py-1 text-xs font-medium text-text-primary hover:bg-warning-light"
                   >
                     ＋ Agregar insumo
                   </button>
                 </div>
 
-                <div className="overflow-x-auto rounded-md border border-amber-200/80 bg-white">
+                <div className="overflow-x-auto rounded-md border border-warning bg-surface">
                   <div className="min-w-[560px]">
-                    <div className="grid grid-cols-12 gap-1 border-b border-[var(--border)] px-2 py-1.5 text-xs font-semibold text-[var(--foreground)]/70 sm:gap-2 sm:px-3 sm:text-sm">
+                    <div className="grid grid-cols-12 gap-1 border-b border-border px-2 py-1.5 text-xs font-semibold text-text-secondary sm:gap-2 sm:px-3 sm:text-sm">
                       <div className="col-span-5">Insumo</div>
                       <div className="col-span-2">Cantidad</div>
                       <div className="col-span-4">Unidad</div>
                       <div className="col-span-1 text-center"> </div>
                     </div>
-                    <div className="divide-y divide-[var(--border)]">
+                    <div className="divide-y divide-border">
                       {editRows.map((row, idx) => (
                         <div key={idx} className="grid grid-cols-12 items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3">
                           <div className="col-span-5">
@@ -393,7 +393,7 @@ export function RecipesCardsModal({
                               disabled={editRows.length <= 1}
                               title={editRows.length <= 1 ? "Debe quedar al menos una fila" : "Quitar fila"}
                               onClick={() => removeRow(idx)}
-                              className="rounded px-1.5 py-0.5 text-lg leading-none text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="rounded px-1.5 py-0.5 text-lg leading-none text-danger hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               ×
                             </button>
@@ -404,12 +404,12 @@ export function RecipesCardsModal({
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-amber-200/80 pt-3">
+                <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-warning pt-3">
                   <button
                     type="button"
                     disabled={pending}
                     onClick={cancelEdit}
-                    className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)]/80 hover:bg-gray-50 hover:text-[var(--foreground)] disabled:opacity-60"
+                    className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm font-medium text-text-primary hover:bg-border disabled:opacity-60"
                   >
                     Cancelar
                   </button>
@@ -417,7 +417,7 @@ export function RecipesCardsModal({
                     type="button"
                     disabled={pending}
                     onClick={saveEdit}
-                    className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-60"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
                   >
                     {pending ? "Guardando…" : "Guardar cambios"}
                   </button>
