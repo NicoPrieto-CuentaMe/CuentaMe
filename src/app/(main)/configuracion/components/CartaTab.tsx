@@ -573,6 +573,13 @@ export function CartaTab({
 
   const menuSections = useMemo(() => buildMenuSections(platos, categorias), [platos, categorias]);
 
+  /** Platos marcados con receta obligatoria pero sin filas de receta aún. */
+  const platosNecesitanReceta = useMemo(() => {
+    return [...platos]
+      .filter((p) => p.tieneReceta && p.recetas.length === 0)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [platos]);
+
   const activeDishes = useMemo(() => platos.filter((p) => p.active), [platos]);
 
   const recipeGroups: RecipeCardGroup[] = useMemo(
@@ -610,6 +617,12 @@ export function CartaTab({
     setRecipePlatoId(p.id);
   }, []);
 
+  const handleAlertPlatoClick = useCallback((p: CartaPlatoRow) => {
+    const el = document.getElementById(`carta-plato-${p.id}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    handleCardClick(p);
+  }, [handleCardClick]);
+
   const closeCreateModal = useCallback(() => setCreateOpen(false), []);
   const closeEditModal = useCallback(() => setEditPlato(null), []);
 
@@ -633,6 +646,43 @@ export function CartaTab({
   return (
     <div className="space-y-6">
       <CategoriaChips categorias={categorias} onDeleted={() => router.refresh()} />
+
+      {platosNecesitanReceta.length > 0 ? (
+        <div
+          className="flex gap-3 rounded-lg border-l-4 border-warning bg-warning-light px-4 py-3 text-sm text-text-primary shadow-sm"
+          role="status"
+        >
+          <span className="shrink-0 select-none text-lg leading-snug text-warning" aria-hidden>
+            ⚠
+          </span>
+          <p className="min-w-0 leading-relaxed">
+            <span className="font-medium">
+              {platosNecesitanReceta.length === 1
+                ? "1 plato necesita receta"
+                : `${platosNecesitanReceta.length} platos necesitan receta`}
+            </span>
+            {": "}
+            {platosNecesitanReceta.slice(0, 3).map((p, i) => (
+              <span key={p.id}>
+                {i > 0 ? ", " : ""}
+                <button
+                  type="button"
+                  className="font-medium text-warning underline decoration-warning/80 underline-offset-2 transition hover:text-warning hover:decoration-warning"
+                  onClick={() => handleAlertPlatoClick(p)}
+                >
+                  {p.nombre}
+                </button>
+              </span>
+            ))}
+            {platosNecesitanReceta.length > 3 ? (
+              <span className="text-text-secondary">
+                {" "}
+                +{platosNecesitanReceta.length - 3} más
+              </span>
+            ) : null}
+          </p>
+        </div>
+      ) : null}
 
       <section className="relative rounded-xl border border-border bg-surface p-6 shadow-sm">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -668,6 +718,7 @@ export function CartaTab({
                     return (
                       <div
                         key={p.id}
+                        id={`carta-plato-${p.id}`}
                         role={clickable ? "button" : undefined}
                         tabIndex={clickable ? 0 : undefined}
                         title={!clickable ? "Este plato no requiere receta" : undefined}
