@@ -66,7 +66,6 @@ model Proveedor {
   compras Compra[]
 
   @@index([userId, deletedAt])
-  @@unique([userId, nombre])
 }
 
 model Insumo {
@@ -85,7 +84,6 @@ model Insumo {
   inventarios Inventario[]
 
   @@index([userId, deletedAt])
-  @@unique([userId, nombre])
 }
 
 model Categoria {
@@ -98,7 +96,6 @@ model Categoria {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  @@unique([userId, nombre])
   @@index([userId, deletedAt])
 }
 
@@ -120,7 +117,6 @@ model Plato {
   detallesVenta DetalleVenta[]
 
   @@index([userId, deletedAt])
-  @@unique([userId, nombre])
 }
 
 model Receta {
