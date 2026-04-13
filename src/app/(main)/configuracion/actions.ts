@@ -41,6 +41,26 @@ export type ActionState =
   | { ok: true; message?: string }
   | { ok: false; message: string; field?: string };
 
+const MAX_NOMBRE = 100;
+const MAX_TELEFONO_CHARS = 20;
+const MAX_NOTAS = 500;
+const MAX_PRECIO_VENTA = new Prisma.Decimal(2_000_000);
+const MAX_CANTIDAD_RECETA = new Prisma.Decimal(9_999);
+
+function maxLength(value: string, max: number, campo: string): { ok: false; message: string } | null {
+  if (value.length > max) {
+    return {
+      ok: false,
+      message: `${campo} no puede superar ${max} caracteres.`,
+    };
+  }
+  return null;
+}
+
+function validarTelefono(tel: string): boolean {
+  return /^[0-9+\-\s()]{7,20}$/.test(tel);
+}
+
 function requiredString(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" ? v.trim() : "";
@@ -73,6 +93,20 @@ export async function addSupplier(_: ActionState, formData: FormData): Promise<A
     const phone = optionalString(formData, "phone");
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
 
+    const nameLen = maxLength(name, MAX_NOMBRE, "El nombre");
+    if (nameLen) return { ...nameLen, field: "name" };
+    if (phone) {
+      const phoneLen = maxLength(phone, MAX_TELEFONO_CHARS, "El teléfono");
+      if (phoneLen) return { ...phoneLen, field: "phone" };
+      if (!validarTelefono(phone)) {
+        return {
+          ok: false,
+          message: "El teléfono solo puede contener números, +, - y espacios.",
+          field: "phone",
+        };
+      }
+    }
+
     const catParsed = parseCategoriasProveedorForm(formData, "categorias");
     if (!catParsed.ok) return { ok: false, message: catParsed.message, field: "categorias" };
 
@@ -83,6 +117,7 @@ export async function addSupplier(_: ActionState, formData: FormData): Promise<A
     revalidatePath("/configuracion");
     return { ok: true, message: "Proveedor agregado." };
   } catch (e) {
+    console.error("[addSupplier]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un proveedor con ese nombre."
@@ -91,17 +126,23 @@ export async function addSupplier(_: ActionState, formData: FormData): Promise<A
   }
 }
 
-export async function deleteSupplier(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const id = requiredString(formData, "id");
-  if (!id) throw new Error("Proveedor inválido.");
+export async function deleteSupplier(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Proveedor inválido." };
 
-  const res = await prisma.proveedor.deleteMany({
-    where: { id, userId },
-  });
-  if (res.count === 0) throw new Error("Proveedor no encontrado.");
+    const res = await prisma.proveedor.deleteMany({
+      where: { id, userId },
+    });
+    if (res.count === 0) return { ok: false, message: "Proveedor no encontrado." };
 
-  revalidatePath("/configuracion");
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Proveedor eliminado." };
+  } catch (e) {
+    console.error("[deleteSupplier]", e);
+    return { ok: false, message: "No se pudo eliminar el proveedor." };
+  }
 }
 
 export async function updateProveedor(formData: FormData): Promise<ActionState> {
@@ -116,6 +157,20 @@ export async function updateProveedor(formData: FormData): Promise<ActionState> 
     if (!id) return { ok: false, message: "Proveedor inválido." };
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
 
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return nombreLen;
+    if (telefono) {
+      const telLen = maxLength(telefono, MAX_TELEFONO_CHARS, "El teléfono");
+      if (telLen) return { ...telLen, field: "telefono" };
+      if (!validarTelefono(telefono)) {
+        return {
+          ok: false,
+          message: "El teléfono solo puede contener números, +, - y espacios.",
+          field: "telefono",
+        };
+      }
+    }
+
     const res = await prisma.proveedor.updateMany({
       where: { id, userId },
       data: { nombre, telefono: telefono ?? null, categorias: catParsed.value },
@@ -125,6 +180,7 @@ export async function updateProveedor(formData: FormData): Promise<ActionState> 
     revalidatePath("/configuracion");
     return { ok: true, message: "Proveedor actualizado." };
   } catch (e) {
+    console.error("[updateProveedor]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un proveedor con ese nombre."
@@ -143,6 +199,13 @@ export async function addSupply(_: ActionState, formData: FormData): Promise<Act
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
     if (!baseUnitRaw) return { ok: false, message: "La unidad base es obligatoria.", field: "baseUnit" };
 
+    const nameLen = maxLength(name, MAX_NOMBRE, "El nombre");
+    if (nameLen) return { ...nameLen, field: "name" };
+    if (category) {
+      const catLen = maxLength(category, MAX_NOTAS, "La categoría");
+      if (catLen) return { ...catLen, field: "category" };
+    }
+
     const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
     if (!unidadBase) return { ok: false, message: "Unidad base inválida.", field: "baseUnit" };
 
@@ -153,6 +216,7 @@ export async function addSupply(_: ActionState, formData: FormData): Promise<Act
     revalidatePath("/configuracion");
     return { ok: true, message: "Insumo agregado." };
   } catch (e) {
+    console.error("[addSupply]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un insumo con ese nombre."
@@ -224,6 +288,7 @@ export async function deleteInsumo(formData: FormData): Promise<ActionState> {
     revalidatePath("/configuracion");
     return { ok: true, message: "Insumo eliminado." };
   } catch (e) {
+    console.error("[deleteInsumo]", e);
     const message =
       e instanceof Error ? e.message : "No se pudo eliminar el insumo. Intenta de nuevo.";
     return { ok: false, message };
@@ -242,6 +307,13 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
     if (!baseUnitRaw) return { ok: false, message: "La unidad base es obligatoria." };
 
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return nombreLen;
+    if (categoria) {
+      const catLen = maxLength(categoria, MAX_NOTAS, "La categoría");
+      if (catLen) return catLen;
+    }
+
     const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
     if (!unidadBase) return { ok: false, message: "Unidad base inválida." };
 
@@ -254,6 +326,7 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     revalidatePath("/configuracion");
     return { ok: true, message: "Insumo actualizado." };
   } catch (e) {
+    console.error("[updateInsumo]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un insumo con ese nombre."
@@ -281,8 +354,12 @@ export async function addDish(_: ActionState, formData: FormData): Promise<Actio
     }
 
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
+    const nameLen = maxLength(name, MAX_NOMBRE, "El nombre");
+    if (nameLen) return { ...nameLen, field: "name" };
     const salePrice = toPositiveDecimal(salePriceRaw);
-    if (!salePrice) return { ok: false, message: "El precio de venta debe ser mayor a 0.", field: "salePrice" };
+    if (!salePrice) return { ok: false, message: "El precio debe ser mayor a 0.", field: "salePrice" };
+    if (salePrice.greaterThan(MAX_PRECIO_VENTA))
+      return { ok: false, message: "El precio no puede superar $2.000.000.", field: "salePrice" };
 
     await prisma.plato.create({
       data: { userId, nombre: name, categoriaId, precioVenta: salePrice, active },
@@ -291,6 +368,7 @@ export async function addDish(_: ActionState, formData: FormData): Promise<Actio
     revalidatePath("/configuracion");
     return { ok: true, message: "Plato agregado." };
   } catch (e) {
+    console.error("[addDish]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un plato con ese nombre."
@@ -333,8 +411,12 @@ export async function updatePlato(formData: FormData): Promise<ActionState> {
 
     if (!id) return { ok: false, message: "Plato inválido." };
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return nombreLen;
     const salePrice = toPositiveDecimal(salePriceRaw);
-    if (!salePrice) return { ok: false, message: "El precio de venta debe ser mayor a 0." };
+    if (!salePrice) return { ok: false, message: "El precio debe ser mayor a 0." };
+    if (salePrice.greaterThan(MAX_PRECIO_VENTA))
+      return { ok: false, message: "El precio no puede superar $2.000.000." };
 
     const res = await prisma.plato.updateMany({
       where: { id, userId },
@@ -345,6 +427,7 @@ export async function updatePlato(formData: FormData): Promise<ActionState> {
     revalidatePath("/configuracion");
     return { ok: true, message: "Plato actualizado." };
   } catch (e) {
+    console.error("[updatePlato]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un plato con ese nombre."
@@ -374,8 +457,12 @@ export async function createPlato(_: ActionState, formData: FormData): Promise<A
     }
 
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
+    const nameLen = maxLength(name, MAX_NOMBRE, "El nombre");
+    if (nameLen) return { ...nameLen, field: "name" };
     const salePrice = toPositiveDecimal(salePriceRaw);
-    if (!salePrice) return { ok: false, message: "El precio de venta debe ser mayor a 0.", field: "salePrice" };
+    if (!salePrice) return { ok: false, message: "El precio debe ser mayor a 0.", field: "salePrice" };
+    if (salePrice.greaterThan(MAX_PRECIO_VENTA))
+      return { ok: false, message: "El precio no puede superar $2.000.000.", field: "salePrice" };
 
     await prisma.plato.create({
       data: {
@@ -391,6 +478,7 @@ export async function createPlato(_: ActionState, formData: FormData): Promise<A
     revalidatePath("/configuracion");
     return { ok: true, message: "Plato creado." };
   } catch (e) {
+    console.error("[createPlato]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un plato con ese nombre."
@@ -422,8 +510,12 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
 
     if (!id) return { ok: false, message: "Plato inválido." };
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return nombreLen;
     const salePrice = toPositiveDecimal(salePriceRaw);
-    if (!salePrice) return { ok: false, message: "El precio de venta debe ser mayor a 0." };
+    if (!salePrice) return { ok: false, message: "El precio debe ser mayor a 0." };
+    if (salePrice.greaterThan(MAX_PRECIO_VENTA))
+      return { ok: false, message: "El precio no puede superar $2.000.000." };
 
     const res = await prisma.plato.updateMany({
       where: { id, userId },
@@ -440,6 +532,7 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
     revalidatePath("/configuracion");
     return { ok: true, message: "Plato actualizado." };
   } catch (e) {
+    console.error("[updatePlatoCompleto]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe un plato con ese nombre."
@@ -454,6 +547,9 @@ export async function createCategoria(_: ActionState, formData: FormData): Promi
     const nombre = requiredString(formData, "nombre");
     if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
 
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return { ...nombreLen, field: "nombre" };
+
     await prisma.categoria.create({
       data: { userId, nombre },
     });
@@ -461,6 +557,7 @@ export async function createCategoria(_: ActionState, formData: FormData): Promi
     revalidatePath("/configuracion");
     return { ok: true, message: "Categoría creada." };
   } catch (e) {
+    console.error("[createCategoria]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe una categoría con ese nombre."
@@ -475,6 +572,9 @@ export async function updateCategoria(id: string, nombre: string): Promise<Actio
     const trimmed = nombre.trim();
     if (!id.trim()) return { ok: false, message: "Categoría inválida." };
     if (!trimmed) return { ok: false, message: "El nombre no puede quedar vacío." };
+
+    const nombreLen = maxLength(trimmed, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return nombreLen;
 
     const existing = await prisma.categoria.findFirst({
       where: { id, userId },
@@ -501,6 +601,7 @@ export async function updateCategoria(id: string, nombre: string): Promise<Actio
     revalidatePath("/configuracion");
     return { ok: true, message: "Categoría actualizada." };
   } catch (e) {
+    console.error("[updateCategoria]", e);
     const message =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
         ? "Ya existe una categoría con ese nombre."
@@ -595,7 +696,7 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
     return { ok: true, message: "Ingrediente agregado a la receta." };
   } catch (e) {
     console.error("[addRecipeIngredient]", e);
-    return { ok: false, message: "No se pudo agregar el ingrediente. Intenta de nuevo." };
+    return { ok: false, message: "No se pudo agregar el ingrediente." };
   }
 }
 
@@ -656,24 +757,32 @@ export async function saveRecipeComplete(_: ActionState, formData: FormData): Pr
       }
     }
 
-    const ops = rows.map((r) => {
+    const data = rows.map((r) => {
       const cantidad = toPositiveDecimal(r.cantidadRaw);
       if (!cantidad) throw new Error(`Cantidad inválida en fila ${r.index + 1}.`);
+      if (cantidad.greaterThan(MAX_CANTIDAD_RECETA)) {
+        throw new Error(`La cantidad en fila ${r.index + 1} no puede superar 9.999.`);
+      }
       const unidad = (Unidad as Record<string, Unidad>)[r.unidadRaw];
       if (!unidad) throw new Error(`Unidad inválida en fila ${r.index + 1}.`);
-
-      return prisma.receta.upsert({
-        where: { platoId_insumoId: { platoId, insumoId: r.insumoId } },
-        create: { userId, platoId, insumoId: r.insumoId, cantidad, unidad },
-        update: { userId, cantidad, unidad },
-      });
+      return {
+        userId,
+        platoId,
+        insumoId: r.insumoId,
+        cantidad,
+        unidad,
+      };
     });
 
-    await prisma.$transaction(ops);
+    await prisma.$transaction(async (tx) => {
+      await tx.receta.deleteMany({ where: { platoId, userId } });
+      await tx.receta.createMany({ data });
+    });
 
     revalidatePath("/configuracion");
     return { ok: true, message: "Receta guardada." };
   } catch (e) {
+    console.error("[saveRecipeComplete]", e);
     const message = e instanceof Error ? e.message : "No se pudo guardar la receta. Intenta de nuevo.";
     return { ok: false, message };
   }
@@ -748,23 +857,35 @@ export async function updateReceta(payload: {
       }
     }
 
-    const data = ingredientes.map((r) => {
+    const data: {
+      userId: string;
+      platoId: string;
+      insumoId: string;
+      cantidad: Prisma.Decimal;
+      unidad: Unidad;
+    }[] = [];
+
+    for (let i = 0; i < ingredientes.length; i++) {
+      const r = ingredientes[i];
       const cantidad = toPositiveDecimal(r.cantidad.trim());
       if (!cantidad) {
-        throw new Error(`La cantidad debe ser mayor a 0 en cada fila.`);
+        return { ok: false, message: `Cantidad inválida en fila ${i + 1}.` };
+      }
+      if (cantidad.greaterThan(MAX_CANTIDAD_RECETA)) {
+        return { ok: false, message: `La cantidad en fila ${i + 1} no puede superar 9.999.` };
       }
       const unidad = (Unidad as Record<string, Unidad>)[r.unidad.trim()];
       if (!unidad) {
-        throw new Error("Unidad inválida.");
+        return { ok: false, message: `Unidad inválida en la fila ${i + 1}.` };
       }
-      return {
+      data.push({
         userId,
         platoId,
         insumoId: r.insumoId.trim(),
         cantidad,
         unidad,
-      };
-    });
+      });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.receta.deleteMany({ where: { platoId, userId } });
@@ -774,22 +895,29 @@ export async function updateReceta(payload: {
     revalidatePath("/configuracion");
     return { ok: true, message: "Receta actualizada." };
   } catch (e) {
+    console.error("[updateReceta]", e);
     const message =
       e instanceof Error ? e.message : "No se pudo actualizar la receta. Intenta de nuevo.";
     return { ok: false, message };
   }
 }
 
-export async function deleteRecipeIngredient(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const id = requiredString(formData, "id");
-  if (!id) throw new Error("Ingrediente inválido.");
+export async function deleteRecipeIngredient(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Ingrediente inválido." };
 
-  const res = await prisma.receta.deleteMany({
-    where: { id, userId },
-  });
-  if (res.count === 0) throw new Error("Ingrediente no encontrado.");
+    const res = await prisma.receta.deleteMany({
+      where: { id, userId },
+    });
+    if (res.count === 0) return { ok: false, message: "Ingrediente no encontrado." };
 
-  revalidatePath("/configuracion");
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Ingrediente eliminado." };
+  } catch (e) {
+    console.error("[deleteRecipeIngredient]", e);
+    return { ok: false, message: "No se pudo eliminar el ingrediente." };
+  }
 }
 

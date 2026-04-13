@@ -766,7 +766,12 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                           <button type="button" className={btnEdit} onClick={() => beginEdit(s)}>
                             Editar
                           </button>
-                          <form action={deleteSupplier} className="inline">
+                          <form
+                            action={async (fd) => {
+                              await deleteSupplier(fd);
+                            }}
+                            className="inline"
+                          >
                             <input type="hidden" name="id" value={s.id} />
                             <ConfirmSubmitButton
                               confirmMessage="¿Eliminar este proveedor? Esta acción no se puede deshacer."
