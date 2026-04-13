@@ -200,7 +200,8 @@ export async function checkInsumoEnUso(insumoId: string): Promise<CheckInsumoEnU
     platoNames.sort((a, b) => a.localeCompare(b, "es"));
 
     return { ok: true, enUso: true, platoNames };
-  } catch {
+  } catch (e) {
+    console.error("[checkInsumoEnUso]", e);
     return { ok: false, message: "No se pudo comprobar el uso del insumo." };
   }
 }
@@ -530,7 +531,8 @@ export async function deleteCategoria(_: ActionState, formData: FormData): Promi
 
     revalidatePath("/configuracion");
     return { ok: true, message: "Categoría eliminada." };
-  } catch {
+  } catch (e) {
+    console.error("[deleteCategoria]", e);
     return { ok: false, message: "No se pudo eliminar la categoría." };
   }
 }
@@ -548,7 +550,8 @@ export async function deletePlatoConReceta(formData: FormData): Promise<ActionSt
 
     revalidatePath("/configuracion");
     return { ok: true, message: "Plato eliminado." };
-  } catch {
+  } catch (e) {
+    console.error("[deletePlatoConReceta]", e);
     return { ok: false, message: "No se pudo eliminar el plato. Intenta de nuevo." };
   }
 }
@@ -590,7 +593,8 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
 
     revalidatePath("/configuracion");
     return { ok: true, message: "Ingrediente agregado a la receta." };
-  } catch {
+  } catch (e) {
+    console.error("[addRecipeIngredient]", e);
     return { ok: false, message: "No se pudo agregar el ingrediente. Intenta de nuevo." };
   }
 }
