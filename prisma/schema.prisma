@@ -60,11 +60,12 @@ model Proveedor {
   categorias CategoriaProveedor[] @default([])
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
+  deletedAt  DateTime?
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   compras Compra[]
 
-  @@index([userId])
+  @@index([userId, deletedAt])
   @@unique([userId, nombre])
 }
 
@@ -76,13 +77,14 @@ model Insumo {
   categoria  String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   recetas     Receta[]
   compras     Compra[]
   inventarios Inventario[]
 
-  @@index([userId])
+  @@index([userId, deletedAt])
   @@unique([userId, nombre])
 }
 
@@ -94,8 +96,10 @@ model Categoria {
   platos    Plato[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   @@unique([userId, nombre])
+  @@index([userId, deletedAt])
 }
 
 model Plato {
@@ -108,13 +112,14 @@ model Plato {
   tieneReceta   Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   categoria     Categoria?     @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
   recetas       Receta[]
   detallesVenta DetalleVenta[]
 
-  @@index([userId])
+  @@index([userId, deletedAt])
   @@unique([userId, nombre])
 }
 
@@ -176,6 +181,7 @@ model Inventario {
 
   @@index([userId])
   @@index([insumoId])
+  @@index([userId, insumoId, fecha])
 }
 
 model Venta {
@@ -211,6 +217,7 @@ model DetalleVenta {
 
   @@index([userId])
   @@index([ventaId])
+  @@index([platoId])
 }
 
 model Empleado {
@@ -221,11 +228,12 @@ model Empleado {
   tipoContrato String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   nominas Nomina[]
 
-  @@index([userId])
+  @@index([userId, deletedAt])
 }
 
 model Nomina {
@@ -245,6 +253,7 @@ model Nomina {
   empleado Empleado @relation(fields: [empleadoId], references: [id])
 
   @@index([userId])
+  @@index([empleadoId])
 }
 
 model GastoFijo {

@@ -1554,7 +1554,12 @@ export function PlatosTable({ rows }: { rows: PlatoRow[] }) {
                           <button type="button" className={btnEdit} onClick={() => beginEdit(d)}>
                             Editar
                           </button>
-                          <form action={deleteDish} className="inline">
+                          <form
+                            action={async (fd) => {
+                              await deleteDish(fd);
+                            }}
+                            className="inline"
+                          >
                             <input type="hidden" name="id" value={d.id} />
                             <ConfirmSubmitButton
                               confirmMessage="¿Eliminar este plato? Si tiene receta, puede fallar."

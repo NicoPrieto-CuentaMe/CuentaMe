@@ -33,15 +33,15 @@ export default async function ConfiguracionPage({
 
   const [proveedores, insumos, platos, categorias] = await Promise.all([
     prisma.proveedor.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
     }),
     prisma.insumo.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
     }),
     prisma.plato.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       include: {
         recetas: {
           include: { insumo: true },
@@ -52,8 +52,14 @@ export default async function ConfiguracionPage({
       orderBy: { nombre: "asc" },
     }),
     prisma.categoria.findMany({
-      where: { userId },
-      include: { _count: { select: { platos: true } } },
+      where: { userId, deletedAt: null },
+      include: {
+        _count: {
+          select: {
+            platos: { where: { deletedAt: null } },
+          },
+        },
+      },
       orderBy: { nombre: "asc" },
     }),
   ]);

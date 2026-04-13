@@ -283,8 +283,8 @@ function CategoriaChips({
             {deleteTarget._count.platos > 0 ? (
               <p className="mt-2 text-sm text-text-secondary">
                 Esta categoría tiene {deleteTarget._count.platos}{" "}
-                {deleteTarget._count.platos === 1 ? "plato" : "platos"}. Si la eliminas, esos platos quedarán sin
-                categoría.
+                {deleteTarget._count.platos === 1 ? "plato" : "platos"}. Al eliminarla, dejará de mostrarse en la
+                carta; los platos conservan el vínculo para informes e historial.
               </p>
             ) : (
               <p className="mt-2 text-sm text-text-secondary">¿Eliminar la categoría «{deleteTarget.nombre}»?</p>
@@ -627,9 +627,9 @@ function DeletePlatoModal({
 }
 
 export function CartaTab({
-  platos,
-  categorias,
-  insumos,
+  platos: platosRaw,
+  categorias: categoriasRaw,
+  insumos: insumosRaw,
   initialDishId,
 }: {
   platos: CartaPlatoRow[];
@@ -637,6 +637,19 @@ export function CartaTab({
   insumos: Insumo[];
   initialDishId?: string;
 }) {
+  const platos = useMemo(
+    () => platosRaw.filter((p) => p.deletedAt == null),
+    [platosRaw],
+  );
+  const categorias = useMemo(
+    () => categoriasRaw.filter((c) => c.deletedAt == null),
+    [categoriasRaw],
+  );
+  const insumos = useMemo(
+    () => insumosRaw.filter((i) => i.deletedAt == null),
+    [insumosRaw],
+  );
+
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [pendingDeletePlato, setPendingDeletePlato] = useState(false);

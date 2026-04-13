@@ -86,6 +86,9 @@ async function requireUserId() {
   return userId;
 }
 
+/** Filtro estándar para entidades con soft delete (listados y mutaciones sobre filas activas). */
+const notDeleted = { deletedAt: null } as const;
+
 export async function addSupplier(_: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const userId = await requireUserId();
@@ -132,8 +135,9 @@ export async function deleteSupplier(formData: FormData): Promise<ActionState> {
     const id = requiredString(formData, "id");
     if (!id) return { ok: false, message: "Proveedor inválido." };
 
-    const res = await prisma.proveedor.deleteMany({
-      where: { id, userId },
+    const res = await prisma.proveedor.updateMany({
+      where: { id, userId, ...notDeleted },
+      data: { deletedAt: new Date() },
     });
     if (res.count === 0) return { ok: false, message: "Proveedor no encontrado." };
 
@@ -172,7 +176,7 @@ export async function updateProveedor(formData: FormData): Promise<ActionState> 
     }
 
     const res = await prisma.proveedor.updateMany({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       data: { nombre, telefono: telefono ?? null, categorias: catParsed.value },
     });
     if (res.count === 0) return { ok: false, message: "Proveedor no encontrado." };
@@ -240,7 +244,7 @@ export async function checkInsumoEnUso(insumoId: string): Promise<CheckInsumoEnU
     if (!id) return { ok: false, message: "Insumo inválido." };
 
     const insumo = await prisma.insumo.findFirst({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       select: { id: true },
     });
     if (!insumo) return { ok: false, message: "Insumo no encontrado." };
@@ -281,7 +285,10 @@ export async function deleteInsumo(formData: FormData): Promise<ActionState> {
 
     await prisma.$transaction(async (tx) => {
       await tx.receta.deleteMany({ where: { insumoId: id, userId } });
-      const del = await tx.insumo.deleteMany({ where: { id, userId } });
+      const del = await tx.insumo.updateMany({
+        where: { id, userId, ...notDeleted },
+        data: { deletedAt: new Date() },
+      });
       if (del.count === 0) throw new Error("Insumo no encontrado.");
     });
 
@@ -318,7 +325,7 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     if (!unidadBase) return { ok: false, message: "Unidad base inválida." };
 
     const res = await prisma.insumo.updateMany({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       data: { nombre, unidadBase, categoria: categoria ?? null },
     });
     if (res.count === 0) return { ok: false, message: "Insumo no encontrado." };
@@ -346,7 +353,7 @@ export async function addDish(_: ActionState, formData: FormData): Promise<Actio
     let categoriaId: string | null = null;
     if (categoriaIdRaw) {
       const cat = await prisma.categoria.findFirst({
-        where: { id: categoriaIdRaw, userId },
+        where: { id: categoriaIdRaw, userId, ...notDeleted },
         select: { id: true },
       });
       if (!cat) return { ok: false, message: "Categoría inválida.", field: "categoriaId" };
@@ -377,17 +384,24 @@ export async function addDish(_: ActionState, formData: FormData): Promise<Actio
   }
 }
 
-export async function deleteDish(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const id = requiredString(formData, "id");
-  if (!id) throw new Error("Plato inválido.");
+export async function deleteDish(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Plato inválido." };
 
-  const res = await prisma.plato.deleteMany({
-    where: { id, userId },
-  });
-  if (res.count === 0) throw new Error("Plato no encontrado.");
+    const res = await prisma.plato.updateMany({
+      where: { id, userId, ...notDeleted },
+      data: { deletedAt: new Date() },
+    });
+    if (res.count === 0) return { ok: false, message: "Plato no encontrado." };
 
-  revalidatePath("/configuracion");
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Plato eliminado." };
+  } catch (e) {
+    console.error("[deleteDish]", e);
+    return { ok: false, message: "No se pudo eliminar el plato." };
+  }
 }
 
 export async function updatePlato(formData: FormData): Promise<ActionState> {
@@ -402,7 +416,7 @@ export async function updatePlato(formData: FormData): Promise<ActionState> {
     let categoriaId: string | null = null;
     if (categoriaIdRaw) {
       const cat = await prisma.categoria.findFirst({
-        where: { id: categoriaIdRaw, userId },
+        where: { id: categoriaIdRaw, userId, ...notDeleted },
         select: { id: true },
       });
       if (!cat) return { ok: false, message: "Categoría inválida." };
@@ -419,7 +433,7 @@ export async function updatePlato(formData: FormData): Promise<ActionState> {
       return { ok: false, message: "El precio no puede superar $2.000.000." };
 
     const res = await prisma.plato.updateMany({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       data: { nombre, categoriaId, precioVenta: salePrice, active },
     });
     if (res.count === 0) return { ok: false, message: "Plato no encontrado." };
@@ -449,7 +463,7 @@ export async function createPlato(_: ActionState, formData: FormData): Promise<A
     let categoriaId: string | null = null;
     if (categoriaIdRaw) {
       const cat = await prisma.categoria.findFirst({
-        where: { id: categoriaIdRaw, userId },
+        where: { id: categoriaIdRaw, userId, ...notDeleted },
         select: { id: true },
       });
       if (!cat) return { ok: false, message: "Categoría inválida.", field: "categoriaId" };
@@ -501,7 +515,7 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
     let categoriaId: string | null = null;
     if (categoriaIdRaw) {
       const cat = await prisma.categoria.findFirst({
-        where: { id: categoriaIdRaw, userId },
+        where: { id: categoriaIdRaw, userId, ...notDeleted },
         select: { id: true },
       });
       if (!cat) return { ok: false, message: "Categoría inválida." };
@@ -518,7 +532,7 @@ export async function updatePlatoCompleto(_: ActionState, formData: FormData): P
       return { ok: false, message: "El precio no puede superar $2.000.000." };
 
     const res = await prisma.plato.updateMany({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       data: {
         nombre,
         categoriaId,
@@ -577,7 +591,7 @@ export async function updateCategoria(id: string, nombre: string): Promise<Actio
     if (nombreLen) return nombreLen;
 
     const existing = await prisma.categoria.findFirst({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       select: { id: true },
     });
     if (!existing) return { ok: false, message: "Categoría no encontrada." };
@@ -585,6 +599,7 @@ export async function updateCategoria(id: string, nombre: string): Promise<Actio
     const dup = await prisma.categoria.findFirst({
       where: {
         userId,
+        ...notDeleted,
         nombre: { equals: trimmed, mode: "insensitive" },
         NOT: { id },
       },
@@ -593,7 +608,7 @@ export async function updateCategoria(id: string, nombre: string): Promise<Actio
     if (dup) return { ok: false, message: "Ya existe una categoría con ese nombre." };
 
     const res = await prisma.categoria.updateMany({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       data: { nombre: trimmed },
     });
     if (res.count === 0) return { ok: false, message: "Categoría no encontrada." };
@@ -617,18 +632,16 @@ export async function deleteCategoria(_: ActionState, formData: FormData): Promi
     if (!id) return { ok: false, message: "Categoría inválida." };
 
     const existing = await prisma.categoria.findFirst({
-      where: { id, userId },
+      where: { id, userId, ...notDeleted },
       select: { id: true },
     });
     if (!existing) return { ok: false, message: "Categoría no encontrada." };
 
-    await prisma.$transaction(async (tx) => {
-      await tx.plato.updateMany({
-        where: { userId, categoriaId: id },
-        data: { categoriaId: null },
-      });
-      await tx.categoria.deleteMany({ where: { id, userId } });
+    const res = await prisma.categoria.updateMany({
+      where: { id, userId, ...notDeleted },
+      data: { deletedAt: new Date() },
     });
+    if (res.count === 0) return { ok: false, message: "Categoría no encontrada." };
 
     revalidatePath("/configuracion");
     return { ok: true, message: "Categoría eliminada." };
@@ -644,8 +657,9 @@ export async function deletePlatoConReceta(formData: FormData): Promise<ActionSt
     const id = requiredString(formData, "id");
     if (!id) return { ok: false, message: "Plato inválido." };
 
-    const del = await prisma.plato.deleteMany({
-      where: { id, userId },
+    const del = await prisma.plato.updateMany({
+      where: { id, userId, ...notDeleted },
+      data: { deletedAt: new Date() },
     });
     if (del.count === 0) return { ok: false, message: "Plato no encontrado." };
 
@@ -675,13 +689,13 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
     if (!unidad) return { ok: false, message: "Unidad inválida.", field: "unit" };
 
     const plato = await prisma.plato.findFirst({
-      where: { id: dishId, userId, active: true },
+      where: { id: dishId, userId, active: true, ...notDeleted },
       select: { id: true },
     });
     if (!plato) return { ok: false, message: "Plato inválido o inactivo.", field: "dishId" };
 
     const insumo = await prisma.insumo.findFirst({
-      where: { id: supplyId, userId },
+      where: { id: supplyId, userId, ...notDeleted },
       select: { id: true },
     });
     if (!insumo) return { ok: false, message: "Insumo inválido.", field: "supplyId" };
@@ -713,7 +727,7 @@ export async function saveRecipeComplete(_: ActionState, formData: FormData): Pr
     }
 
     const plato = await prisma.plato.findFirst({
-      where: { id: platoId, userId, active: true },
+      where: { id: platoId, userId, active: true, ...notDeleted },
       select: { id: true },
     });
     if (!plato) return { ok: false, message: "Plato inválido o inactivo.", field: "dishId" };
@@ -738,7 +752,7 @@ export async function saveRecipeComplete(_: ActionState, formData: FormData): Pr
 
     const insumoIds = Array.from(uniqueInsumos);
     const existing = await prisma.insumo.findMany({
-      where: { userId, id: { in: insumoIds } },
+      where: { userId, id: { in: insumoIds }, ...notDeleted },
       select: { id: true, nombre: true, unidadBase: true },
     });
     if (existing.length !== insumoIds.length) {
@@ -812,7 +826,7 @@ export async function updateReceta(payload: {
     }
 
     const plato = await prisma.plato.findFirst({
-      where: { id: platoId, userId },
+      where: { id: platoId, userId, ...notDeleted },
       select: { id: true },
     });
     if (!plato) return { ok: false, message: "Plato no encontrado." };
@@ -837,7 +851,7 @@ export async function updateReceta(payload: {
 
     const uniqueIds = Array.from(new Set(insumoIds));
     const insumosOk = await prisma.insumo.findMany({
-      where: { userId, id: { in: uniqueIds } },
+      where: { userId, id: { in: uniqueIds }, ...notDeleted },
       select: { id: true, nombre: true, unidadBase: true },
     });
     if (insumosOk.length !== uniqueIds.length) {
@@ -918,6 +932,51 @@ export async function deleteRecipeIngredient(formData: FormData): Promise<Action
   } catch (e) {
     console.error("[deleteRecipeIngredient]", e);
     return { ok: false, message: "No se pudo eliminar el ingrediente." };
+  }
+}
+
+/**
+ * Cuenta nóminas del empleado (para advertencia antes de eliminar: el historial se conserva con soft delete).
+ */
+export async function countNominasEmpleado(
+  empleadoId: string,
+): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
+  try {
+    const userId = await requireUserId();
+    const id = empleadoId.trim();
+    if (!id) return { ok: false, message: "Empleado inválido." };
+
+    const empleado = await prisma.empleado.findFirst({
+      where: { id, userId, ...notDeleted },
+      select: { id: true },
+    });
+    if (!empleado) return { ok: false, message: "Empleado no encontrado." };
+
+    const count = await prisma.nomina.count({ where: { empleadoId: id, userId } });
+    return { ok: true, count };
+  } catch (e) {
+    console.error("[countNominasEmpleado]", e);
+    return { ok: false, message: "No se pudo consultar las nóminas." };
+  }
+}
+
+export async function deleteEmpleado(formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Empleado inválido." };
+
+    const res = await prisma.empleado.updateMany({
+      where: { id, userId, ...notDeleted },
+      data: { deletedAt: new Date() },
+    });
+    if (res.count === 0) return { ok: false, message: "Empleado no encontrado." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Empleado eliminado." };
+  } catch (e) {
+    console.error("[deleteEmpleado]", e);
+    return { ok: false, message: "No se pudo eliminar el empleado." };
   }
 }
 
