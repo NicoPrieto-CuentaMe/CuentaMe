@@ -21,14 +21,15 @@ function todayLocalISO(): string {
 }
 
 function emptyLine(): LineState {
-  return { insumoId: "", unidad: "", cantidad: "", precioDigits: "" };
+  return { insumoId: "", unidad: "", cantidad: "", totalPagadoDigits: "" };
 }
 
 type LineState = {
   insumoId: string;
   unidad: string;
   cantidad: string;
-  precioDigits: string;
+  /** Total pagado en la línea (solo dígitos COP, como precio antes). */
+  totalPagadoDigits: string;
 };
 
 function FieldError({ state, field }: { state: ActionState; field: string }) {
@@ -109,7 +110,7 @@ export function ComprasForm({
       insumoId: l.insumoId,
       cantidad: l.cantidad,
       unidad: l.unidad,
-      precioUnitario: digitsToSalePriceString(l.precioDigits),
+      total: digitsToSalePriceString(l.totalPagadoDigits),
     }));
     return JSON.stringify(payload);
   }, [lines]);
@@ -117,11 +118,8 @@ export function ComprasForm({
   const totalGeneralFmt = useMemo(() => {
     let sum = 0;
     for (const l of lines) {
-      const qty = Number(String(l.cantidad).replace(",", "."));
-      const precio = Number(digitsToSalePriceString(l.precioDigits));
-      if (Number.isFinite(qty) && Number.isFinite(precio) && qty > 0 && precio > 0) {
-        sum += qty * precio;
-      }
+      const t = Number(digitsToSalePriceString(l.totalPagadoDigits));
+      if (Number.isFinite(t) && t > 0) sum += t;
     }
     if (sum <= 0) return "—";
     return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(sum);
@@ -237,15 +235,28 @@ export function ComprasForm({
             const unitOpts = insumoSel
               ? UNIT_OPTIONS.filter((u) => getUnidadesCompatibles(insumoSel.unidadBase as string).includes(u.value))
               : [];
-            const precioFmt = formatCopFromDigits(line.precioDigits);
+            const totalFmt = formatCopFromDigits(line.totalPagadoDigits);
             const qty = Number(String(line.cantidad).replace(",", "."));
-            const precioN = Number(digitsToSalePriceString(line.precioDigits));
-            const lineTotal =
-              Number.isFinite(qty) && Number.isFinite(precioN) && qty > 0 && precioN > 0
-                ? new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(
-                    qty * precioN,
-                  )
-                : "—";
+            const totalN = Number(digitsToSalePriceString(line.totalPagadoDigits));
+            const unidadLbl = line.unidad
+              ? UNIT_OPTIONS.find((u) => u.value === line.unidad)?.label ?? line.unidad
+              : "";
+            const precioUnitarioHint =
+              Number.isFinite(qty) &&
+              qty > 0 &&
+              Number.isFinite(totalN) &&
+              totalN > 0 &&
+              line.unidad
+                ? (() => {
+                    const pu = totalN / qty;
+                    const cop = new Intl.NumberFormat("es-CO", {
+                      style: "currency",
+                      currency: "COP",
+                      maximumFractionDigits: 0,
+                    }).format(pu);
+                    return `≈ ${cop} / ${unidadLbl}`;
+                  })()
+                : null;
 
             return (
               <div
@@ -264,7 +275,7 @@ export function ComprasForm({
                     ×
                   </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-start">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end">
                   <div className="lg:col-span-3">
                     <label className="text-xs font-medium text-text-secondary">Insumo *</label>
                     <select
@@ -323,24 +334,24 @@ export function ComprasForm({
                     />
                   </div>
                   <div className="lg:col-span-3">
-                    <label className="text-xs font-medium text-text-secondary">Precio unitario (COP) *</label>
+                    <label className="text-xs font-medium text-text-secondary">Total pagado *</label>
                     <input
                       inputMode="numeric"
-                      value={precioFmt}
+                      value={totalFmt}
                       onChange={(e) => {
                         const digits = e.target.value.replace(/[^\d]/g, "");
-                        setLine(i, { precioDigits: digits });
+                        setLine(i, { totalPagadoDigits: digits });
                       }}
                       required
                       className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                      placeholder="Ej: $ 15.000"
+                      placeholder="Ej: 45000"
                     />
                   </div>
-                  <div className="lg:col-span-2">
-                    <label className="text-xs font-medium text-text-secondary">Total línea</label>
-                    <div className="mt-1 flex min-h-[42px] items-center rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm font-medium text-text-primary">
-                      {lineTotal}
-                    </div>
+                  <div className="lg:col-span-2 lg:flex lg:min-h-[72px] lg:flex-col lg:justify-end">
+                    <span className="text-xs font-medium text-text-tertiary">Precio unitario (calculado)</span>
+                    <p className="mt-1 text-sm leading-snug text-text-secondary">
+                      {precioUnitarioHint ?? "—"}
+                    </p>
                   </div>
                 </div>
               </div>

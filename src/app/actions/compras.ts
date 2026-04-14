@@ -19,7 +19,8 @@ function compraUnidadIncompatibleMsg(nombreInsumo: string, unidadBase: string, u
 
 const MAX_NOTAS = 500;
 const MAX_CANTIDAD = new Prisma.Decimal(9_999);
-const MAX_PRECIO_UNITARIO = new Prisma.Decimal(9_999_999);
+/** Máximo por línea: total pagado (COP) y, indirectamente, límite histórico de precio unitario en UI anterior. */
+const MAX_TOTAL_LINEA = new Prisma.Decimal(9_999_999);
 const MIN_LINEAS = 1;
 const MAX_LINEAS = 20;
 
@@ -93,7 +94,7 @@ type LineaJson = {
   insumoId?: unknown;
   cantidad?: unknown;
   unidad?: unknown;
-  precioUnitario?: unknown;
+  total?: unknown;
 };
 
 export async function registrarCompra(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -234,30 +235,30 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
         };
       }
 
-      const precioStr =
-        typeof row.precioUnitario === "string"
-          ? row.precioUnitario.replace(/[^\d]/g, "")
-          : typeof row.precioUnitario === "number"
-            ? String(Math.round(row.precioUnitario))
+      const totalStr =
+        typeof row.total === "string"
+          ? row.total.replace(/[^\d]/g, "")
+          : typeof row.total === "number"
+            ? String(Math.round(row.total))
             : "";
-      const precioUnitario = toPositiveDecimal(precioStr);
-      if (!precioUnitario) {
+      const totalLinea = toPositiveDecimal(totalStr);
+      if (!totalLinea) {
         return {
           ok: false,
-          message: lineaMsg(lineNum, "el precio unitario debe ser mayor a 0."),
+          message: lineaMsg(lineNum, "el total pagado debe ser mayor a 0."),
           field: `linea-${i}`,
         };
       }
-      if (precioUnitario.gt(MAX_PRECIO_UNITARIO)) {
+      if (totalLinea.gt(MAX_TOTAL_LINEA)) {
         return {
           ok: false,
-          message: lineaMsg(lineNum, "el precio unitario no puede superar $9.999.999."),
+          message: lineaMsg(lineNum, "el total pagado no puede superar $9.999.999."),
           field: `linea-${i}`,
         };
       }
 
-      const total = cantidad.mul(precioUnitario);
-      validLines.push({ insumoId, cantidad, unidad, precioUnitario, total });
+      const precioUnitario = totalLinea.div(cantidad).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      validLines.push({ insumoId, cantidad, unidad, precioUnitario, total: totalLinea });
     }
 
     let totalGeneral = new Prisma.Decimal(0);
