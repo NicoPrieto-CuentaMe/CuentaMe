@@ -2,7 +2,7 @@
 
 import type { CategoriaProveedor, Insumo, Plato, Proveedor } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
+import { createPortal, useFormState } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -11,13 +11,17 @@ import {
   useState,
   useTransition,
 } from "react";
-import { insumoCategorias, proveedorCategoriaLabel, proveedorCategoriaOptions } from "../categories";
+import { proveedorCategoriaLabel, proveedorCategoriaOptions } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
+import type { ActionState } from "../actions";
 import {
   checkInsumoEnUso,
+  createCategoriaInsumo,
+  deleteCategoriaInsumo,
   deleteDish,
   deleteInsumo,
   deleteSupplier,
+  updateCategoriaInsumo,
   updateInsumo,
   updatePlato,
   updateProveedor,
@@ -360,7 +364,17 @@ function FilterPopover({
 }
 
 type ProveedorRow = Pick<Proveedor, "id" | "nombre" | "telefono" | "categorias">;
-type InsumoRow = Pick<Insumo, "id" | "nombre" | "unidadBase" | "categoria">;
+type InsumoRow = Pick<Insumo, "id" | "nombre" | "unidadBase" | "categoriaInsumoId"> & {
+  categoriaInsumo: { id: string; nombre: string } | null;
+};
+
+export type CategoriaInsumoTabRow = {
+  id: string;
+  nombre: string;
+  _count: { insumos: number };
+};
+
+const insumoCategoriaFormIdle: ActionState = { ok: false, message: "" };
 type PlatoRow = Pick<Plato, "id" | "nombre" | "categoriaId" | "precioVenta" | "active"> & {
   categoria: { id: string; nombre: string } | null;
 };
@@ -794,7 +808,223 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   );
 }
 
-export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
+function InsumoCategoriaFormFeedback({ state }: { state: ActionState }) {
+  if (!("ok" in state) || state.ok) return null;
+  if (!state.message?.trim()) return null;
+  return (
+    <div className="mt-2 rounded-lg border border-danger/30 bg-danger-light px-2 py-1.5 text-xs text-danger">{state.message}</div>
+  );
+}
+
+export function InsumosCategoriasSection({ rows }: { rows: CategoriaInsumoTabRow[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [renamePending, startRenameTransition] = useTransition();
+  const [inlineOpen, setInlineOpen] = useState(false);
+  const [state, formAction] = useFormState(createCategoriaInsumo, insumoCategoriaFormIdle);
+  const [deleteTarget, setDeleteTarget] = useState<CategoriaInsumoTabRow | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.ok && state.message) {
+      router.refresh();
+      setInlineOpen(false);
+    }
+  }, [state.ok, state.message, router]);
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", id);
+      const res = await deleteCategoriaInsumo(insumoCategoriaFormIdle, fd);
+      if (res.ok) {
+        setDeleteTarget(null);
+        router.refresh();
+      }
+    });
+  }, [deleteTarget, router]);
+
+  const cancelRename = useCallback(() => {
+    setRenameId(null);
+    setRenameDraft("");
+    setRenameError(null);
+  }, []);
+
+  const commitRename = useCallback(
+    (c: CategoriaInsumoTabRow) => {
+      if (renameId !== c.id) return;
+      const next = renameDraft.trim();
+      if (!next) {
+        cancelRename();
+        return;
+      }
+      if (next === c.nombre) {
+        cancelRename();
+        return;
+      }
+      startRenameTransition(async () => {
+        const res = await updateCategoriaInsumo(c.id, next);
+        if (!res.ok) {
+          setRenameError(res.message);
+          return;
+        }
+        cancelRename();
+        router.refresh();
+      });
+    },
+    [renameDraft, renameId, cancelRename, router],
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+      <h4 className="text-sm font-semibold text-text-primary">Categorías de insumos</h4>
+      <p className="mt-2 text-xs text-text-tertiary">
+        Agrupa insumos por tipo o uso. Pueden quedar sin categoría.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {rows.map((c) => (
+          <div key={c.id} className="inline-flex max-w-full flex-col gap-0.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-secondary">
+              {renameId === c.id ? (
+                <input
+                  autoFocus
+                  disabled={renamePending}
+                  value={renameDraft}
+                  onChange={(e) => {
+                    setRenameDraft(e.target.value);
+                    setRenameError(null);
+                  }}
+                  onBlur={() => commitRename(c)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setRenameDraft(c.nombre);
+                      cancelRename();
+                    }
+                  }}
+                  className="min-h-[1.875rem] min-w-[80px] max-w-[200px] rounded-full border border-accent bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:ring-2 focus:ring-accent/30"
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="max-w-[160px] truncate text-left font-medium text-text-primary no-underline decoration-none hover:no-underline"
+                    style={{ textDecoration: "none" }}
+                    onClick={() => {
+                      setRenameId(c.id);
+                      setRenameDraft(c.nombre);
+                      setRenameError(null);
+                    }}
+                  >
+                    {c.nombre}
+                  </button>
+                  <span className="shrink-0 text-xs text-text-tertiary" title="Insumos en esta categoría">
+                    ({c._count.insumos})
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded px-1 text-base leading-none text-text-tertiary hover:bg-border hover:text-danger"
+                    aria-label={`Eliminar categoría ${c.nombre}`}
+                    onClick={() => setDeleteTarget(c)}
+                  >
+                    ×
+                  </button>
+                </>
+              )}
+            </span>
+            {renameError && renameId === c.id ? (
+              <p className="max-w-[220px] pl-1 text-xs text-danger">{renameError}</p>
+            ) : null}
+          </div>
+        ))}
+
+        {!inlineOpen ? (
+          <button
+            type="button"
+            onClick={() => setInlineOpen(true)}
+            className="inline-flex items-center rounded-full border border-dashed border-accent/50 bg-surface px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent-light"
+          >
+            ＋ Nueva categoría
+          </button>
+        ) : (
+          <form action={formAction} className="flex flex-wrap items-center gap-2">
+            <input
+              name="nombre"
+              required
+              autoFocus
+              placeholder="Nombre"
+              className="w-40 rounded-lg border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover"
+            >
+              Agregar
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-primary hover:bg-border"
+              onClick={() => setInlineOpen(false)}
+            >
+              Cancelar
+            </button>
+            <InsumoCategoriaFormFeedback state={state} />
+          </form>
+        )}
+      </div>
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
+          <button type="button" className="absolute inset-0 cursor-default" aria-label="Cerrar" onClick={() => setDeleteTarget(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-text-primary">Eliminar categoría de insumo</h3>
+            {deleteTarget._count.insumos > 0 ? (
+              <p className="mt-2 text-sm text-text-secondary">
+                {deleteTarget._count.insumos}{" "}
+                {deleteTarget._count.insumos === 1 ? "insumo quedará" : "insumos quedarán"} sin categoría. ¿Confirmar?
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-text-secondary">¿Eliminar la categoría «{deleteTarget.nombre}»?</p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm text-text-primary hover:bg-border"
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={confirmDelete}
+                className="rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-50"
+              >
+                {pending ? "Eliminando…" : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function InsumosTable({
+  rows,
+  categoriasInsumo,
+}: {
+  rows: InsumoRow[];
+  categoriasInsumo: { id: string; nombre: string }[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
@@ -803,7 +1033,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
   const [draft, setDraft] = useState<{
     nombre: string;
     baseUnit: string;
-    categoria: string;
+    categoriaInsumoId: string;
   } | null>(null);
 
   const [fNombre, setFNombre] = useState("");
@@ -836,20 +1066,22 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
 
   const insumoCatOptions = useMemo(() => {
     const keys = new Set<string>();
+    keys.add(EMPTY_KEY);
+    for (const c of categoriasInsumo) keys.add(c.id);
     for (const r of rows) {
-      keys.add(r.categoria?.trim() ? r.categoria.trim() : EMPTY_KEY);
+      keys.add(r.categoriaInsumo?.id ?? EMPTY_KEY);
     }
+    const labelFor = (id: string) => {
+      if (id === EMPTY_KEY) return "(Sin categoría)";
+      return categoriasInsumo.find((c) => c.id === id)?.nombre ?? rows.find((r) => r.categoriaInsumo?.id === id)?.categoriaInsumo?.nombre ?? id;
+    };
     return Array.from(keys)
-      .sort((a, b) => {
-        const la = a === EMPTY_KEY ? "(Sin categoría)" : a;
-        const lb = b === EMPTY_KEY ? "(Sin categoría)" : b;
-        return la.localeCompare(lb, "es");
-      })
+      .sort((a, b) => labelFor(a).localeCompare(labelFor(b), "es"))
       .map((value) => ({
         value,
-        label: value === EMPTY_KEY ? "(Sin categoría)" : value,
+        label: labelFor(value),
       }));
-  }, [rows]);
+  }, [rows, categoriasInsumo]);
 
   const funnelNombre = fNombre.trim() !== "";
   const funnelUnidad = unidadApplied.size > 0;
@@ -860,7 +1092,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       if (!textIncludes(s.nombre, fNombre)) return false;
       if (unidadApplied.size > 0 && !unidadApplied.has(s.unidadBase)) return false;
       if (insCatApplied.size > 0) {
-        const key = s.categoria?.trim() ? s.categoria.trim() : EMPTY_KEY;
+        const key = s.categoriaInsumo?.id ?? EMPTY_KEY;
         if (!insCatApplied.has(key)) return false;
       }
       return true;
@@ -899,7 +1131,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
     setDraft({
       nombre: r.nombre,
       baseUnit: r.unidadBase,
-      categoria: r.categoria ?? "",
+      categoriaInsumoId: r.categoriaInsumoId ?? "",
     });
   }, []);
 
@@ -915,7 +1147,7 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
     fd.set("id", editingId);
     fd.set("nombre", draft.nombre);
     fd.set("baseUnit", draft.baseUnit);
-    fd.set("categoria", draft.categoria);
+    fd.set("categoriaInsumoId", draft.categoriaInsumoId);
     startTransition(async () => {
       const res = await updateInsumo(fd);
       if (!res.ok) {
@@ -1110,18 +1342,20 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
                       {isEdit && draft ? (
                         <select
                           className={inlineField}
-                          value={draft.categoria}
-                          onChange={(e) => setDraft((d) => (d ? { ...d, categoria: e.target.value } : d))}
+                          value={draft.categoriaInsumoId}
+                          onChange={(e) =>
+                            setDraft((d) => (d ? { ...d, categoriaInsumoId: e.target.value } : d))
+                          }
                         >
                           <option value="">Selecciona...</option>
-                          {insumoCategorias.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
+                          {categoriasInsumo.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nombre}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        (s.categoria ?? "—")
+                        (s.categoriaInsumo?.nombre ?? "—")
                       )}
                     </td>
                     <td className="border-b border-border px-3 py-2 align-middle">

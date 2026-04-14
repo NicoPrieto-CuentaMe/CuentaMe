@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AddSupplierForm, AddSupplyForm } from "./components/AddForms";
-import { InsumosTable, ProveedoresTable } from "./components/MasterTablesInline";
+import { InsumosCategoriasSection, InsumosTable, ProveedoresTable } from "./components/MasterTablesInline";
 import { CartaTab } from "./components/CartaTab";
 
 const tabs = [
@@ -31,13 +31,16 @@ export default async function ConfiguracionPage({
 
   const tab = normalizeTab(searchParams?.tab);
 
-  const [proveedores, insumos, platos, categorias] = await Promise.all([
+  const [proveedores, insumos, platos, categorias, categoriasInsumo] = await Promise.all([
     prisma.proveedor.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
     }),
     prisma.insumo.findMany({
       where: { userId, deletedAt: null },
+      include: {
+        categoriaInsumo: { select: { id: true, nombre: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.plato.findMany({
@@ -57,6 +60,17 @@ export default async function ConfiguracionPage({
         _count: {
           select: {
             platos: { where: { deletedAt: null } },
+          },
+        },
+      },
+      orderBy: { nombre: "asc" },
+    }),
+    prisma.categoriaInsumo.findMany({
+      where: { userId, deletedAt: null },
+      include: {
+        _count: {
+          select: {
+            insumos: { where: { deletedAt: null } },
           },
         },
       },
@@ -121,15 +135,19 @@ export default async function ConfiguracionPage({
             Define tus insumos con unidad base para cálculos posteriores.
           </p>
 
+          <div className="mt-6">
+            <InsumosCategoriasSection rows={categoriasInsumo} />
+          </div>
+
           <div className="mt-4">
-            <AddSupplyForm />
+            <AddSupplyForm categoriasInsumo={categoriasInsumo} />
           </div>
 
           <div className="mt-6 overflow-x-auto">
             {insumos.length === 0 ? (
               <p className="text-sm text-text-tertiary">Aún no tienes insumos registrados</p>
             ) : (
-              <InsumosTable rows={insumos} />
+              <InsumosTable rows={insumos} categoriasInsumo={categoriasInsumo} />
             )}
           </div>
         </section>

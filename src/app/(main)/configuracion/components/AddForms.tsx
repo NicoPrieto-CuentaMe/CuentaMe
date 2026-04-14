@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState } from "react-dom";
 import type { ActionState } from "../actions";
 import { addDish, addSupplier, addSupply, saveRecipeComplete } from "../actions";
-import { insumoCategorias } from "../categories";
 import { digitsToSalePriceString, formatCopFromDigits } from "../cop-price";
 import { FAMILIA_LABEL_ES, getFamiliaUnidad, getUnidadesCompatibles } from "@/lib/unidades.config";
 import { UNIT_OPTIONS } from "../units";
@@ -85,7 +84,11 @@ export function AddSupplierForm() {
   );
 }
 
-export function AddSupplyForm() {
+export function AddSupplyForm({
+  categoriasInsumo,
+}: {
+  categoriasInsumo: { id: string; nombre: string }[];
+}) {
   const [state, formAction] = useFormState(addSupply, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   useResetOnOk(state, formRef);
@@ -122,14 +125,14 @@ export function AddSupplyForm() {
       <div className="md:col-span-1">
         <label className="text-sm font-medium text-text-secondary">Categoría</label>
         <select
-          name="category"
+          name="categoriaInsumoId"
           defaultValue=""
           className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
         >
           <option value="">Selecciona...</option>
-          {insumoCategorias.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {categoriasInsumo.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
             </option>
           ))}
         </select>

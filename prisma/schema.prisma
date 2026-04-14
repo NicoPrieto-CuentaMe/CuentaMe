@@ -43,6 +43,7 @@ model User {
   platos        Plato[]
   recetas       Receta[]
   categorias    Categoria[]
+  categoriasInsumo CategoriaInsumo[]
   compras       Compra[]
   inventarios   Inventario[]
   ventas        Venta[]
@@ -68,15 +69,29 @@ model Proveedor {
   @@index([userId, deletedAt])
 }
 
+model CategoriaInsumo {
+  id        String    @id @default(cuid())
+  nombre    String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  insumos   Insumo[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, deletedAt])
+}
+
 model Insumo {
-  id         String   @id @default(cuid())
-  userId     String
-  nombre     String
-  unidadBase Unidad
-  categoria  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  deletedAt  DateTime?
+  id                  String           @id @default(cuid())
+  userId              String
+  nombre              String
+  unidadBase          Unidad
+  categoriaInsumoId   String?
+  categoriaInsumo     CategoriaInsumo? @relation(fields: [categoriaInsumoId], references: [id], onDelete: SetNull)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  deletedAt           DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   recetas     Receta[]
