@@ -58,7 +58,7 @@ function maxLength(value: string, max: number, campo: string): { ok: false; mess
 }
 
 function validarTelefono(tel: string): boolean {
-  return /^[0-9+\-\s()]{7,20}$/.test(tel);
+  return /^[0-9+\-\s()]{1,20}$/.test(tel);
 }
 
 function requiredString(formData: FormData, key: string) {
@@ -104,7 +104,8 @@ export async function addSupplier(_: ActionState, formData: FormData): Promise<A
       if (!validarTelefono(phone)) {
         return {
           ok: false,
-          message: "El teléfono solo puede contener números, +, - y espacios.",
+          message:
+            "El teléfono solo puede contener números, +, -, espacios y paréntesis (máximo 20 caracteres).",
           field: "phone",
         };
       }
@@ -169,7 +170,8 @@ export async function updateProveedor(formData: FormData): Promise<ActionState> 
       if (!validarTelefono(telefono)) {
         return {
           ok: false,
-          message: "El teléfono solo puede contener números, +, - y espacios.",
+          message:
+            "El teléfono solo puede contener números, +, -, espacios y paréntesis (máximo 20 caracteres).",
           field: "telefono",
         };
       }
