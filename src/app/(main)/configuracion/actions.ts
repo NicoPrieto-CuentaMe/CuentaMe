@@ -37,6 +37,16 @@ function parseCategoriasProveedorForm(
   return { ok: true, value: out };
 }
 
+function parseOptionalCategoriaProveedorSingle(
+  raw: string | undefined,
+): { ok: true; value: CategoriaProveedor | null } | { ok: false; message: string } {
+  if (raw === undefined) return { ok: true, value: null };
+  const t = raw.trim();
+  if (!t) return { ok: true, value: null };
+  if (!CATEGORIA_PROVEEDOR_SET.has(t)) return { ok: false, message: "Categoría inválida." };
+  return { ok: true, value: t as CategoriaProveedor };
+}
+
 export type ActionState =
   | { ok: true; message?: string }
   | { ok: false; message: string; field?: string };
@@ -200,7 +210,9 @@ export async function addSupply(_: ActionState, formData: FormData): Promise<Act
     const userId = await requireUserId();
     const name = requiredString(formData, "name");
     const baseUnitRaw = requiredString(formData, "baseUnit");
-    const categoriaInsumoIdRaw = optionalString(formData, "categoriaInsumoId");
+    const categoriaRaw = optionalString(formData, "categoria");
+    const categoriaParsed = parseOptionalCategoriaProveedorSingle(categoriaRaw);
+    if (!categoriaParsed.ok) return { ok: false, message: categoriaParsed.message, field: "categoria" };
 
     if (!name) return { ok: false, message: "El nombre es obligatorio.", field: "name" };
     if (!baseUnitRaw) return { ok: false, message: "La unidad base es obligatoria.", field: "baseUnit" };
@@ -208,21 +220,11 @@ export async function addSupply(_: ActionState, formData: FormData): Promise<Act
     const nameLen = maxLength(name, MAX_NOMBRE, "El nombre");
     if (nameLen) return { ...nameLen, field: "name" };
 
-    let categoriaInsumoId: string | null = null;
-    if (categoriaInsumoIdRaw) {
-      const cat = await prisma.categoriaInsumo.findFirst({
-        where: { id: categoriaInsumoIdRaw, userId, ...notDeleted },
-        select: { id: true },
-      });
-      if (!cat) return { ok: false, message: "Categoría de insumo inválida.", field: "categoriaInsumoId" };
-      categoriaInsumoId = categoriaInsumoIdRaw;
-    }
-
     const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
     if (!unidadBase) return { ok: false, message: "Unidad base inválida.", field: "baseUnit" };
 
     await prisma.insumo.create({
-      data: { userId, nombre: name, unidadBase, categoriaInsumoId },
+      data: { userId, nombre: name, unidadBase, categoria: categoriaParsed.value },
     });
 
     revalidatePath("/configuracion");
@@ -316,7 +318,9 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     const id = requiredString(formData, "id");
     const nombre = requiredString(formData, "nombre");
     const baseUnitRaw = requiredString(formData, "baseUnit");
-    const categoriaInsumoIdRaw = optionalString(formData, "categoriaInsumoId");
+    const categoriaRaw = optionalString(formData, "categoria");
+    const categoriaParsed = parseOptionalCategoriaProveedorSingle(categoriaRaw);
+    if (!categoriaParsed.ok) return { ok: false, message: categoriaParsed.message, field: "categoria" };
 
     if (!id) return { ok: false, message: "Insumo inválido." };
     if (!nombre) return { ok: false, message: "El nombre es obligatorio." };
@@ -325,22 +329,12 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
     if (nombreLen) return nombreLen;
 
-    let categoriaInsumoId: string | null = null;
-    if (categoriaInsumoIdRaw) {
-      const cat = await prisma.categoriaInsumo.findFirst({
-        where: { id: categoriaInsumoIdRaw, userId, ...notDeleted },
-        select: { id: true },
-      });
-      if (!cat) return { ok: false, message: "Categoría de insumo inválida." };
-      categoriaInsumoId = categoriaInsumoIdRaw;
-    }
-
     const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
     if (!unidadBase) return { ok: false, message: "Unidad base inválida." };
 
     const res = await prisma.insumo.updateMany({
       where: { id, userId, ...notDeleted },
-      data: { nombre, unidadBase, categoriaInsumoId },
+      data: { nombre, unidadBase, categoria: categoriaParsed.value },
     });
     if (res.count === 0) return { ok: false, message: "Insumo no encontrado." };
 
@@ -662,120 +656,6 @@ export async function deleteCategoria(_: ActionState, formData: FormData): Promi
   } catch (e) {
     console.error("[deleteCategoria]", e);
     return { ok: false, message: "No se pudo eliminar la categoría." };
-  }
-}
-
-export async function createCategoriaInsumo(_: ActionState, formData: FormData): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const nombre = requiredString(formData, "nombre");
-    if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
-
-    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
-    if (nombreLen) return { ...nombreLen, field: "nombre" };
-
-    const dup = await prisma.categoriaInsumo.findFirst({
-      where: {
-        userId,
-        ...notDeleted,
-        nombre: { equals: nombre.trim(), mode: "insensitive" },
-      },
-      select: { id: true },
-    });
-    if (dup) return { ok: false, message: "Ya existe una categoría de insumo con ese nombre.", field: "nombre" };
-
-    await prisma.categoriaInsumo.create({
-      data: { userId, nombre: nombre.trim() },
-    });
-
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Categoría de insumo creada." };
-  } catch (e) {
-    console.error("[createCategoriaInsumo]", e);
-    const message =
-      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
-        ? "Ya existe una categoría de insumo con ese nombre."
-        : "No se pudo crear la categoría de insumo.";
-    return { ok: false, message };
-  }
-}
-
-export async function updateCategoriaInsumo(id: string, nombre: string): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const trimmed = nombre.trim();
-    if (!id.trim()) return { ok: false, message: "Categoría inválida." };
-    if (!trimmed) return { ok: false, message: "El nombre no puede quedar vacío." };
-
-    const nombreLen = maxLength(trimmed, MAX_NOMBRE, "El nombre");
-    if (nombreLen) return nombreLen;
-
-    const existing = await prisma.categoriaInsumo.findFirst({
-      where: { id, userId, ...notDeleted },
-      select: { id: true },
-    });
-    if (!existing) return { ok: false, message: "Categoría no encontrada." };
-
-    const dup = await prisma.categoriaInsumo.findFirst({
-      where: {
-        userId,
-        ...notDeleted,
-        nombre: { equals: trimmed, mode: "insensitive" },
-        NOT: { id },
-      },
-      select: { id: true },
-    });
-    if (dup) return { ok: false, message: "Ya existe una categoría de insumo con ese nombre." };
-
-    const res = await prisma.categoriaInsumo.updateMany({
-      where: { id, userId, ...notDeleted },
-      data: { nombre: trimmed },
-    });
-    if (res.count === 0) return { ok: false, message: "Categoría no encontrada." };
-
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Categoría de insumo actualizada." };
-  } catch (e) {
-    console.error("[updateCategoriaInsumo]", e);
-    const message =
-      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
-        ? "Ya existe una categoría de insumo con ese nombre."
-        : "No se pudo actualizar la categoría de insumo.";
-    return { ok: false, message };
-  }
-}
-
-export async function deleteCategoriaInsumo(_: ActionState, formData: FormData): Promise<ActionState> {
-  try {
-    const userId = await requireUserId();
-    const id = requiredString(formData, "id");
-    if (!id) return { ok: false, message: "Categoría inválida." };
-
-    const existing = await prisma.categoriaInsumo.findFirst({
-      where: { id, userId, ...notDeleted },
-      select: { id: true },
-    });
-    if (!existing) return { ok: false, message: "Categoría no encontrada." };
-
-    await prisma.$transaction(async (tx) => {
-      await tx.insumo.updateMany({
-        where: { userId, categoriaInsumoId: id },
-        data: { categoriaInsumoId: null },
-      });
-      const res = await tx.categoriaInsumo.updateMany({
-        where: { id, userId, ...notDeleted },
-        data: { deletedAt: new Date() },
-      });
-      if (res.count === 0) throw new Error("Categoría no encontrada.");
-    });
-
-    revalidatePath("/configuracion");
-    return { ok: true, message: "Categoría de insumo eliminada." };
-  } catch (e) {
-    console.error("[deleteCategoriaInsumo]", e);
-    const message =
-      e instanceof Error ? e.message : "No se pudo eliminar la categoría de insumo.";
-    return { ok: false, message };
   }
 }
 
