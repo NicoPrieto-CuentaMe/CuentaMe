@@ -1018,6 +1018,40 @@ export function InsumosCategoriasSection({ rows }: { rows: CategoriaInsumoTabRow
   );
 }
 
+function buildInsumoMenuSections(
+  insumos: InsumoRow[],
+  categorias: { id: string; nombre: string }[],
+): { key: string; titulo: string; items: InsumoRow[] }[] {
+  const knownCatIds = new Set(categorias.map((c) => c.id));
+  const byId = new Map<string, InsumoRow[]>();
+  for (const inv of insumos) {
+    const cid = inv.categoriaInsumoId ?? "__sin__";
+    if (!byId.has(cid)) byId.set(cid, []);
+    byId.get(cid)!.push(inv);
+  }
+  for (const arr of Array.from(byId.values())) {
+    arr.sort((a: InsumoRow, b: InsumoRow) => a.nombre.localeCompare(b.nombre, "es"));
+  }
+
+  const sections: { key: string; titulo: string; items: InsumoRow[] }[] = [];
+  for (const c of categorias) {
+    const list = byId.get(c.id) ?? [];
+    if (list.length > 0) {
+      sections.push({ key: c.id, titulo: `${c.nombre} (${list.length})`, items: list });
+    }
+  }
+  for (const [cid, list] of Array.from(byId.entries())) {
+    if (cid === "__sin__" || knownCatIds.has(cid) || list.length === 0) continue;
+    const titulo = list[0]?.categoriaInsumo?.nombre?.trim() || "Categoría";
+    sections.push({ key: cid, titulo: `${titulo} (${list.length})`, items: list });
+  }
+  const sin = byId.get("__sin__") ?? [];
+  if (sin.length > 0) {
+    sections.push({ key: "__sin__", titulo: `Sin categoría (${sin.length})`, items: sin });
+  }
+  return sections;
+}
+
 export function InsumosTable({
   rows,
   categoriasInsumo,
@@ -1028,123 +1062,47 @@ export function InsumosTable({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<{
     nombre: string;
     baseUnit: string;
     categoriaInsumoId: string;
   } | null>(null);
 
-  const [fNombre, setFNombre] = useState("");
-  const [unidadApplied, setUnidadApplied] = useState<Set<string>>(new Set());
-  const [unidadDraft, setUnidadDraft] = useState<Set<string>>(new Set());
-  const [unidadSearch, setUnidadSearch] = useState("");
-  const [insCatApplied, setInsCatApplied] = useState<Set<string>>(new Set());
-  const [insCatDraft, setInsCatDraft] = useState<Set<string>>(new Set());
-  const [insCatSearch, setInsCatSearch] = useState("");
-
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<PopoverAnchor | null>(null);
   const [deleteModal, setDeleteModal] = useState<DeleteInsumoModalState | null>(null);
 
-  const unidadOptions = useMemo(() => {
-    const keys = new Set<string>();
-    for (const r of rows) keys.add(r.unidadBase);
-    return Array.from(keys)
-      .sort((a, b) =>
-        (unitLabel.get(a as Insumo["unidadBase"]) ?? a).localeCompare(
-          unitLabel.get(b as Insumo["unidadBase"]) ?? b,
-          "es",
-        ),
-      )
-      .map((value) => ({
-        value,
-        label: unitLabel.get(value as Insumo["unidadBase"]) ?? value,
-      }));
-  }, [rows]);
+  const menuSections = useMemo(() => buildInsumoMenuSections(rows, categoriasInsumo), [rows, categoriasInsumo]);
 
-  const insumoCatOptions = useMemo(() => {
-    const keys = new Set<string>();
-    keys.add(EMPTY_KEY);
-    for (const c of categoriasInsumo) keys.add(c.id);
-    for (const r of rows) {
-      keys.add(r.categoriaInsumo?.id ?? EMPTY_KEY);
-    }
-    const labelFor = (id: string) => {
-      if (id === EMPTY_KEY) return "(Sin categoría)";
-      return categoriasInsumo.find((c) => c.id === id)?.nombre ?? rows.find((r) => r.categoriaInsumo?.id === id)?.categoriaInsumo?.nombre ?? id;
-    };
-    return Array.from(keys)
-      .sort((a, b) => labelFor(a).localeCompare(labelFor(b), "es"))
-      .map((value) => ({
-        value,
-        label: labelFor(value),
-      }));
-  }, [rows, categoriasInsumo]);
-
-  const funnelNombre = fNombre.trim() !== "";
-  const funnelUnidad = unidadApplied.size > 0;
-  const funnelInsCat = insCatApplied.size > 0;
-
-  const filteredInsumos = useMemo(() => {
-    return rows.filter((s) => {
-      if (!textIncludes(s.nombre, fNombre)) return false;
-      if (unidadApplied.size > 0 && !unidadApplied.has(s.unidadBase)) return false;
-      if (insCatApplied.size > 0) {
-        const key = s.categoriaInsumo?.id ?? EMPTY_KEY;
-        if (!insCatApplied.has(key)) return false;
-      }
-      return true;
-    });
-  }, [rows, fNombre, unidadApplied, insCatApplied]);
-
-  const toggleInsMenu = (key: string) => (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    const anchor = anchorFromEvent(e);
-    setOpenMenu((prev) => {
-      if (prev === key) {
-        setMenuAnchor(null);
-        return null;
-      }
-      setMenuAnchor(anchor);
-      if (key === "ins-unidad") {
-        setUnidadDraft(new Set(unidadApplied));
-        setUnidadSearch("");
-      }
-      if (key === "ins-categoria") {
-        setInsCatDraft(new Set(insCatApplied));
-        setInsCatSearch("");
-      }
-      return key;
-    });
-  };
-
-  const closeMenu = useCallback(() => {
-    setOpenMenu(null);
-    setMenuAnchor(null);
-  }, []);
-
-  const beginEdit = useCallback((r: InsumoRow) => {
-    setEditingId(r.id);
-    setError(null);
-    setDraft({
-      nombre: r.nombre,
-      baseUnit: r.unidadBase,
-      categoriaInsumoId: r.categoriaInsumoId ?? "",
-    });
-  }, []);
-
-  const cancel = useCallback(() => {
-    setEditingId(null);
+  const collapseCard = useCallback(() => {
+    setExpandedId(null);
     setDraft(null);
     setError(null);
   }, []);
 
+  const handleCardActivate = useCallback(
+    (r: InsumoRow) => {
+      setSuccessMessage(null);
+      if (expandedId === r.id) {
+        collapseCard();
+        return;
+      }
+      setExpandedId(r.id);
+      setError(null);
+      setDraft({
+        nombre: r.nombre,
+        baseUnit: r.unidadBase,
+        categoriaInsumoId: r.categoriaInsumoId ?? "",
+      });
+    },
+    [expandedId, collapseCard],
+  );
+
   const save = useCallback(async () => {
-    if (!editingId || !draft) return;
+    if (!expandedId || !draft) return;
     const fd = new FormData();
-    fd.set("id", editingId);
+    fd.set("id", expandedId);
     fd.set("nombre", draft.nombre);
     fd.set("baseUnit", draft.baseUnit);
     fd.set("categoriaInsumoId", draft.categoriaInsumoId);
@@ -1152,17 +1110,18 @@ export function InsumosTable({
       const res = await updateInsumo(fd);
       if (!res.ok) {
         setError(res.message);
+        setSuccessMessage(null);
         return;
       }
-      setEditingId(null);
-      setDraft(null);
-      setError(null);
+      collapseCard();
+      setSuccessMessage("Insumo actualizado.");
       router.refresh();
     });
-  }, [draft, editingId, router]);
+  }, [draft, expandedId, router, collapseCard]);
 
   const beginDeleteInsumo = useCallback((id: string, nombre: string) => {
     setError(null);
+    setSuccessMessage(null);
     setDeleteModal({ phase: "checking", id, nombre });
     void (async () => {
       const res = await checkInsumoEnUso(id);
@@ -1198,12 +1157,21 @@ export function InsumosTable({
       }
       setDeleteModal(null);
       setError(null);
+      if (expandedId === id) collapseCard();
       router.refresh();
     });
-  }, [deleteModal, router]);
+  }, [deleteModal, router, expandedId, collapseCard]);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
+      {successMessage ? (
+        <div
+          className="rounded-lg border border-accent/30 bg-accent-light px-3 py-2 text-sm text-accent"
+          role="status"
+        >
+          {successMessage}
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">{error}</div>
       ) : null}
@@ -1215,182 +1183,137 @@ export function InsumosTable({
           onConfirm={confirmDeleteInsumo}
         />
       ) : null}
-      {openMenu && menuAnchor ? (
-        <FilterPopover
-          open
-          anchor={menuAnchor}
-          onClose={closeMenu}
-          onEnterApply={() => {
-            if (openMenu === "ins-nombre") closeMenu();
-            else if (openMenu === "ins-unidad") {
-              setUnidadApplied(new Set(unidadDraft));
-              closeMenu();
-            } else if (openMenu === "ins-categoria") {
-              setInsCatApplied(new Set(insCatDraft));
-              closeMenu();
-            }
-          }}
-        >
-          {openMenu === "ins-nombre" ? (
-            <TextFilterMenu value={fNombre} onChange={setFNombre} onClear={() => setFNombre("")} />
-          ) : null}
-          {openMenu === "ins-unidad" ? (
-            <CategoricalFilterMenu
-              options={unidadOptions}
-              draft={unidadDraft}
-              setDraft={setUnidadDraft}
-              optionSearch={unidadSearch}
-              setOptionSearch={setUnidadSearch}
-              onApply={() => {
-                setUnidadApplied(new Set(unidadDraft));
-                closeMenu();
-              }}
-              onClearDraft={() => setUnidadDraft(new Set())}
-            />
-          ) : null}
-          {openMenu === "ins-categoria" ? (
-            <CategoricalFilterMenu
-              options={insumoCatOptions}
-              draft={insCatDraft}
-              setDraft={setInsCatDraft}
-              optionSearch={insCatSearch}
-              setOptionSearch={setInsCatSearch}
-              onApply={() => {
-                setInsCatApplied(new Set(insCatDraft));
-                closeMenu();
-              }}
-              onClearDraft={() => setInsCatDraft(new Set())}
-            />
-          ) : null}
-        </FilterPopover>
-      ) : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-sm">
-          <thead className="bg-surface-elevated">
-            <tr className="text-text-secondary">
-              <th className="relative border-b border-border px-3 py-2 text-center">
-                <HeaderWithFunnel
-                  label="Nombre"
-                  funnelActive={funnelNombre}
-                  onFunnelClick={toggleInsMenu("ins-nombre")}
-                  onClearColumnFilter={() => setFNombre("")}
-                />
-              </th>
-              <th className="relative border-b border-border px-3 py-2 text-center">
-                <HeaderWithFunnel
-                  label="Unidad base"
-                  funnelActive={funnelUnidad}
-                  onFunnelClick={toggleInsMenu("ins-unidad")}
-                  onClearColumnFilter={() => setUnidadApplied(new Set())}
-                />
-              </th>
-              <th className="relative border-b border-border px-3 py-2 text-center">
-                <HeaderWithFunnel
-                  label="Categoría"
-                  funnelActive={funnelInsCat}
-                  onFunnelClick={toggleInsMenu("ins-categoria")}
-                  onClearColumnFilter={() => setInsCatApplied(new Set())}
-                />
-              </th>
-              <th className="border-b border-border px-3 py-2 font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="[&_tr]:bg-surface [&_tr:hover]:bg-surface-elevated">
-            {filteredInsumos.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="border-b border-border px-3 py-6 text-center text-sm text-text-tertiary">
-                  No se encontraron resultados para los filtros aplicados
-                </td>
-              </tr>
-            ) : (
-              filteredInsumos.map((s) => {
-                const isEdit = editingId === s.id;
-                return (
-                  <tr key={s.id} className="text-text-primary">
-                    <td className="border-b border-border px-3 py-2 align-middle">
-                      {isEdit && draft ? (
-                        <input
-                          className={inlineField}
-                          value={draft.nombre}
-                          onChange={(e) => setDraft((d) => (d ? { ...d, nombre: e.target.value } : d))}
-                        />
-                      ) : (
-                        s.nombre
-                      )}
-                    </td>
-                    <td className="border-b border-border px-3 py-2 align-middle">
-                      {isEdit && draft ? (
-                        <select
-                          className={inlineField}
-                          value={draft.baseUnit}
-                          onChange={(e) => setDraft((d) => (d ? { ...d, baseUnit: e.target.value } : d))}
-                        >
-                          <option value="" disabled>
-                            Selecciona...
-                          </option>
-                          {UNIT_OPTIONS.map((u) => (
-                            <option key={u.value} value={u.value}>
-                              {u.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        (unitLabel.get(s.unidadBase) ?? s.unidadBase)
-                      )}
-                    </td>
-                    <td className="border-b border-border px-3 py-2 align-middle">
-                      {isEdit && draft ? (
-                        <select
-                          className={inlineField}
-                          value={draft.categoriaInsumoId}
-                          onChange={(e) =>
-                            setDraft((d) => (d ? { ...d, categoriaInsumoId: e.target.value } : d))
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-text-tertiary">Aún no tienes insumos registrados. Agrega el primero arriba.</p>
+      ) : menuSections.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No hay insumos para mostrar por categoría.</p>
+      ) : (
+        <div className="space-y-10">
+          {menuSections.map((sec) => (
+            <div key={sec.key}>
+              <h4 className="mb-3 text-sm font-bold text-text-primary">{sec.titulo}</h4>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {sec.items.map((ins) => {
+                    const expanded = expandedId === ins.id;
+                    return (
+                      <div
+                        key={ins.id}
+                        id={`insumo-card-${ins.id}`}
+                        role={expanded ? undefined : "button"}
+                        tabIndex={expanded ? -1 : 0}
+                        onClick={() => {
+                          if (!expanded) handleCardActivate(ins);
+                        }}
+                        onKeyDown={(e) => {
+                          if (expanded) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleCardActivate(ins);
                           }
-                        >
-                          <option value="">Selecciona...</option>
-                          {categoriasInsumo.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.nombre}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        (s.categoriaInsumo?.nombre ?? "—")
-                      )}
-                    </td>
-                    <td className="border-b border-border px-3 py-2 align-middle">
-                      {isEdit ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button type="button" className={btnSave} disabled={pending} onClick={() => void save()}>
-                            Guardar
-                          </button>
-                          <button type="button" className={btnCancel} disabled={pending} onClick={cancel}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button type="button" className={btnEdit} onClick={() => beginEdit(s)}>
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            className="text-danger hover:text-danger border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium hover:bg-danger/20 disabled:opacity-60"
-                            disabled={!!deleteModal}
-                            onClick={() => beginDeleteInsumo(s.id, s.nombre)}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                        }}
+                        className={`relative rounded-xl border border-border bg-surface p-4 text-left shadow-sm transition-shadow ${
+                          expanded
+                            ? "cursor-default ring-2 ring-accent/30"
+                            : "cursor-pointer hover:shadow-md"
+                        }`}
+                      >
+                        {!expanded || !draft ? (
+                          <>
+                            <div className="text-sm font-semibold text-text-primary">{ins.nombre}</div>
+                            <div className="mt-1 text-sm text-text-secondary">
+                              {unitLabel.get(ins.unidadBase) ?? ins.unidadBase}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                            <div>
+                              <label className="text-xs font-medium text-text-secondary">Nombre</label>
+                              <input
+                                className={`${inlineField} mt-1 w-full`}
+                                value={draft.nombre}
+                                onChange={(e) => setDraft((d) => (d ? { ...d, nombre: e.target.value } : d))}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-text-secondary">Unidad base</label>
+                              <select
+                                className={`${inlineField} mt-1 w-full`}
+                                value={draft.baseUnit}
+                                onChange={(e) => setDraft((d) => (d ? { ...d, baseUnit: e.target.value } : d))}
+                              >
+                                <option value="" disabled>
+                                  Selecciona...
+                                </option>
+                                {UNIT_OPTIONS.map((u) => (
+                                  <option key={u.value} value={u.value}>
+                                    {u.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-text-secondary">Categoría</label>
+                              <select
+                                className={`${inlineField} mt-1 w-full`}
+                                value={draft.categoriaInsumoId}
+                                onChange={(e) =>
+                                  setDraft((d) => (d ? { ...d, categoriaInsumoId: e.target.value } : d))
+                                }
+                              >
+                                <option value="">Sin categoría</option>
+                                {categoriasInsumo.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              <button
+                                type="button"
+                                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                disabled={pending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void save();
+                                }}
+                              >
+                                {pending ? "Guardando…" : "Guardar"}
+                              </button>
+                              <button
+                                type="button"
+                                className={btnCancel}
+                                disabled={pending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  collapseCard();
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded border border-danger/30 bg-danger-light px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/20 disabled:opacity-60"
+                                disabled={!!deleteModal || pending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  beginDeleteInsumo(ins.id, ins.nombre);
+                                }}
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
