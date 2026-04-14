@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import type { Unidad } from "@prisma/client";
+import type { CategoriaProveedor, Unidad } from "@prisma/client";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import { registrarCompra } from "@/app/actions/compras";
 import { digitsToSalePriceString, formatCopFromDigits } from "@/app/(main)/configuracion/cop-price";
@@ -19,6 +19,17 @@ function todayLocalISO(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
+function emptyLine(): LineState {
+  return { insumoId: "", unidad: "", cantidad: "", precioDigits: "" };
+}
+
+type LineState = {
+  insumoId: string;
+  unidad: string;
+  cantidad: string;
+  precioDigits: string;
+};
 
 function FieldError({ state, field }: { state: ActionState; field: string }) {
   if (!("ok" in state) || state.ok || state.field !== field) return null;
@@ -61,226 +72,292 @@ function UnitHints({ unidadBase }: { unidadBase: Unidad }) {
   );
 }
 
+function insumosFiltrados(
+  proveedorId: string,
+  proveedores: { id: string; categorias: CategoriaProveedor[] }[],
+  insumos: { id: string; nombre: string; unidadBase: Unidad; categoria: CategoriaProveedor | null }[],
+) {
+  if (!proveedorId) return [];
+  const p = proveedores.find((x) => x.id === proveedorId);
+  if (!p || p.categorias.length === 0) return insumos;
+  const set = new Set(p.categorias);
+  return insumos.filter((i) => i.categoria != null && set.has(i.categoria));
+}
+
 export function ComprasForm({
   proveedores,
   insumos,
 }: {
-  proveedores: { id: string; nombre: string }[];
-  insumos: { id: string; nombre: string; unidadBase: Unidad }[];
+  proveedores: { id: string; nombre: string; categorias: CategoriaProveedor[] }[];
+  insumos: { id: string; nombre: string; unidadBase: Unidad; categoria: CategoriaProveedor | null }[];
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState(registrarCompra, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
 
   const [fecha, setFecha] = useState(todayLocalISO);
   const [proveedorId, setProveedorId] = useState("");
-  const [insumoId, setInsumoId] = useState("");
-  const [cantidadDraft, setCantidadDraft] = useState("");
-  const [unidad, setUnidad] = useState<Unidad | "">("");
-  const [precioDisplay, setPrecioDisplay] = useState("");
   const [notas, setNotas] = useState("");
+  const [lines, setLines] = useState<LineState[]>(() => [emptyLine()]);
 
-  const insumoSel = useMemo(() => insumos.find((i) => i.id === insumoId), [insumos, insumoId]);
+  const disponibles = useMemo(
+    () => insumosFiltrados(proveedorId, proveedores, insumos),
+    [proveedorId, proveedores, insumos],
+  );
 
-  const unitOptions = useMemo(() => {
-    if (!insumoSel) return [] as typeof UNIT_OPTIONS;
-    const codes = getUnidadesCompatibles(insumoSel.unidadBase as string);
-    return UNIT_OPTIONS.filter((u) => codes.includes(u.value));
-  }, [insumoSel]);
+  const lineasJson = useMemo(() => {
+    const payload = lines.map((l) => ({
+      insumoId: l.insumoId,
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+      precioUnitario: digitsToSalePriceString(l.precioDigits),
+    }));
+    return JSON.stringify(payload);
+  }, [lines]);
 
-  const precioDigits = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
-  const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
-
-  const totalFormateado = useMemo(() => {
-    const qty = Number(String(cantidadDraft).replace(",", "."));
-    const precio = Number(precioDigits);
-    if (!Number.isFinite(qty) || !Number.isFinite(precio) || qty <= 0 || precio <= 0) {
-      return "—";
+  const totalGeneralFmt = useMemo(() => {
+    let sum = 0;
+    for (const l of lines) {
+      const qty = Number(String(l.cantidad).replace(",", "."));
+      const precio = Number(digitsToSalePriceString(l.precioDigits));
+      if (Number.isFinite(qty) && Number.isFinite(precio) && qty > 0 && precio > 0) {
+        sum += qty * precio;
+      }
     }
-    const t = qty * precio;
-    return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(t);
-  }, [cantidadDraft, precioDigits]);
+    if (sum <= 0) return "—";
+    return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(sum);
+  }, [lines]);
 
   useEffect(() => {
     if (state.ok) {
       setFecha(todayLocalISO());
       setProveedorId("");
-      setInsumoId("");
-      setCantidadDraft("");
-      setUnidad("");
-      setPrecioDisplay("");
       setNotas("");
+      setLines([emptyLine()]);
       router.refresh();
     }
   }, [state.ok, router]);
 
+  useEffect(() => {
+    setLines([emptyLine()]);
+  }, [proveedorId]);
+
+  function setLine(i: number, patch: Partial<LineState>) {
+    setLines((prev) => prev.map((row, j) => (j === i ? { ...row, ...patch } : row)));
+  }
+
+  function addLine() {
+    setLines((prev) => (prev.length >= 20 ? prev : [...prev, emptyLine()]));
+  }
+
+  function removeLine(i: number) {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, j) => j !== i)));
+  }
+
   return (
-    <form ref={formRef} action={formAction} className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+    <form action={formAction} className="space-y-6">
       <input type="hidden" name="fecha" value={fecha} />
+      <input type="hidden" name="lineas" value={lineasJson} />
 
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-fecha">
-          Fecha *
-        </label>
-        <input
-          id="compra-fecha"
-          type="date"
-          value={fecha}
-          max={todayLocalISO()}
-          onChange={(e) => setFecha(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          required
-        />
-        <FieldError state={state} field="fecha" />
-      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="text-sm font-medium text-text-secondary" htmlFor="compra-fecha">
+            Fecha *
+          </label>
+          <input
+            id="compra-fecha"
+            type="date"
+            value={fecha}
+            max={todayLocalISO()}
+            onChange={(e) => setFecha(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            required
+          />
+          <FieldError state={state} field="fecha" />
+        </div>
 
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-proveedor">
-          Proveedor *
-        </label>
-        <select
-          id="compra-proveedor"
-          name="proveedorId"
-          value={proveedorId}
-          onChange={(e) => setProveedorId(e.target.value)}
-          required
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-        >
-          <option value="" disabled>
-            Selecciona…
-          </option>
-          {proveedores.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
+        <div>
+          <label className="text-sm font-medium text-text-secondary" htmlFor="compra-proveedor">
+            Proveedor *
+          </label>
+          <select
+            id="compra-proveedor"
+            name="proveedorId"
+            value={proveedorId}
+            onChange={(e) => setProveedorId(e.target.value)}
+            required
+            className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+          >
+            <option value="" disabled>
+              Selecciona…
             </option>
-          ))}
-        </select>
-        <FieldError state={state} field="proveedorId" />
-      </div>
+            {proveedores.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+          <FieldError state={state} field="proveedorId" />
+        </div>
 
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-insumo">
-          Insumo *
-        </label>
-        <select
-          id="compra-insumo"
-          name="insumoId"
-          value={insumoId}
-          onChange={(e) => {
-            const v = e.target.value;
-            const ins = insumos.find((i) => i.id === v);
-            setInsumoId(v);
-            setUnidad(ins ? ins.unidadBase : "");
-          }}
-          required
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-        >
-          <option value="" disabled>
-            Selecciona…
-          </option>
-          {insumos.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nombre}
-            </option>
-          ))}
-        </select>
-        <FieldError state={state} field="insumoId" />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-cantidad">
-          Cantidad *
-        </label>
-        <input
-          id="compra-cantidad"
-          name="cantidad"
-          inputMode="decimal"
-          type="number"
-          step="0.0001"
-          min="0"
-          value={cantidadDraft}
-          onChange={(e) => setCantidadDraft(e.target.value)}
-          required
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          placeholder="Ej: 2,5"
-        />
-        <FieldError state={state} field="cantidad" />
-      </div>
-
-      <div className="flex min-w-0 flex-col">
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-unidad">
-          Unidad *
-        </label>
-        <input type="hidden" name="unidad" value={unidad} />
-        <select
-          id="compra-unidad"
-          value={unidad}
-          onChange={(e) => setUnidad(e.target.value as Unidad)}
-          required
-          disabled={!insumoSel || unitOptions.length === 0}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <option value="" disabled>
-            {insumoSel ? "Selecciona…" : "Primero elige un insumo"}
-          </option>
-          {unitOptions.map((u) => (
-            <option key={u.value} value={u.value}>
-              {u.label}
-            </option>
-          ))}
-        </select>
-        {insumoSel ? <UnitHints unidadBase={insumoSel.unidadBase} /> : null}
-        <FieldError state={state} field="unidad" />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-precio">
-          Precio unitario (COP) *
-        </label>
-        <input type="hidden" name="precioUnitario" value={precioDigits} />
-        <input
-          id="compra-precio"
-          required
-          inputMode="numeric"
-          value={precioFormateado}
-          onChange={(e) => {
-            const raw = e.target.value;
-            const digits = raw.replace(/[^\d]/g, "");
-            setPrecioDisplay(digits);
-          }}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          placeholder="Ej: $ 15.000"
-        />
-        <FieldError state={state} field="precioUnitario" />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-text-secondary">Total</label>
-        <div className="mt-1 flex min-h-[42px] items-center rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm font-medium text-text-primary">
-          {totalFormateado}
+        <div className="md:col-span-2">
+          <label className="text-sm font-medium text-text-secondary" htmlFor="compra-notas">
+            Notas
+          </label>
+          <textarea
+            id="compra-notas"
+            name="notas"
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            rows={2}
+            maxLength={500}
+            className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+            placeholder="Opcional"
+          />
+          <FieldError state={state} field="notas" />
         </div>
       </div>
 
-      <div className="md:col-span-2 lg:col-span-3">
-        <label className="text-sm font-medium text-text-secondary" htmlFor="compra-notas">
-          Notas
-        </label>
-        <textarea
-          id="compra-notas"
-          name="notas"
-          value={notas}
-          onChange={(e) => setNotas(e.target.value)}
-          rows={3}
-          maxLength={500}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
-          placeholder="Opcional"
-        />
-        <FieldError state={state} field="notas" />
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-text-primary">Insumos</h3>
+          <button
+            type="button"
+            onClick={addLine}
+            disabled={lines.length >= 20}
+            className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Agregar insumo
+          </button>
+        </div>
+        <FieldError state={state} field="lineas" />
+
+        <div className="space-y-4 overflow-x-auto pb-1">
+          {lines.map((line, i) => {
+            const insumoSel = disponibles.find((x) => x.id === line.insumoId);
+            const unitOpts = insumoSel
+              ? UNIT_OPTIONS.filter((u) => getUnidadesCompatibles(insumoSel.unidadBase as string).includes(u.value))
+              : [];
+            const precioFmt = formatCopFromDigits(line.precioDigits);
+            const qty = Number(String(line.cantidad).replace(",", "."));
+            const precioN = Number(digitsToSalePriceString(line.precioDigits));
+            const lineTotal =
+              Number.isFinite(qty) && Number.isFinite(precioN) && qty > 0 && precioN > 0
+                ? new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(
+                    qty * precioN,
+                  )
+                : "—";
+
+            return (
+              <div
+                key={i}
+                className="rounded-lg border border-border bg-surface-elevated/50 p-3 min-w-[min(100%,720px)]"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-text-tertiary">Línea {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeLine(i)}
+                    disabled={lines.length <= 1}
+                    className="rounded px-2 py-0.5 text-lg leading-none text-text-tertiary hover:bg-border hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Eliminar línea"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-start">
+                  <div className="lg:col-span-3">
+                    <label className="text-xs font-medium text-text-secondary">Insumo *</label>
+                    <select
+                      value={line.insumoId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const ins = disponibles.find((x) => x.id === v);
+                        setLine(i, { insumoId: v, unidad: ins ? ins.unidadBase : "" });
+                      }}
+                      required
+                      disabled={!proveedorId}
+                      className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="" disabled>
+                        {proveedorId ? "Selecciona…" : "Elige proveedor primero"}
+                      </option>
+                      {disponibles.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    <FieldError state={state} field={`linea-${i}`} />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="text-xs font-medium text-text-secondary">Unidad *</label>
+                    <select
+                      value={line.unidad}
+                      onChange={(e) => setLine(i, { unidad: e.target.value })}
+                      required
+                      disabled={!insumoSel || unitOpts.length === 0}
+                      className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-60"
+                    >
+                      <option value="" disabled>
+                        {insumoSel ? "Selecciona…" : "—"}
+                      </option>
+                      {unitOpts.map((u) => (
+                        <option key={u.value} value={u.value}>
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                    {insumoSel ? <UnitHints unidadBase={insumoSel.unidadBase} /> : null}
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="text-xs font-medium text-text-secondary">Cantidad *</label>
+                    <input
+                      inputMode="decimal"
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      value={line.cantidad}
+                      onChange={(e) => setLine(i, { cantidad: e.target.value })}
+                      required
+                      className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className="text-xs font-medium text-text-secondary">Precio unitario (COP) *</label>
+                    <input
+                      inputMode="numeric"
+                      value={precioFmt}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^\d]/g, "");
+                        setLine(i, { precioDigits: digits });
+                      }}
+                      required
+                      className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent"
+                      placeholder="Ej: $ 15.000"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="text-xs font-medium text-text-secondary">Total línea</label>
+                    <div className="mt-1 flex min-h-[42px] items-center rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm font-medium text-text-primary">
+                      {lineTotal}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex flex-col gap-3 md:col-span-2 lg:col-span-3 md:flex-row md:items-center md:justify-between">
-        <GlobalFeedback state={state} />
-        <SubmitButton />
+      <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <span className="text-sm font-medium text-text-secondary">Total general</span>
+          <div className="mt-1 text-lg font-semibold text-text-primary">{totalGeneralFmt}</div>
+        </div>
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <GlobalFeedback state={state} />
+          <SubmitButton />
+        </div>
       </div>
     </form>
   );

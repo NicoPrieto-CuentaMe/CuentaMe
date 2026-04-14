@@ -14,12 +14,12 @@ export default async function ComprasPage() {
   const [proveedores, insumos, compras] = await Promise.all([
     prisma.proveedor.findMany({
       where: { userId, ...notDeleted },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, categorias: true },
       orderBy: { nombre: "asc" },
     }),
     prisma.insumo.findMany({
       where: { userId, ...notDeleted },
-      select: { id: true, nombre: true, unidadBase: true },
+      select: { id: true, nombre: true, unidadBase: true, categoria: true },
       orderBy: { nombre: "asc" },
     }),
     prisma.compra.findMany({
@@ -28,7 +28,10 @@ export default async function ComprasPage() {
       orderBy: { fecha: "desc" },
       include: {
         proveedor: { select: { nombre: true } },
-        insumo: { select: { nombre: true } },
+        detalles: {
+          include: { insumo: { select: { nombre: true } } },
+          orderBy: { insumo: { nombre: "asc" } },
+        },
       },
     }),
   ]);

@@ -43,8 +43,9 @@ model User {
   platos        Plato[]
   recetas       Receta[]
   categorias    Categoria[]
-  compras       Compra[]
-  inventarios   Inventario[]
+  compras         Compra[]
+  compraDetalles  CompraDetalle[]
+  inventarios     Inventario[]
   ventas        Venta[]
   detallesVenta DetalleVenta[]
   empleados     Empleado[]
@@ -79,9 +80,9 @@ model Insumo {
   deletedAt           DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recetas     Receta[]
-  compras     Compra[]
-  inventarios Inventario[]
+  recetas          Receta[]
+  compraDetalles   CompraDetalle[]
+  inventarios      Inventario[]
 
   @@index([userId, deletedAt])
 }
@@ -140,25 +141,41 @@ model Receta {
 }
 
 model Compra {
+  id          String   @id @default(cuid())
+  userId      String
+  fecha       DateTime
+  proveedorId String
+  total       Decimal  @db.Decimal(10, 2)
+  notas       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proveedor Proveedor       @relation(fields: [proveedorId], references: [id])
+  detalles  CompraDetalle[]
+
+  @@index([userId])
+  @@index([proveedorId])
+}
+
+model CompraDetalle {
   id             String   @id @default(cuid())
   userId         String
-  fecha          DateTime
-  proveedorId    String
+  compraId       String
   insumoId       String
   cantidad       Decimal  @db.Decimal(12, 4)
   unidad         Unidad
   precioUnitario Decimal  @db.Decimal(10, 2)
   total          Decimal  @db.Decimal(10, 2)
-  notas          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  proveedor Proveedor @relation(fields: [proveedorId], references: [id])
-  insumo    Insumo    @relation(fields: [insumoId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  compra Compra @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  insumo Insumo @relation(fields: [insumoId], references: [id])
 
   @@index([userId])
-  @@index([proveedorId])
+  @@index([compraId])
   @@index([insumoId])
 }
 
