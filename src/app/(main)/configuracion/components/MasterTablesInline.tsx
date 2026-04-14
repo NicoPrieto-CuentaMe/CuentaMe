@@ -23,7 +23,7 @@ import {
   updateProveedor,
 } from "../actions";
 import { UNIT_OPTIONS } from "../units";
-import { AddSupplyForm } from "./AddForms";
+import { AddSupplierForm, AddSupplyForm } from "./AddForms";
 import { ConfirmSubmitButton } from "./ConfirmSubmitButton";
 import { ProveedorCategoriasMultiSelect } from "./ProveedorCategoriasMultiSelect";
 
@@ -854,6 +854,41 @@ export function InsumosTabPanel({ rows }: { rows: InsumoRow[] }) {
         <h3 className="text-base font-semibold text-text-primary">Mis insumos</h3>
         <div className="mt-4 overflow-x-auto">
           <InsumosTable rows={rows} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** Pestaña Proveedores: dos tarjetas (mismo patrón que InsumosTabPanel). */
+export function ProveedoresTabPanel({ rows }: { rows: ProveedorRow[] }) {
+  const n = rows.length;
+  return (
+    <div className="space-y-6">
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-text-primary">Agregar proveedor</h3>
+        <p className="mt-1 text-sm text-text-tertiary">Crea tus proveedores una sola vez.</p>
+        <div className="mt-4">
+          <AddSupplierForm />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h4 className="text-sm font-medium text-text-secondary">Mis proveedores</h4>
+          <span
+            className="inline-flex min-h-[1.25rem] items-center rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-xs tabular-nums text-text-tertiary"
+            aria-label={`${n} proveedores`}
+          >
+            {n}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          {n === 0 ? (
+            <p className="text-sm text-text-tertiary">Aún no tienes proveedores. Agrega el primero arriba.</p>
+          ) : (
+            <ProveedoresTable rows={rows} />
+          )}
         </div>
       </section>
     </div>
