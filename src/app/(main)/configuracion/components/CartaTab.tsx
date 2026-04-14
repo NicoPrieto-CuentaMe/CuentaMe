@@ -61,6 +61,20 @@ function Feedback({ state }: { state: ActionState }) {
   );
 }
 
+function CartaGroupHeading({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <h4 className="text-sm font-medium text-text-secondary">{title}</h4>
+      <span
+        className="inline-flex min-h-[1.25rem] items-center rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-xs tabular-nums text-text-tertiary"
+        aria-label={`${count} platos`}
+      >
+        {count}
+      </span>
+    </div>
+  );
+}
+
 function buildMenuSections(platos: CartaPlatoRow[], categorias: CartaCategoriaRow[]) {
   const knownCatIds = new Set(categorias.map((c) => c.id));
   const byId = new Map<string, CartaPlatoRow[]>();
@@ -73,21 +87,21 @@ function buildMenuSections(platos: CartaPlatoRow[], categorias: CartaCategoriaRo
     arr.sort((a: CartaPlatoRow, b: CartaPlatoRow) => a.nombre.localeCompare(b.nombre, "es"));
   }
 
-  const sections: { key: string; titulo: string; platos: CartaPlatoRow[] }[] = [];
+  const sections: { key: string; titulo: string; count: number; platos: CartaPlatoRow[] }[] = [];
   for (const c of categorias) {
     const list = byId.get(c.id) ?? [];
     if (list.length > 0) {
-      sections.push({ key: c.id, titulo: c.nombre, platos: list });
+      sections.push({ key: c.id, titulo: c.nombre, count: list.length, platos: list });
     }
   }
   for (const [cid, list] of Array.from(byId.entries())) {
     if (cid === "__sin__" || knownCatIds.has(cid) || list.length === 0) continue;
     const titulo = list[0]?.categoria?.nombre?.trim() || "Categoría";
-    sections.push({ key: cid, titulo, platos: list });
+    sections.push({ key: cid, titulo, count: list.length, platos: list });
   }
   const sin = byId.get("__sin__") ?? [];
   if (sin.length > 0) {
-    sections.push({ key: "__sin__", titulo: "Sin categoría", platos: sin });
+    sections.push({ key: "__sin__", titulo: "Sin categoría", count: sin.length, platos: sin });
   }
   return sections;
 }
@@ -847,7 +861,7 @@ export function CartaTab({
           <div className="space-y-10">
             {menuSections.map((sec) => (
               <div key={sec.key}>
-                <h4 className="mb-3 text-sm font-bold text-text-primary">{sec.titulo}</h4>
+                <CartaGroupHeading title={sec.titulo} count={sec.count} />
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {sec.platos.map((p) => {
                     const st = cardStatus(p);

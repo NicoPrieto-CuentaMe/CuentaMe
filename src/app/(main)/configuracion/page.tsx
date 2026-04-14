@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { AddSupplierForm, AddSupplyForm } from "./components/AddForms";
-import { InsumosTable, ProveedoresTable } from "./components/MasterTablesInline";
+import { AddSupplierForm } from "./components/AddForms";
+import { InsumosTabPanel, ProveedoresTable } from "./components/MasterTablesInline";
 import { CartaTab } from "./components/CartaTab";
 
 const tabs = [
@@ -114,26 +114,7 @@ export default async function ConfiguracionPage({
         </section>
       ) : null}
 
-      {tab === "insumos" ? (
-        <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-text-primary">Insumos</h3>
-          <p className="mt-1 text-sm text-text-tertiary">
-            Define tus insumos con unidad base para cálculos posteriores.
-          </p>
-
-          <div className="mt-4">
-            <AddSupplyForm />
-          </div>
-
-          <div className="mt-6 overflow-x-auto">
-            {insumos.length === 0 ? (
-              <p className="text-sm text-text-tertiary">Aún no tienes insumos registrados</p>
-            ) : (
-              <InsumosTable rows={insumos} />
-            )}
-          </div>
-        </section>
-      ) : null}
+      {tab === "insumos" ? <InsumosTabPanel rows={insumos} /> : null}
 
       {tab === "carta" ? (
         <CartaTab

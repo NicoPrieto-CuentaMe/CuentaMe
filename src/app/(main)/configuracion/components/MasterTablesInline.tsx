@@ -23,6 +23,7 @@ import {
   updateProveedor,
 } from "../actions";
 import { UNIT_OPTIONS } from "../units";
+import { AddSupplyForm } from "./AddForms";
 import { ConfirmSubmitButton } from "./ConfirmSubmitButton";
 import { ProveedorCategoriasMultiSelect } from "./ProveedorCategoriasMultiSelect";
 
@@ -794,7 +795,23 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
   );
 }
 
-function buildInsumoMenuSections(insumos: InsumoRow[]): { key: string; titulo: string; items: InsumoRow[] }[] {
+function InsumoGroupHeading({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <h4 className="text-sm font-medium text-text-secondary">{title}</h4>
+      <span
+        className="inline-flex min-h-[1.25rem] items-center rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-xs tabular-nums text-text-tertiary"
+        aria-label={`${count} insumos`}
+      >
+        {count}
+      </span>
+    </div>
+  );
+}
+
+function buildInsumoMenuSections(
+  insumos: InsumoRow[],
+): { key: string; label: string; count: number; items: InsumoRow[] }[] {
   const byKey = new Map<string, InsumoRow[]>();
   for (const inv of insumos) {
     const key = inv.categoria ?? "__sin__";
@@ -805,18 +822,42 @@ function buildInsumoMenuSections(insumos: InsumoRow[]): { key: string; titulo: s
     arr.sort((a: InsumoRow, b: InsumoRow) => a.nombre.localeCompare(b.nombre, "es"));
   }
 
-  const sections: { key: string; titulo: string; items: InsumoRow[] }[] = [];
+  const sections: { key: string; label: string; count: number; items: InsumoRow[] }[] = [];
   for (const opt of proveedorCategoriaOptions) {
     const list = byKey.get(opt.value) ?? [];
     if (list.length > 0) {
-      sections.push({ key: opt.value, titulo: `${opt.label} (${list.length})`, items: list });
+      sections.push({ key: opt.value, label: opt.label, count: list.length, items: list });
     }
   }
   const sin = byKey.get("__sin__") ?? [];
   if (sin.length > 0) {
-    sections.push({ key: "__sin__", titulo: `Sin categoría (${sin.length})`, items: sin });
+    sections.push({ key: "__sin__", label: "Sin categoría", count: sin.length, items: sin });
   }
   return sections;
+}
+
+/** Pestaña Insumos: formulario y listado en dos tarjetas independientes (mismo patrón que Carta). */
+export function InsumosTabPanel({ rows }: { rows: InsumoRow[] }) {
+  return (
+    <div className="space-y-6">
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-text-primary">Agregar insumo</h3>
+        <p className="mt-1 text-sm text-text-tertiary">
+          Define tus insumos con unidad base para cálculos posteriores.
+        </p>
+        <div className="mt-4">
+          <AddSupplyForm />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-text-primary">Mis insumos</h3>
+        <div className="mt-4 overflow-x-auto">
+          <InsumosTable rows={rows} />
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
@@ -946,14 +987,14 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-text-tertiary">Aún no tienes insumos registrados. Agrega el primero arriba.</p>
+        <p className="text-sm text-text-tertiary">Aún no tienes insumos. Agrega el primero arriba.</p>
       ) : menuSections.length === 0 ? (
         <p className="text-sm text-text-tertiary">No hay insumos para mostrar por categoría.</p>
       ) : (
         <div className="space-y-10">
           {menuSections.map((sec) => (
             <div key={sec.key}>
-              <h4 className="mb-3 text-sm font-bold text-text-primary">{sec.titulo}</h4>
+              <InsumoGroupHeading title={sec.label} count={sec.count} />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {sec.items.map((ins) => {
                     const expanded = expandedId === ins.id;
