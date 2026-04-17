@@ -234,10 +234,9 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[740px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border text-text-secondary">
-            <th className="w-8 pb-2 pr-1" aria-hidden />
             <th className="pb-2 pr-3 font-semibold">Fecha</th>
             <th className="pb-2 pr-3 font-semibold">Proveedor</th>
             <th className="pb-2 pr-3 font-semibold">Items</th>
@@ -252,22 +251,19 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
             const nItems = c.detalles.length;
             const isEditing = editingId === c.id && draft;
             const todayMax = todayLocalISO();
+            const canToggleDetail = !isEditing && deleteId !== c.id;
 
             return (
               <Fragment key={c.id}>
                 <tr className="align-top">
-                  <td className="py-2 pr-1 align-middle">
-                    <button
-                      type="button"
-                      onClick={() => toggle(c.id)}
-                      className="rounded p-1 text-text-secondary hover:bg-surface-elevated hover:text-text-primary"
-                      aria-expanded={expanded}
-                      aria-label={expanded ? "Ocultar detalle" : "Ver detalle"}
-                    >
-                      <span className="inline-block w-4 text-center text-xs">{expanded ? "▼" : "▶"}</span>
-                    </button>
-                  </td>
-                  <td className="py-2 pr-3 align-middle">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(c.id),
+                          className: "cursor-pointer py-2 pr-3 align-middle",
+                        }
+                      : { className: "py-2 pr-3 align-middle" })}
+                  >
                     {isEditing ? (
                       <input
                         type="date"
@@ -280,7 +276,14 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                       <span className="whitespace-nowrap">{formatFecha(c.fecha)}</span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 align-middle">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(c.id),
+                          className: "cursor-pointer py-2 pr-3 align-middle",
+                        }
+                      : { className: "py-2 pr-3 align-middle" })}
+                  >
                     {isEditing ? (
                       <select
                         value={draft!.proveedorId}
@@ -308,13 +311,34 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                       <span>{c.proveedor.nombre}</span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 align-middle tabular-nums">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(c.id),
+                          className: "cursor-pointer py-2 pr-3 align-middle tabular-nums",
+                        }
+                      : { className: "py-2 pr-3 align-middle tabular-nums" })}
+                  >
                     {isEditing ? `${draft!.lines.length} ítems` : nItems}
                   </td>
-                  <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(c.id),
+                          className: "cursor-pointer py-2 pr-3 align-middle font-medium whitespace-nowrap",
+                        }
+                      : { className: "py-2 pr-3 align-middle font-medium whitespace-nowrap" })}
+                  >
                     {isEditing ? formatCop(draftTotal) : formatCop(c.total)}
                   </td>
-                  <td className="max-w-[220px] py-2 align-middle">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(c.id),
+                          className: "max-w-[220px] cursor-pointer py-2 align-middle text-text-secondary",
+                        }
+                      : { className: "max-w-[220px] py-2 align-middle text-text-secondary" })}
+                  >
                     {isEditing ? (
                       <input
                         type="text"
@@ -379,7 +403,6 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                 </tr>
                 {expanded ? (
                   <tr className="bg-surface-elevated/40">
-                    <td />
                     <td className="pb-3 pt-0 pr-3" colSpan={6}>
                       <div className="rounded-lg border border-border/80 p-3">
                         {isEditing && draft ? (

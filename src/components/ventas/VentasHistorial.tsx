@@ -181,10 +181,9 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[840px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[780px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border text-text-secondary">
-            <th className="w-8 pb-2 pr-1" aria-hidden />
             <th className="pb-2 pr-3 font-semibold">Fecha</th>
             <th className="pb-2 pr-3 font-semibold">Hora</th>
             <th className="pb-2 pr-3 font-semibold">Tipo</th>
@@ -200,22 +199,18 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
             const nItems = v.detalles.reduce((s, d) => s + d.cantidad, 0);
             const isEditing = editingId === v.id && draft;
             const todayMax = new Date().toISOString().slice(0, 10);
+            const canToggleDetail = !isEditing && deleteId !== v.id;
+            const dataCellToggle = canToggleDetail
+              ? {
+                  onClick: () => toggle(v.id),
+                  className: "cursor-pointer py-2 pr-3 align-middle",
+                }
+              : { className: "py-2 pr-3 align-middle" };
 
             return (
               <Fragment key={v.id}>
                 <tr className="align-top">
-                  <td className="py-2 pr-1 align-middle">
-                    <button
-                      type="button"
-                      onClick={() => toggle(v.id)}
-                      className="rounded p-1 text-text-secondary hover:bg-surface-elevated hover:text-text-primary"
-                      aria-expanded={expanded}
-                      aria-label={expanded ? "Ocultar detalle" : "Ver detalle"}
-                    >
-                      <span className="inline-block w-4 text-center text-xs">{expanded ? "▼" : "▶"}</span>
-                    </button>
-                  </td>
-                  <td className="py-2 pr-3 align-middle">
+                  <td {...dataCellToggle}>
                     {isEditing ? (
                       <input
                         type="date"
@@ -228,7 +223,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                       <span className="whitespace-nowrap">{formatFecha(v.fecha)}</span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 align-middle">
+                  <td {...dataCellToggle}>
                     {isEditing ? (
                       <input
                         type="time"
@@ -240,7 +235,11 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                       <span className="whitespace-nowrap">{v.hora}</span>
                     )}
                   </td>
-                  <td className="max-w-[200px] py-2 pr-3 align-middle text-text-secondary">
+                  <td
+                    {...(canToggleDetail
+                      ? { onClick: () => toggle(v.id), className: "max-w-[200px] cursor-pointer py-2 pr-3 align-middle text-text-secondary" }
+                      : { className: "max-w-[200px] py-2 pr-3 align-middle text-text-secondary" })}
+                  >
                     {isEditing ? (
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-1">
@@ -277,13 +276,34 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                       <span>{v.tipo}</span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 align-middle tabular-nums">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(v.id),
+                          className: "cursor-pointer py-2 pr-3 align-middle tabular-nums",
+                        }
+                      : { className: "py-2 pr-3 align-middle tabular-nums" })}
+                  >
                     {isEditing ? `${draft!.lines.length} ítems` : `${nItems} items`}
                   </td>
-                  <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(v.id),
+                          className: "cursor-pointer py-2 pr-3 align-middle font-medium whitespace-nowrap",
+                        }
+                      : { className: "py-2 pr-3 align-middle font-medium whitespace-nowrap" })}
+                  >
                     {isEditing ? formatCop(draftTotal) : formatCop(v.total)}
                   </td>
-                  <td className="max-w-[160px] py-2 align-middle text-text-secondary">
+                  <td
+                    {...(canToggleDetail
+                      ? {
+                          onClick: () => toggle(v.id),
+                          className: "max-w-[160px] cursor-pointer py-2 align-middle text-text-secondary",
+                        }
+                      : { className: "max-w-[160px] py-2 align-middle text-text-secondary" })}
+                  >
                     {isEditing ? (
                       <select
                         value={draft!.metodoPago}
@@ -351,7 +371,6 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                 </tr>
                 {expanded ? (
                   <tr className="bg-surface-elevated/40">
-                    <td />
                     <td className="pb-3 pt-0 pr-3" colSpan={7}>
                       <div className="rounded-lg border border-border/80 p-3">
                         {isEditing && draft ? (
