@@ -11,7 +11,7 @@ export default async function VentasPage() {
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 
-  const [platos, ventas] = await Promise.all([
+  const [platos, ventas, rankingRows] = await Promise.all([
     prisma.plato.findMany({
       where: { userId, ...notDeleted, active: true },
       select: {
@@ -36,7 +36,18 @@ export default async function VentasPage() {
         },
       },
     }),
+    prisma.detalleVenta.groupBy({
+      by: ["platoId"],
+      where: { userId },
+      _sum: { cantidad: true },
+      orderBy: { _sum: { cantidad: "desc" } },
+    }),
   ]);
+
+  const rankingVentas: Record<string, number> = {};
+  for (const row of rankingRows) {
+    rankingVentas[row.platoId] = row._sum.cantidad ?? 0;
+  }
 
   return (
     <div className="space-y-8">
@@ -49,7 +60,7 @@ export default async function VentasPage() {
 
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         <h2 className="mb-4 text-base font-semibold text-text-primary">Nueva venta</h2>
-        <VentasForm platos={platos} />
+        <VentasForm platos={platos} rankingVentas={rankingVentas} />
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">

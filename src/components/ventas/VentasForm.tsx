@@ -177,7 +177,22 @@ function SubmitBar({
   );
 }
 
-export function VentasForm({ platos }: { platos: PlatoRow[] }) {
+function sortPlatosByRankingVentas(platos: PlatoRow[], rankingVentas: Record<string, number>): PlatoRow[] {
+  return [...platos].sort((a, b) => {
+    const va = rankingVentas[a.id] ?? 0;
+    const vb = rankingVentas[b.id] ?? 0;
+    if (va !== vb) return vb - va;
+    return a.nombre.localeCompare(b.nombre, "es");
+  });
+}
+
+export function VentasForm({
+  platos,
+  rankingVentas = {},
+}: {
+  platos: PlatoRow[];
+  rankingVentas?: Record<string, number>;
+}) {
   const router = useRouter();
   const [state, formAction] = useFormState(registrarVenta, initialState);
 
@@ -198,11 +213,18 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
 
   const sections = useMemo(() => buildPlatoSections(platos), [platos]);
 
-  const platosFiltradosBusqueda = useMemo(() => {
+  /** Modo "Por plato": todos los activos ordenados por unidades vendidas (histórico), empates por nombre; sin ventas al final. */
+  const platosOrdenadosRanking = useMemo(
+    () => sortPlatosByRankingVentas(platos, rankingVentas),
+    [platos, rankingVentas],
+  );
+
+  /** Lista mostrada en el mosaico: filtro en vivo sobre el orden de ranking. */
+  const platosMosaicoPorPlato = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return [];
-    return platos.filter((p) => p.nombre.toLowerCase().includes(q));
-  }, [platos, busqueda]);
+    if (!q) return platosOrdenadosRanking;
+    return platosOrdenadosRanking.filter((p) => p.nombre.toLowerCase().includes(q));
+  }, [platosOrdenadosRanking, busqueda]);
 
   const platosCategoriaActual = useMemo(() => {
     if (categoriaKey == null) return [];
@@ -454,18 +476,19 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
             ) : null}
 
             {view === "plato" ? (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-6">
                 <button
                   type="button"
                   onClick={() => {
                     setView("home");
                     setBusqueda("");
                   }}
-                  className="text-sm font-medium text-accent hover:underline"
+                  className="self-start text-sm font-medium text-accent hover:underline"
                 >
                   ← Volver
                 </button>
-                <div>
+
+                <div className="shrink-0">
                   <label className="text-sm font-medium text-text-secondary" htmlFor="venta-buscar-plato">
                     Buscar plato
                   </label>
@@ -475,27 +498,28 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
                     type="search"
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="Escribe el nombre…"
+                    placeholder="Buscar plato..."
                     className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                     autoComplete="off"
                   />
                 </div>
-                {!busqueda.trim() ? (
-                  <p className="text-sm text-text-tertiary">Escribe para filtrar por nombre.</p>
-                ) : platosFiltradosBusqueda.length === 0 ? (
-                  <p className="text-sm text-text-tertiary">No hay platos que coincidan.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {platosFiltradosBusqueda.map((p) => (
-                      <PlatoCard
-                        key={p.id}
-                        p={p}
-                        cantidad={cantidades[p.id] ?? 0}
-                        onDelta={(d) => setQty(p.id, d)}
-                      />
-                    ))}
-                  </div>
-                )}
+
+                <div className="min-h-0 flex-1">
+                  {platosMosaicoPorPlato.length === 0 ? (
+                    <p className="text-sm text-text-tertiary">No se encontró ningún plato</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      {platosMosaicoPorPlato.map((p) => (
+                        <PlatoCard
+                          key={p.id}
+                          p={p}
+                          cantidad={cantidades[p.id] ?? 0}
+                          onDelta={(d) => setQty(p.id, d)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
           </>
