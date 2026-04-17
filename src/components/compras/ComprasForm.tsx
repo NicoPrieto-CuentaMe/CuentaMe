@@ -156,7 +156,7 @@ export function ComprasForm({
       <input type="hidden" name="fecha" value={fecha} />
       <input type="hidden" name="lineas" value={lineasJson} />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
         <div>
           <label className="text-sm font-medium text-text-secondary" htmlFor="compra-fecha">
             Fecha *
@@ -173,7 +173,7 @@ export function ComprasForm({
           <FieldError state={state} field="fecha" />
         </div>
 
-        <div>
+        <div className="min-w-0">
           <label className="text-sm font-medium text-text-secondary" htmlFor="compra-proveedor">
             Proveedor *
           </label>
@@ -197,16 +197,16 @@ export function ComprasForm({
           <FieldError state={state} field="proveedorId" />
         </div>
 
-        <div className="md:col-span-2">
+        <div className="min-w-0">
           <label className="text-sm font-medium text-text-secondary" htmlFor="compra-notas">
             Notas
           </label>
-          <textarea
+          <input
             id="compra-notas"
             name="notas"
+            type="text"
             value={notas}
             onChange={(e) => setNotas(e.target.value)}
-            rows={2}
             maxLength={500}
             className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
             placeholder="Opcional"
