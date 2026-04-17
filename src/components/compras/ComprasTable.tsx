@@ -87,10 +87,15 @@ function emptyLine(): LineDraft {
   return { insumoId: "", unidad: "", cantidad: "", totalPagadoDigits: "" };
 }
 
-const btnSecondary =
-  "rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-surface-elevated";
-const btnDanger =
-  "rounded-lg border border-danger bg-danger-light px-3 py-1.5 text-sm font-medium text-danger hover:opacity-90";
+/** Misma tabla Proveedores (Configuración) */
+const btnEditRow =
+  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
+const btnDeleteRow =
+  "rounded border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium text-danger hover:bg-danger/20 hover:text-danger";
+const btnSaveRow =
+  "rounded bg-accent px-2 py-1 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60";
+const btnCancelRow =
+  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
 
 const idle: ActionState = { ok: true };
 
@@ -143,6 +148,7 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
   const startEdit = useCallback((c: Row) => {
     setEditingId(c.id);
     setDeleteId(null);
+    setOpen((prev) => new Set(prev).add(c.id));
     setDraft({
       fecha: fechaToInput(c.fecha),
       proveedorId: c.proveedorId,
@@ -228,7 +234,7 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[800px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border text-text-secondary">
             <th className="w-8 pb-2 pr-1" aria-hidden />
@@ -236,7 +242,8 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
             <th className="pb-2 pr-3 font-semibold">Proveedor</th>
             <th className="pb-2 pr-3 font-semibold">Items</th>
             <th className="pb-2 pr-3 font-semibold">Total</th>
-            <th className="pb-2 font-semibold">Notas</th>
+            <th className="pb-2 pr-3 font-semibold">Notas</th>
+            <th className="pb-2 pr-2 font-semibold">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border text-text-primary">
@@ -270,9 +277,7 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                         className="w-full min-w-[8rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
                       />
                     ) : (
-                      <span className="cursor-pointer whitespace-nowrap" onClick={() => toggle(c.id)}>
-                        {formatFecha(c.fecha)}
-                      </span>
+                      <span className="whitespace-nowrap">{formatFecha(c.fecha)}</span>
                     )}
                   </td>
                   <td className="py-2 pr-3 align-middle">
@@ -300,22 +305,14 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                         ))}
                       </select>
                     ) : (
-                      <span className="cursor-pointer" onClick={() => toggle(c.id)}>
-                        {c.proveedor.nombre}
-                      </span>
+                      <span>{c.proveedor.nombre}</span>
                     )}
                   </td>
                   <td className="py-2 pr-3 align-middle tabular-nums">
-                    {isEditing ? `${draft!.lines.length} ítems` : <span className="cursor-pointer" onClick={() => toggle(c.id)}>{nItems}</span>}
+                    {isEditing ? `${draft!.lines.length} ítems` : nItems}
                   </td>
                   <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
-                    {isEditing ? (
-                      formatCop(draftTotal)
-                    ) : (
-                      <span className="cursor-pointer" onClick={() => toggle(c.id)}>
-                        {formatCop(c.total)}
-                      </span>
-                    )}
+                    {isEditing ? formatCop(draftTotal) : formatCop(c.total)}
                   </td>
                   <td className="max-w-[220px] py-2 align-middle">
                     {isEditing ? (
@@ -328,16 +325,62 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                         placeholder="Opcional"
                       />
                     ) : (
-                      <span className="cursor-pointer break-words text-text-secondary" onClick={() => toggle(c.id)}>
-                        {c.notas?.trim() ? c.notas : "—"}
-                      </span>
+                      <span className="break-words text-text-secondary">{c.notas?.trim() ? c.notas : "—"}</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-2 align-top">
+                    {deleteId === c.id ? (
+                      <div className="flex max-w-[min(100%,18rem)] flex-col gap-2">
+                        <p className="text-xs leading-snug text-danger">
+                          ¿Eliminar este registro? Esta acción no se puede deshacer.
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => confirmDelete(c.id)}
+                            disabled={pending}
+                            className={btnDeleteRow}
+                          >
+                            Confirmar eliminación
+                          </button>
+                          <button type="button" onClick={() => setDeleteId(null)} disabled={pending} className={btnCancelRow}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : isEditing ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        <button type="button" onClick={saveEdit} disabled={pending} className={btnSaveRow}>
+                          Guardar
+                        </button>
+                        <button type="button" onClick={cancelEdit} disabled={pending} className={btnCancelRow}>
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        <button type="button" onClick={() => startEdit(c)} className={btnEditRow}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteId(c.id);
+                            setEditingId(null);
+                            setDraft(null);
+                          }}
+                          className={btnDeleteRow}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
                 {expanded ? (
                   <tr className="bg-surface-elevated/40">
                     <td />
-                    <td className="pb-3 pt-0 pr-3" colSpan={5}>
+                    <td className="pb-3 pt-0 pr-3" colSpan={6}>
                       <div className="rounded-lg border border-border/80 p-3">
                         {isEditing && draft ? (
                           <CompraLineEditor
@@ -345,9 +388,6 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                             setDraft={setDraft}
                             insumosCat={insumosCat}
                             disponiblesBase={disponiblesEdit}
-                            pending={pending}
-                            onSave={saveEdit}
-                            onCancel={cancelEdit}
                           />
                         ) : (
                           <>
@@ -373,38 +413,6 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                                 ))}
                               </tbody>
                             </table>
-                            {deleteId === c.id ? (
-                              <div className="mt-4 rounded-lg border border-danger/30 bg-danger-light/30 p-3">
-                                <p className="text-sm text-danger">
-                                  ¿Eliminar este registro? Esta acción no se puede deshacer.
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <button type="button" onClick={() => confirmDelete(c.id)} disabled={pending} className={btnDanger}>
-                                    Confirmar eliminación
-                                  </button>
-                                  <button type="button" onClick={() => setDeleteId(null)} className={btnSecondary}>
-                                    Cancelar
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                <button type="button" onClick={() => startEdit(c)} className={btnSecondary}>
-                                  Editar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setDeleteId(c.id);
-                                    setEditingId(null);
-                                    setDraft(null);
-                                  }}
-                                  className={btnDanger}
-                                >
-                                  Eliminar
-                                </button>
-                              </div>
-                            )}
                           </>
                         )}
                       </div>
@@ -425,9 +433,6 @@ function CompraLineEditor({
   setDraft,
   insumosCat,
   disponiblesBase,
-  pending,
-  onSave,
-  onCancel,
 }: {
   draft: { fecha: string; proveedorId: string; notas: string; lines: LineDraft[] };
   setDraft: Dispatch<
@@ -435,9 +440,6 @@ function CompraLineEditor({
   >;
   insumosCat: CatalogInsumo[];
   disponiblesBase: CatalogInsumo[];
-  pending: boolean;
-  onSave: () => void;
-  onCancel: () => void;
 }) {
   function setLine(i: number, patch: Partial<LineDraft>) {
     setDraft((d) => {
@@ -596,24 +598,9 @@ function CompraLineEditor({
       >
         Agregar insumo
       </button>
-      <div className="flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <span className="text-sm font-medium text-text-secondary">Total general</span>
-          <div className="mt-1 text-lg font-semibold text-text-primary">{totalGeneralFmt}</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={pending}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
-          >
-            Guardar
-          </button>
-          <button type="button" onClick={onCancel} disabled={pending} className={btnSecondary}>
-            Cancelar
-          </button>
-        </div>
+      <div className="border-t border-border pt-3">
+        <span className="text-sm font-medium text-text-secondary">Total general</span>
+        <div className="mt-1 text-lg font-semibold text-text-primary">{totalGeneralFmt}</div>
       </div>
     </div>
   );
