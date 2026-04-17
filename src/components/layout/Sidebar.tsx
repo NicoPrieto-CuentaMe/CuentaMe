@@ -8,6 +8,7 @@ import {
   PackagePlus,
   Settings2,
   ShoppingCart,
+  Warehouse,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { APP_NAME } from "@/lib/config";
@@ -17,6 +18,7 @@ const nav: { href: string; label: string; Icon: LucideIcon }[] = [
   { href: "/dashboard", label: "Análisis", Icon: BarChart2 },
   { href: "/ventas", label: "Ventas", Icon: ShoppingCart },
   { href: "/compras", label: "Compras", Icon: PackagePlus },
+  { href: "/inventario", label: "Inventario", Icon: Warehouse },
   { href: "/configuracion", label: "Configuración", Icon: Settings2 },
 ];
 
