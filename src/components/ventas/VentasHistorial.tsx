@@ -219,9 +219,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                         className="w-full min-w-[8rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
                       />
                     ) : (
-                      <span className="cursor-pointer whitespace-nowrap" onClick={() => toggle(v.id)}>
-                        {formatFecha(v.fecha)}
-                      </span>
+                      <span className="whitespace-nowrap">{formatFecha(v.fecha)}</span>
                     )}
                   </td>
                   <td className="py-2 pr-3 align-middle">
@@ -233,9 +231,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                         className="w-full min-w-[6rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
                       />
                     ) : (
-                      <span className="cursor-pointer whitespace-nowrap" onClick={() => toggle(v.id)}>
-                        {v.hora}
-                      </span>
+                      <span className="whitespace-nowrap">{v.hora}</span>
                     )}
                   </td>
                   <td className="max-w-[200px] py-2 pr-3 align-middle text-text-secondary">
@@ -272,16 +268,14 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                         ) : null}
                       </div>
                     ) : (
-                      <span className="cursor-pointer" onClick={() => toggle(v.id)}>
-                        {v.tipo}
-                      </span>
+                      <span>{v.tipo}</span>
                     )}
                   </td>
-                  <td className="cursor-pointer py-2 pr-3 align-middle tabular-nums" onClick={() => !isEditing && toggle(v.id)}>
+                  <td className="py-2 pr-3 align-middle tabular-nums">
                     {isEditing ? `${draft!.lines.length} ítems` : `${nItems} items`}
                   </td>
                   <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
-                    {isEditing ? formatCop(draftTotal) : <span className="cursor-pointer" onClick={() => toggle(v.id)}>{formatCop(v.total)}</span>}
+                    {isEditing ? formatCop(draftTotal) : formatCop(v.total)}
                   </td>
                   <td className="max-w-[160px] py-2 align-middle text-text-secondary">
                     {isEditing ? (
@@ -297,9 +291,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                         ))}
                       </select>
                     ) : (
-                      <span className="cursor-pointer break-words" onClick={() => toggle(v.id)}>
-                        {v.metodoPago}
-                      </span>
+                      <span className="break-words">{v.metodoPago}</span>
                     )}
                   </td>
                 </tr>

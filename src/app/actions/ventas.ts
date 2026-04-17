@@ -320,6 +320,22 @@ export async function editarVenta(_: ActionState, formData: FormData): Promise<A
       return { ok: false, message: "Formato de líneas inválido.", field: "lineas" };
     }
 
+    if (!Array.isArray(parsed)) {
+      return { ok: false, message: "Las líneas deben ser un arreglo.", field: "lineas" };
+    }
+
+    const platoIds = (parsed as LineaJson[]).map((row) =>
+      typeof row.platoId === "string" ? row.platoId.trim() : "",
+    );
+    const uniqueIds = new Set(platoIds);
+    if (uniqueIds.size !== platoIds.length) {
+      return {
+        ok: false,
+        message: "No puedes registrar el mismo plato dos veces en la misma venta.",
+        field: "lineas",
+      };
+    }
+
     const built = await buildValidVentaLinesFromParsed(userId, parsed);
     if (!built.ok) return built.state;
     const { validLines } = built;
