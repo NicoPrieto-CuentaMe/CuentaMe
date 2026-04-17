@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
@@ -34,6 +34,8 @@ type PlatoRow = {
   categoriaId: string | null;
   categoria: { id: string; nombre: string } | null;
 };
+
+type ViewMode = "home" | "categoria" | "plato";
 
 function precioNum(p: PlatoRow): number {
   const x = Number(p.precioVenta);
@@ -103,15 +105,74 @@ function SuccessFeedback({ state }: { state: ActionState }) {
   );
 }
 
-function SubmitBar({ totalFmt, disabled }: { totalFmt: string; disabled: boolean }) {
+const btnCounter =
+  "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated text-lg font-semibold text-text-primary hover:bg-border disabled:cursor-not-allowed disabled:opacity-40";
+
+function PlatoCard({
+  p,
+  cantidad,
+  onDelta,
+}: {
+  p: PlatoRow;
+  cantidad: number;
+  onDelta: (delta: number) => void;
+}) {
+  const q = cantidad;
+  const selected = q > 0;
+  const precio = precioNum(p);
+  return (
+    <div
+      className={`flex flex-col rounded-xl border-2 p-3 transition-colors ${
+        selected
+          ? "border-accent bg-accent-light/20 shadow-sm"
+          : "border-border bg-surface-elevated/50 opacity-75"
+      }`}
+    >
+      <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug text-text-primary">{p.nombre}</p>
+      <p className="mt-1 text-sm font-medium text-text-secondary">{formatCop(precio)}</p>
+      <div className="mt-3 flex items-center justify-center gap-1">
+        <button
+          type="button"
+          onClick={() => onDelta(-1)}
+          disabled={q <= 0}
+          className={btnCounter}
+          aria-label={`Menos ${p.nombre}`}
+        >
+          −
+        </button>
+        <span className="min-w-[2rem] text-center text-lg font-bold tabular-nums text-text-primary">{q}</span>
+        <button
+          type="button"
+          onClick={() => onDelta(1)}
+          disabled={q >= 99}
+          className={btnCounter}
+          aria-label={`Más ${p.nombre}`}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SubmitBar({
+  totalFmt,
+  distinctPlatos,
+  disabled,
+}: {
+  totalFmt: string;
+  distinctPlatos: number;
+  disabled: boolean;
+}) {
   const { pending } = useFormStatus();
+  const platoTxt = distinctPlatos === 1 ? "1 plato" : `${distinctPlatos} platos`;
   return (
     <button
       type="submit"
       disabled={pending || disabled}
       className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:min-w-[220px]"
     >
-      {pending ? "Registrando…" : `Registrar · ${totalFmt}`}
+      {pending ? "Registrando…" : `Registrar · ${totalFmt} · ${platoTxt}`}
     </button>
   );
 }
@@ -128,9 +189,26 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [lineasError, setLineasError] = useState<string | null>(null);
 
+  const [view, setView] = useState<ViewMode>("home");
+  const [categoriaKey, setCategoriaKey] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
   const tipoStr = ventaKind === "mesa" ? TIPO_MESA : tipoDomicilio(canal);
 
   const sections = useMemo(() => buildPlatoSections(platos), [platos]);
+
+  const platosFiltradosBusqueda = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return [];
+    return platos.filter((p) => p.nombre.toLowerCase().includes(q));
+  }, [platos, busqueda]);
+
+  const platosCategoriaActual = useMemo(() => {
+    if (categoriaKey == null) return [];
+    const sec = sections.find((s) => s.key === categoriaKey);
+    return sec?.platos ?? [];
+  }, [sections, categoriaKey]);
 
   const lineasPayload = useMemo(() => {
     const lineas: { platoId: string; cantidad: number }[] = [];
@@ -150,13 +228,30 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
     return sum;
   }, [platos, cantidades]);
 
+  const distinctPlatosConCantidad = useMemo(() => {
+    let n = 0;
+    for (const p of platos) {
+      if ((cantidades[p.id] ?? 0) > 0) n += 1;
+    }
+    return n;
+  }, [platos, cantidades]);
+
   const totalFmt = formatCop(totalGeneral);
   const tieneLineas = totalGeneral > 0;
+
+  useEffect(() => {
+    if (view === "plato") {
+      searchRef.current?.focus();
+    }
+  }, [view]);
 
   useEffect(() => {
     if (state.ok) {
       setCantidades({});
       setLineasError(null);
+      setView("home");
+      setCategoriaKey(null);
+      setBusqueda("");
       router.refresh();
     }
   }, [state.ok, router]);
@@ -186,6 +281,9 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
     "rounded-full border-2 border-accent bg-accent-light px-4 py-2 text-sm font-semibold text-accent shadow-sm";
   const pillOff =
     "rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-text-secondary hover:border-accent/40";
+
+  const homeBtnClass =
+    "flex min-h-[4.5rem] w-full items-center justify-center gap-2 rounded-xl border-2 border-border bg-surface-elevated px-4 py-4 text-base font-semibold text-text-primary transition-colors hover:border-accent hover:bg-accent-light/30 sm:max-w-md";
 
   return (
     <form action={formAction} onSubmit={handleSubmit} className="flex flex-col pb-2">
@@ -282,65 +380,125 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
         </div>
       </div>
 
-      <div className="mt-8 space-y-8">
+      <div className="mt-8 min-h-[120px]">
         {platos.length === 0 ? (
           <p className="text-sm text-text-tertiary">No tienes platos activos. Créalos en Configuración.</p>
         ) : (
-          sections.map((sec) => (
-            <section key={sec.key}>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold text-text-primary">{sec.titulo}</h3>
-                <span className="inline-flex min-h-[1.25rem] items-center rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-xs tabular-nums text-text-tertiary">
-                  {sec.platos.length}
-                </span>
+          <>
+            {view === "home" ? (
+              <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
+                <button type="button" onClick={() => setView("categoria")} className={homeBtnClass}>
+                  <span className="text-2xl" aria-hidden>
+                    🏷
+                  </span>
+                  Buscar por categoría
+                </button>
+                <button type="button" onClick={() => setView("plato")} className={homeBtnClass}>
+                  <span className="text-2xl" aria-hidden>
+                    🔍
+                  </span>
+                  Buscar por plato
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {sec.platos.map((p) => {
-                  const q = cantidades[p.id] ?? 0;
-                  const selected = q > 0;
-                  const precio = precioNum(p);
-                  return (
-                    <div
-                      key={p.id}
-                      className={`flex flex-col rounded-xl border-2 p-3 transition-colors ${
-                        selected
-                          ? "border-accent bg-accent-light/20 shadow-sm"
-                          : "border-border bg-surface-elevated/50 opacity-75"
-                      }`}
-                    >
-                      <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug text-text-primary">
-                        {p.nombre}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-text-secondary">{formatCop(precio)}</p>
-                      <div className="mt-3 flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setQty(p.id, -1)}
-                          disabled={q <= 0}
-                          className="flex h-11 min-w-[2.75rem] items-center justify-center rounded-lg border border-border bg-surface-elevated text-lg font-semibold text-text-primary hover:bg-border disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Menos ${p.nombre}`}
-                        >
-                          −
-                        </button>
-                        <span className="min-w-[2rem] text-center text-lg font-bold tabular-nums text-text-primary">
-                          {q}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setQty(p.id, 1)}
-                          disabled={q >= 99}
-                          className="flex h-11 min-w-[2.75rem] items-center justify-center rounded-lg border border-border bg-surface-elevated text-lg font-semibold text-text-primary hover:bg-border disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Más ${p.nombre}`}
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+            ) : null}
+
+            {view === "categoria" ? (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("home");
+                    setCategoriaKey(null);
+                  }}
+                  className="text-sm font-medium text-accent hover:underline"
+                >
+                  ← Volver
+                </button>
+                <p className="text-xs font-medium text-text-tertiary">Categoría</p>
+                <div className="flex flex-wrap gap-2">
+                  {sections.map((sec) => {
+                    const active = categoriaKey === sec.key;
+                    return (
+                      <button
+                        key={sec.key}
+                        type="button"
+                        onClick={() => setCategoriaKey(sec.key)}
+                        className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                          active
+                            ? "border-accent bg-accent-light text-accent"
+                            : "border-border bg-surface-elevated text-text-secondary hover:border-accent/50"
+                        }`}
+                      >
+                        {sec.titulo}
+                      </button>
+                    );
+                  })}
+                </div>
+                {categoriaKey == null ? (
+                  <p className="text-sm text-text-tertiary">Selecciona una categoría para ver los platos.</p>
+                ) : platosCategoriaActual.length === 0 ? (
+                  <p className="text-sm text-text-tertiary">No hay platos en esta categoría.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {platosCategoriaActual.map((p) => (
+                      <PlatoCard
+                        key={p.id}
+                        p={p}
+                        cantidad={cantidades[p.id] ?? 0}
+                        onDelta={(d) => setQty(p.id, d)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            </section>
-          ))
+            ) : null}
+
+            {view === "plato" ? (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("home");
+                    setBusqueda("");
+                  }}
+                  className="text-sm font-medium text-accent hover:underline"
+                >
+                  ← Volver
+                </button>
+                <div>
+                  <label className="text-sm font-medium text-text-secondary" htmlFor="venta-buscar-plato">
+                    Buscar plato
+                  </label>
+                  <input
+                    ref={searchRef}
+                    id="venta-buscar-plato"
+                    type="search"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Escribe el nombre…"
+                    className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+                    autoComplete="off"
+                  />
+                </div>
+                {!busqueda.trim() ? (
+                  <p className="text-sm text-text-tertiary">Escribe para filtrar por nombre.</p>
+                ) : platosFiltradosBusqueda.length === 0 ? (
+                  <p className="text-sm text-text-tertiary">No hay platos que coincidan.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {platosFiltradosBusqueda.map((p) => (
+                      <PlatoCard
+                        key={p.id}
+                        p={p}
+                        cantidad={cantidades[p.id] ?? 0}
+                        onDelta={(d) => setQty(p.id, d)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -361,7 +519,7 @@ export function VentasForm({ platos }: { platos: PlatoRow[] }) {
           <div className="flex flex-col items-stretch gap-3 sm:items-end">
             <SuccessFeedback state={state} />
             <GlobalFeedback state={state} />
-            <SubmitBar totalFmt={totalFmt} disabled={!tieneLineas} />
+            <SubmitBar totalFmt={totalFmt} distinctPlatos={distinctPlatosConCantidad} disabled={!tieneLineas} />
           </div>
         </div>
       </div>
