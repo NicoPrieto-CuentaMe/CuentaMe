@@ -241,3 +241,64 @@ export async function registrarInventario(_: ActionState, formData: FormData): P
     return { ok: false, message: "No se pudo registrar el conteo. Intenta de nuevo." };
   }
 }
+
+export async function editarInventario(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const registroId = requiredString(formData, "registroId");
+    const stockRaw = requiredString(formData, "stockReal");
+    const notasRaw = typeof formData.get("notas") === "string" ? (formData.get("notas") as string).trim() : "";
+
+    if (!registroId) return { ok: false, message: "Registro inválido.", field: "registroId" };
+
+    const stockReal = parseStockReal(stockRaw);
+    if (stockReal === null) {
+      return { ok: false, message: "El stock debe ser un número mayor o igual a 0.", field: "stockReal" };
+    }
+    if (stockReal.gt(MAX_STOCK_REAL)) {
+      return { ok: false, message: "El stock no puede superar 9.999.", field: "stockReal" };
+    }
+
+    let notas: string | null = null;
+    if (notasRaw) {
+      const nl = maxLength(notasRaw, MAX_NOTAS_LINEA, "Las notas");
+      if (nl) return { ...nl, field: "notas" };
+      notas = notasRaw;
+    }
+
+    const res = await prisma.inventario.updateMany({
+      where: { id: registroId, userId },
+      data: { stockReal, notas },
+    });
+    if (res.count === 0) {
+      return { ok: false, message: "Registro no encontrado.", field: "registroId" };
+    }
+
+    revalidatePath("/inventario");
+    return { ok: true, message: "Conteo actualizado." };
+  } catch (e) {
+    console.error("[editarInventario]", e);
+    return { ok: false, message: "No se pudo actualizar el registro." };
+  }
+}
+
+export async function eliminarInventario(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const registroId = requiredString(formData, "registroId");
+    if (!registroId) return { ok: false, message: "Registro inválido." };
+
+    const res = await prisma.inventario.deleteMany({
+      where: { id: registroId, userId },
+    });
+    if (res.count === 0) {
+      return { ok: false, message: "Registro no encontrado." };
+    }
+
+    revalidatePath("/inventario");
+    return { ok: true, message: "Registro eliminado." };
+  } catch (e) {
+    console.error("[eliminarInventario]", e);
+    return { ok: false, message: "No se pudo eliminar el registro." };
+  }
+}

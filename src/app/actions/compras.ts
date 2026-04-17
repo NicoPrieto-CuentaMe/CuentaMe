@@ -144,122 +144,9 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
     });
     if (!proveedor) return { ok: false, message: "Proveedor inválido o inactivo.", field: "proveedorId" };
 
-    const insumoIds: string[] = [];
-    for (let i = 0; i < parsed.length; i++) {
-      const row = parsed[i] as LineaJson;
-      const insumoId = typeof row.insumoId === "string" ? row.insumoId.trim() : "";
-      if (!insumoId) {
-        return {
-          ok: false,
-          message: lineaMsg(i + 1, "selecciona un insumo."),
-          field: `linea-${i}`,
-        };
-      }
-      insumoIds.push(insumoId);
-    }
-
-    const unique = new Set(insumoIds);
-    if (unique.size !== insumoIds.length) {
-      return {
-        ok: false,
-        message: "No puedes repetir el mismo insumo en dos líneas.",
-        field: "lineas",
-      };
-    }
-
-    const insumosDb = await prisma.insumo.findMany({
-      where: { id: { in: insumoIds }, userId, ...notDeleted },
-      select: { id: true, nombre: true, unidadBase: true },
-    });
-    const insumoMap = new Map(insumosDb.map((x) => [x.id, x]));
-
-    type ValidLine = {
-      insumoId: string;
-      cantidad: Prisma.Decimal;
-      unidad: Unidad;
-      precioUnitario: Prisma.Decimal;
-      total: Prisma.Decimal;
-    };
-
-    const validLines: ValidLine[] = [];
-
-    for (let i = 0; i < parsed.length; i++) {
-      const row = parsed[i] as LineaJson;
-      const lineNum = i + 1;
-      const insumoId = String(row.insumoId ?? "").trim();
-
-      const insumo = insumoMap.get(insumoId);
-      if (!insumo) {
-        return {
-          ok: false,
-          message: lineaMsg(lineNum, "el insumo no es válido."),
-          field: `linea-${i}`,
-        };
-      }
-
-      const cantidadRaw = typeof row.cantidad === "string" || typeof row.cantidad === "number" ? String(row.cantidad) : "";
-      const cantidad = toPositiveDecimal(cantidadRaw.trim());
-      if (!cantidad) {
-        return {
-          ok: false,
-          message: lineaMsg(lineNum, "la cantidad debe ser mayor a 0."),
-          field: `linea-${i}`,
-        };
-      }
-      if (cantidad.gt(MAX_CANTIDAD)) {
-        return {
-          ok: false,
-          message: lineaMsg(lineNum, "la cantidad no puede superar 9.999."),
-          field: `linea-${i}`,
-        };
-      }
-
-      const unidadRaw = typeof row.unidad === "string" ? row.unidad.trim() : "";
-      const unidad = (Unidad as Record<string, Unidad>)[unidadRaw];
-      if (!unidad) {
-        return {
-          ok: false,
-          message: lineaMsg(lineNum, "unidad inválida."),
-          field: `linea-${i}`,
-        };
-      }
-
-      if (!sonUnidadesCompatibles(insumo.unidadBase as string, unidadRaw)) {
-        return {
-          ok: false,
-          message: lineaMsg(
-            lineNum,
-            compraUnidadIncompatibleMsg(insumo.nombre, insumo.unidadBase as string, unidadRaw),
-          ),
-          field: `linea-${i}`,
-        };
-      }
-
-      const totalStr =
-        typeof row.total === "string"
-          ? row.total.replace(/[^\d]/g, "")
-          : typeof row.total === "number"
-            ? String(Math.round(row.total))
-            : "";
-      const totalLinea = toPositiveDecimal(totalStr);
-      if (!totalLinea) {
-        return {
-          ok: false,
-          message: lineaMsg(lineNum, "el total pagado debe ser mayor a 0."),
-          field: `linea-${i}`,
-        };
-      }
-      if (totalLinea.gt(MAX_TOTAL_LINEA)) {
-        return {
-          ok: false,
-          message: lineaMsg(lineNum, "el total pagado no puede superar $9.999.999."),
-          field: `linea-${i}`,
-        };
-      }
-
-      const precioUnitario = totalLinea.div(cantidad).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-      validLines.push({ insumoId, cantidad, unidad, precioUnitario, total: totalLinea });
-    }
+    const builtReg = await buildValidCompraDetalles(userId, parsed);
+    if (!builtReg.ok) return builtReg.state;
+    const validLines = builtReg.validLines;
 
     let totalGeneral = new Prisma.Decimal(0);
     for (const vl of validLines) {
@@ -294,5 +181,291 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
   } catch (e) {
     console.error("[registrarCompra]", e);
     return { ok: false, message: "No se pudo registrar la compra. Intenta de nuevo." };
+  }
+}
+
+async function buildValidCompraDetalles(
+  userId: string,
+  parsed: unknown,
+): Promise<
+  | {
+      ok: true;
+      validLines: {
+        insumoId: string;
+        cantidad: Prisma.Decimal;
+        unidad: Unidad;
+        precioUnitario: Prisma.Decimal;
+        total: Prisma.Decimal;
+      }[];
+    }
+  | { ok: false; state: ActionState }
+> {
+  if (!Array.isArray(parsed)) {
+    return { ok: false, state: { ok: false, message: "Las líneas deben ser un arreglo.", field: "lineas" } };
+  }
+  if (parsed.length < MIN_LINEAS) {
+    return { ok: false, state: { ok: false, message: "Debe haber al menos una línea de insumo.", field: "lineas" } };
+  }
+  if (parsed.length > MAX_LINEAS) {
+    return { ok: false, state: { ok: false, message: `No puedes agregar más de ${MAX_LINEAS} líneas.`, field: "lineas" } };
+  }
+
+  const insumoIds: string[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i] as LineaJson;
+    const insumoId = typeof row.insumoId === "string" ? row.insumoId.trim() : "";
+    if (!insumoId) {
+      return {
+        ok: false,
+        state: { ok: false, message: lineaMsg(i + 1, "selecciona un insumo."), field: `linea-${i}` },
+      };
+    }
+    insumoIds.push(insumoId);
+  }
+  const unique = new Set(insumoIds);
+  if (unique.size !== insumoIds.length) {
+    return {
+      ok: false,
+      state: { ok: false, message: "No puedes repetir el mismo insumo en dos líneas.", field: "lineas" },
+    };
+  }
+
+  const insumosDb = await prisma.insumo.findMany({
+    where: { id: { in: insumoIds }, userId, ...notDeleted },
+    select: { id: true, nombre: true, unidadBase: true },
+  });
+  const insumoMap = new Map(insumosDb.map((x) => [x.id, x]));
+
+  type ValidLine = {
+    insumoId: string;
+    cantidad: Prisma.Decimal;
+    unidad: Unidad;
+    precioUnitario: Prisma.Decimal;
+    total: Prisma.Decimal;
+  };
+
+  const validLines: ValidLine[] = [];
+
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i] as LineaJson;
+    const lineNum = i + 1;
+    const insumoId = String(row.insumoId ?? "").trim();
+
+    const insumo = insumoMap.get(insumoId);
+    if (!insumo) {
+      return {
+        ok: false,
+        state: { ok: false, message: lineaMsg(lineNum, "el insumo no es válido."), field: `linea-${i}` },
+      };
+    }
+
+    const cantidadRaw = typeof row.cantidad === "string" || typeof row.cantidad === "number" ? String(row.cantidad) : "";
+    const cantidad = toPositiveDecimal(cantidadRaw.trim());
+    if (!cantidad) {
+      return {
+        ok: false,
+        state: { ok: false, message: lineaMsg(lineNum, "la cantidad debe ser mayor a 0."), field: `linea-${i}` },
+      };
+    }
+    if (cantidad.gt(MAX_CANTIDAD)) {
+      return {
+        ok: false,
+        state: { ok: false, message: lineaMsg(lineNum, "la cantidad no puede superar 9.999."), field: `linea-${i}` },
+      };
+    }
+
+    const unidadRaw = typeof row.unidad === "string" ? row.unidad.trim() : "";
+    const unidad = (Unidad as Record<string, Unidad>)[unidadRaw];
+    if (!unidad) {
+      return {
+        ok: false,
+        state: { ok: false, message: lineaMsg(lineNum, "unidad inválida."), field: `linea-${i}` },
+      };
+    }
+
+    if (!sonUnidadesCompatibles(insumo.unidadBase as string, unidadRaw)) {
+      return {
+        ok: false,
+        state: {
+          ok: false,
+          message: lineaMsg(
+            lineNum,
+            compraUnidadIncompatibleMsg(insumo.nombre, insumo.unidadBase as string, unidadRaw),
+          ),
+          field: `linea-${i}`,
+        },
+      };
+    }
+
+    const totalStr =
+      typeof row.total === "string"
+        ? row.total.replace(/[^\d]/g, "")
+        : typeof row.total === "number"
+          ? String(Math.round(row.total))
+          : "";
+    const totalLinea = toPositiveDecimal(totalStr);
+    if (!totalLinea) {
+      return {
+        ok: false,
+        state: { ok: false, message: lineaMsg(lineNum, "el total pagado debe ser mayor a 0."), field: `linea-${i}` },
+      };
+    }
+    if (totalLinea.gt(MAX_TOTAL_LINEA)) {
+      return {
+        ok: false,
+        state: {
+          ok: false,
+          message: lineaMsg(lineNum, "el total pagado no puede superar $9.999.999."),
+          field: `linea-${i}`,
+        },
+      };
+    }
+
+    const precioUnitario = totalLinea.div(cantidad).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    validLines.push({ insumoId, cantidad, unidad, precioUnitario, total: totalLinea });
+  }
+
+  return { ok: true, validLines };
+}
+
+/** Catálogo para edición de compras en cliente. */
+export async function getComprasCatalogoEdit() {
+  try {
+    const userId = await requireUserId();
+    const [proveedores, insumos] = await Promise.all([
+      prisma.proveedor.findMany({
+        where: { userId, ...notDeleted },
+        select: { id: true, nombre: true, categorias: true },
+        orderBy: { nombre: "asc" },
+      }),
+      prisma.insumo.findMany({
+        where: { userId, ...notDeleted },
+        select: { id: true, nombre: true, unidadBase: true, categoria: true },
+        orderBy: { nombre: "asc" },
+      }),
+    ]);
+    return { ok: true as const, proveedores, insumos };
+  } catch (e) {
+    console.error("[getComprasCatalogoEdit]", e);
+    return {
+      ok: false as const,
+      proveedores: [] as { id: string; nombre: string; categorias: import("@prisma/client").CategoriaProveedor[] }[],
+      insumos: [] as {
+        id: string;
+        nombre: string;
+        unidadBase: Unidad;
+        categoria: import("@prisma/client").CategoriaProveedor | null;
+      }[],
+    };
+  }
+}
+
+export async function editarCompra(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const compraId = requiredString(formData, "compraId");
+    if (!compraId) return { ok: false, message: "Compra inválida.", field: "compraId" };
+
+    const existente = await prisma.compra.findFirst({
+      where: { id: compraId, userId },
+      select: { id: true },
+    });
+    if (!existente) return { ok: false, message: "Compra no encontrada.", field: "compraId" };
+
+    const fechaRaw = requiredString(formData, "fecha");
+    const proveedorId = requiredString(formData, "proveedorId");
+    const notas = optionalString(formData, "notas");
+    const lineasRaw = requiredString(formData, "lineas");
+
+    if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
+    const fechaDb = fechaCivilToDb(fechaRaw);
+    if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    if (esFechaFutura(fechaRaw)) {
+      return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
+    }
+
+    if (!proveedorId) return { ok: false, message: "Selecciona un proveedor.", field: "proveedorId" };
+
+    if (notas) {
+      const nl = maxLength(notas, MAX_NOTAS, "Las notas");
+      if (nl) return { ...nl, field: "notas" };
+    }
+
+    const proveedor = await prisma.proveedor.findFirst({
+      where: { id: proveedorId, userId, ...notDeleted },
+      select: { id: true },
+    });
+    if (!proveedor) return { ok: false, message: "Proveedor inválido o inactivo.", field: "proveedorId" };
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(lineasRaw || "[]");
+    } catch {
+      return { ok: false, message: "Formato de líneas inválido.", field: "lineas" };
+    }
+
+    const built = await buildValidCompraDetalles(userId, parsed);
+    if (!built.ok) return built.state;
+    const { validLines } = built;
+
+    let totalGeneral = new Prisma.Decimal(0);
+    for (const vl of validLines) {
+      totalGeneral = totalGeneral.add(vl.total);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.compra.update({
+        where: { id: compraId },
+        data: {
+          fecha: fechaDb,
+          proveedorId,
+          total: totalGeneral,
+          notas: notas ?? null,
+        },
+      });
+      await tx.compraDetalle.deleteMany({ where: { compraId } });
+      await tx.compraDetalle.createMany({
+        data: validLines.map((vl) => ({
+          userId,
+          compraId,
+          insumoId: vl.insumoId,
+          cantidad: vl.cantidad,
+          unidad: vl.unidad,
+          precioUnitario: vl.precioUnitario,
+          total: vl.total,
+        })),
+      });
+    });
+
+    revalidatePath("/compras");
+    return { ok: true, message: "Compra actualizada." };
+  } catch (e) {
+    console.error("[editarCompra]", e);
+    return { ok: false, message: "No se pudo actualizar la compra. Intenta de nuevo." };
+  }
+}
+
+export async function eliminarCompra(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const compraId = requiredString(formData, "compraId");
+    if (!compraId) return { ok: false, message: "Compra inválida." };
+
+    const existente = await prisma.compra.findFirst({
+      where: { id: compraId, userId },
+      select: { id: true },
+    });
+    if (!existente) return { ok: false, message: "Compra no encontrada." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.compraDetalle.deleteMany({ where: { compraId } });
+      await tx.compra.delete({ where: { id: compraId } });
+    });
+
+    revalidatePath("/compras");
+    return { ok: true, message: "Compra eliminada." };
+  } catch (e) {
+    console.error("[eliminarCompra]", e);
+    return { ok: false, message: "No se pudo eliminar la compra." };
   }
 }
