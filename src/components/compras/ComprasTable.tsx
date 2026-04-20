@@ -54,16 +54,6 @@ function formatCop(n: unknown): string {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 2 }).format(x);
 }
 
-function formatCantidad(n: unknown): string {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return String(n);
-  return new Intl.NumberFormat("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 4 }).format(x);
-}
-
-function unidadLabel(u: string): string {
-  return UNIT_OPTIONS.find((o) => o.value === u)?.label ?? u;
-}
-
 function insumosFiltrados(
   proveedorId: string,
   proveedores: CatalogProveedor[],
@@ -114,7 +104,6 @@ function UnitHints({ unidadBase }: { unidadBase: Unidad }) {
 
 export function ComprasTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
-  const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [proveedores, setProveedores] = useState<CatalogProveedor[]>([]);
   const [insumosCat, setInsumosCat] = useState<CatalogInsumo[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -136,19 +125,9 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
     });
   }, []);
 
-  const toggle = (id: string) => {
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const startEdit = useCallback((c: Row) => {
     setEditingId(c.id);
     setDeleteId(null);
-    setOpen((prev) => new Set(prev).add(c.id));
     setDraft({
       fecha: fechaToInput(c.fecha),
       proveedorId: c.proveedorId,
@@ -201,11 +180,6 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
         const res = await eliminarCompra(idle, fd);
         if (res.ok) {
           setDeleteId(null);
-          setOpen((prev) => {
-            const n = new Set(prev);
-            n.delete(compraId);
-            return n;
-          });
           router.refresh();
         }
       });
@@ -247,23 +221,14 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
         </thead>
         <tbody className="divide-y divide-border text-text-primary">
           {rows.map((c) => {
-            const expanded = open.has(c.id);
             const nItems = c.detalles.length;
             const isEditing = editingId === c.id && draft;
             const todayMax = todayLocalISO();
-            const canToggleDetail = !isEditing && deleteId !== c.id;
 
             return (
               <Fragment key={c.id}>
                 <tr className="align-top">
-                  <td
-                    {...(canToggleDetail
-                      ? {
-                          onClick: () => toggle(c.id),
-                          className: "cursor-pointer py-2 pr-3 align-middle",
-                        }
-                      : { className: "py-2 pr-3 align-middle" })}
-                  >
+                  <td className="py-2 pr-3 align-middle">
                     {isEditing ? (
                       <input
                         type="date"
@@ -276,14 +241,7 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                       <span className="whitespace-nowrap">{formatFecha(c.fecha)}</span>
                     )}
                   </td>
-                  <td
-                    {...(canToggleDetail
-                      ? {
-                          onClick: () => toggle(c.id),
-                          className: "cursor-pointer py-2 pr-3 align-middle",
-                        }
-                      : { className: "py-2 pr-3 align-middle" })}
-                  >
+                  <td className="py-2 pr-3 align-middle">
                     {isEditing ? (
                       <select
                         value={draft!.proveedorId}
@@ -311,34 +269,13 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                       <span>{c.proveedor.nombre}</span>
                     )}
                   </td>
-                  <td
-                    {...(canToggleDetail
-                      ? {
-                          onClick: () => toggle(c.id),
-                          className: "cursor-pointer py-2 pr-3 align-middle tabular-nums",
-                        }
-                      : { className: "py-2 pr-3 align-middle tabular-nums" })}
-                  >
+                  <td className="py-2 pr-3 align-middle tabular-nums">
                     {isEditing ? `${draft!.lines.length} ítems` : nItems}
                   </td>
-                  <td
-                    {...(canToggleDetail
-                      ? {
-                          onClick: () => toggle(c.id),
-                          className: "cursor-pointer py-2 pr-3 align-middle font-medium whitespace-nowrap",
-                        }
-                      : { className: "py-2 pr-3 align-middle font-medium whitespace-nowrap" })}
-                  >
+                  <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
                     {isEditing ? formatCop(draftTotal) : formatCop(c.total)}
                   </td>
-                  <td
-                    {...(canToggleDetail
-                      ? {
-                          onClick: () => toggle(c.id),
-                          className: "max-w-[220px] cursor-pointer py-2 align-middle text-text-secondary",
-                        }
-                      : { className: "max-w-[220px] py-2 align-middle text-text-secondary" })}
-                  >
+                  <td className="max-w-[220px] py-2 align-middle text-text-secondary">
                     {isEditing ? (
                       <input
                         type="text"
@@ -401,43 +338,16 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                     )}
                   </td>
                 </tr>
-                {expanded ? (
+                {isEditing && draft ? (
                   <tr className="bg-surface-elevated/40">
                     <td className="pb-3 pt-0 pr-3" colSpan={6}>
                       <div className="rounded-lg border border-border/80 p-3">
-                        {isEditing && draft ? (
-                          <CompraLineEditor
-                            draft={draft}
-                            setDraft={setDraft}
-                            insumosCat={insumosCat}
-                            disponiblesBase={disponiblesEdit}
-                          />
-                        ) : (
-                          <>
-                            <table className="w-full min-w-[520px] text-sm">
-                              <thead>
-                                <tr className="border-b border-border text-xs text-text-secondary">
-                                  <th className="pb-2 pr-2 text-left font-medium">Insumo</th>
-                                  <th className="pb-2 pr-2 text-left font-medium">Cantidad</th>
-                                  <th className="pb-2 pr-2 text-left font-medium">Precio unitario</th>
-                                  <th className="pb-2 text-left font-medium">Total línea</th>
-                                </tr>
-                              </thead>
-                              <tbody className="text-text-primary">
-                                {c.detalles.map((d) => (
-                                  <tr key={d.id} className="border-b border-border/60 last:border-0">
-                                    <td className="py-2 pr-2 align-top">{d.insumo.nombre}</td>
-                                    <td className="py-2 pr-2 whitespace-nowrap">
-                                      {formatCantidad(d.cantidad)} {unidadLabel(d.unidad)}
-                                    </td>
-                                    <td className="py-2 pr-2 whitespace-nowrap">{formatCop(d.precioUnitario)}</td>
-                                    <td className="py-2 font-medium whitespace-nowrap">{formatCop(d.total)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </>
-                        )}
+                        <CompraLineEditor
+                          draft={draft}
+                          setDraft={setDraft}
+                          insumosCat={insumosCat}
+                          disponiblesBase={disponiblesEdit}
+                        />
                       </div>
                     </td>
                   </tr>
