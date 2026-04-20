@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+} from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
@@ -155,6 +163,177 @@ function PlatoCard({
   );
 }
 
+function PedidoActual({
+  platos,
+  cantidades,
+  setCantidades,
+  setLineasError,
+}: {
+  platos: PlatoRow[];
+  cantidades: Record<string, number>;
+  setCantidades: Dispatch<SetStateAction<Record<string, number>>>;
+  setLineasError: (v: string | null) => void;
+}) {
+  const platoMap = useMemo(() => new Map(platos.map((p) => [p.id, p])), [platos]);
+  const orderedIds = useMemo(
+    () => Object.keys(cantidades).filter((id) => (cantidades[id] ?? 0) > 0),
+    [cantidades],
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftQty, setDraftQty] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingId) editInputRef.current?.focus();
+  }, [editingId]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setEditingId(null);
+        setDraftQty("");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editingId]);
+
+  function commitEdit(platoId: string) {
+    const raw = draftQty.trim();
+    const parsed = parseInt(raw, 10);
+    setLineasError(null);
+    setCantidades((prev) => {
+      const out = { ...prev };
+      if (raw === "" || !Number.isFinite(parsed) || parsed <= 0) {
+        delete out[platoId];
+      } else {
+        out[platoId] = Math.max(1, Math.min(99, parsed));
+      }
+      return out;
+    });
+    setEditingId(null);
+    setDraftQty("");
+  }
+
+  function removePlato(platoId: string) {
+    setLineasError(null);
+    setCantidades((prev) => {
+      const out = { ...prev };
+      delete out[platoId];
+      return out;
+    });
+    if (editingId === platoId) {
+      setEditingId(null);
+      setDraftQty("");
+    }
+  }
+
+  if (orderedIds.length === 0) return null;
+
+  const btnIcon =
+    "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated text-base leading-none text-text-primary hover:bg-border";
+
+  return (
+    <div className="mt-6 border-t border-border pt-6">
+      <h3 className="text-sm font-medium text-text-secondary">Pedido actual</h3>
+      <ul className="mt-3 space-y-2">
+        {orderedIds.map((id) => {
+          const p = platoMap.get(id);
+          const q = cantidades[id] ?? 0;
+          if (q <= 0) return null;
+          const nombre = p?.nombre ?? "Plato";
+          const precio = p ? precioNum(p) : 0;
+          const isEditing = editingId === id;
+          const qForSub = isEditing
+            ? (() => {
+                const t = draftQty.trim();
+                const parsed = parseInt(t, 10);
+                if (t === "" || !Number.isFinite(parsed) || parsed <= 0) return q;
+                return Math.max(1, Math.min(99, parsed));
+              })()
+            : q;
+          const sub = precio * qForSub;
+
+          return (
+            <li
+              key={id}
+              className="flex min-h-[48px] flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 py-2 last:border-0 sm:flex-nowrap"
+            >
+              <span className="min-w-0 flex-1 text-sm text-text-primary">{nombre}</span>
+              {isEditing ? (
+                <>
+                  <input
+                    ref={editInputRef}
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={draftQty}
+                    onChange={(e) => setDraftQty(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitEdit(id);
+                      }
+                    }}
+                    className="w-[4.5rem] shrink-0 rounded border border-border bg-surface-elevated px-2 py-2 text-center text-sm tabular-nums text-text-primary outline-none focus:border-accent"
+                    aria-label={`Cantidad de ${nombre}`}
+                  />
+                  <span className="text-sm font-medium tabular-nums text-text-primary">{formatCop(sub)}</span>
+                  <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
+                    <button
+                      type="button"
+                      onClick={() => commitEdit(id)}
+                      className={btnIcon}
+                      aria-label={`Confirmar cantidad de ${nombre}`}
+                    >
+                      ✓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removePlato(id)}
+                      className={`${btnIcon} border-danger/30 text-danger hover:bg-danger-light`}
+                      aria-label={`Quitar ${nombre}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm text-text-secondary tabular-nums">x{q}</span>
+                  <span className="text-sm font-medium tabular-nums text-text-primary">{formatCop(sub)}</span>
+                  <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(id);
+                        setDraftQty(String(q));
+                      }}
+                      className={btnIcon}
+                      aria-label={`Editar cantidad de ${nombre}`}
+                    >
+                      ✏
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removePlato(id)}
+                      className={`${btnIcon} border-danger/30 text-danger hover:bg-danger-light`}
+                      aria-label={`Quitar ${nombre}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function SubmitBar({
   totalFmt,
   distinctPlatos,
@@ -290,7 +469,7 @@ export function VentasForm({
     });
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
     if (!tieneLineas) {
       e.preventDefault();
       setLineasError("Agrega al menos un plato con cantidad mayor a 0.");
@@ -525,6 +704,13 @@ export function VentasForm({
           </>
         )}
       </div>
+
+      <PedidoActual
+        platos={platos}
+        cantidades={cantidades}
+        setCantidades={setCantidades}
+        setLineasError={setLineasError}
+      />
 
       {(lineasError ||
         (state.ok === false &&
