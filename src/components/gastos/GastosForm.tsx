@@ -227,42 +227,44 @@ export function GastosForm({
         </div>
       </div>
 
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-categoria">
-          Categoría *
-        </label>
-        <select
-          id="gasto-categoria"
-          name="categoria"
-          value={categoria}
-          onChange={(e) => setCategoria(e.target.value as CategoriaGasto)}
-          className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          required
-        >
-          {CATEGORIA_KEYS.map((k) => (
-            <option key={k} value={k}>
-              {CATEGORIA_LABELS[k]}
-            </option>
-          ))}
-        </select>
-        <FieldError state={state} field="categoria" />
-      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-categoria">
+            Categoría *
+          </label>
+          <select
+            id="gasto-categoria"
+            name="categoria"
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value as CategoriaGasto)}
+            className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            required
+          >
+            {CATEGORIA_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {CATEGORIA_LABELS[k]}
+              </option>
+            ))}
+          </select>
+          <FieldError state={state} field="categoria" />
+        </div>
 
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-notas">
-          Notas
-        </label>
-        <textarea
-          id="gasto-notas"
-          name="notas"
-          value={notas}
-          onChange={(e) => setNotas(e.target.value)}
-          rows={2}
-          maxLength={300}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          placeholder="Ej: Arriendo local principal, pago anticipado, etc."
-        />
-        <FieldError state={state} field="notas" />
+        <div>
+          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-notas">
+            Notas
+          </label>
+          <textarea
+            id="gasto-notas"
+            name="notas"
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            rows={3}
+            maxLength={300}
+            className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            placeholder="Ej: Arriendo local principal, pago anticipado, etc."
+          />
+          <FieldError state={state} field="notas" />
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-border pt-4">
