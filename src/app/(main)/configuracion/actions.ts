@@ -332,6 +332,28 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
     if (!unidadBase) return { ok: false, message: "Unidad base inválida." };
 
+    const existing = await prisma.insumo.findFirst({
+      where: { id, userId, ...notDeleted },
+      select: { unidadBase: true },
+    });
+    if (!existing) {
+      return { ok: false, message: "Insumo no encontrado.", field: "id" };
+    }
+
+    if (existing.unidadBase !== unidadBase) {
+      const recetasCount = await prisma.receta.count({
+        where: { insumoId: id, userId },
+      });
+      if (recetasCount > 0) {
+        return {
+          ok: false,
+          message:
+            "No puedes cambiar la unidad base de este insumo porque ya tiene recetas asociadas. Elimina o ajusta las recetas primero.",
+          field: "unidadBase",
+        };
+      }
+    }
+
     const res = await prisma.insumo.updateMany({
       where: { id, userId, ...notDeleted },
       data: { nombre, unidadBase, categoria: categoriaParsed.value },
@@ -645,6 +667,21 @@ export async function deleteCategoria(_: ActionState, formData: FormData): Promi
     });
     if (!existing) return { ok: false, message: "Categoría no encontrada." };
 
+    const platosActivos = await prisma.plato.count({
+      where: {
+        categoriaId: id,
+        userId,
+        deletedAt: null,
+      },
+    });
+    if (platosActivos > 0) {
+      return {
+        ok: false,
+        message:
+          "No puedes eliminar esta categoría porque tiene platos activos. Mueve los platos a otra categoría antes de eliminarla.",
+      };
+    }
+
     const res = await prisma.categoria.updateMany({
       where: { id, userId, ...notDeleted },
       data: { deletedAt: new Date() },
@@ -693,6 +730,10 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
     const quantity = toPositiveDecimal(quantityRaw);
     if (!quantity) return { ok: false, message: "La cantidad debe ser mayor a 0.", field: "quantity" };
 
+    if (quantity.greaterThan(MAX_CANTIDAD_RECETA)) {
+      return { ok: false, message: "La cantidad no puede superar 9.999.", field: "quantity" };
+    }
+
     const unidad = (Unidad as Record<string, Unidad>)[unitRaw];
     if (!unidad) return { ok: false, message: "Unidad inválida.", field: "unit" };
 
@@ -704,9 +745,17 @@ export async function addRecipeIngredient(_: ActionState, formData: FormData): P
 
     const insumo = await prisma.insumo.findFirst({
       where: { id: supplyId, userId, ...notDeleted },
-      select: { id: true },
+      select: { id: true, nombre: true, unidadBase: true },
     });
     if (!insumo) return { ok: false, message: "Insumo inválido.", field: "supplyId" };
+
+    if (!sonUnidadesCompatibles(insumo.unidadBase as string, unitRaw)) {
+      return {
+        ok: false,
+        message: recetaUnidadIncompatibleMsg(insumo.nombre, insumo.unidadBase as string, unitRaw),
+        field: "unit",
+      };
+    }
 
     await prisma.receta.upsert({
       where: { platoId_insumoId: { platoId: dishId, insumoId: supplyId } },

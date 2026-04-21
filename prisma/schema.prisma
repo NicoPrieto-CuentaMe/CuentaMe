@@ -30,6 +30,61 @@ enum CategoriaProveedor {
   OTRO
 }
 
+enum CategoriaGasto {
+  ARRIENDO
+  SERVICIOS_PUBLICOS
+  NOMINA
+  IMPUESTOS_Y_TASAS
+  MANTENIMIENTO
+  PUBLICIDAD
+  CONTABILIDAD
+  SEGURO
+  TECNOLOGIA
+  TRANSPORTE
+  OTRO
+}
+
+enum PeriodicidadGasto {
+  DIARIO
+  SEMANAL
+  QUINCENAL
+  MENSUAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+  UNICO
+}
+
+enum MetodoPagoGasto {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  CHEQUE
+  OTRO
+}
+
+enum RolEmpleado {
+  ADMINISTRADOR
+  COCINERO
+  AUXILIAR_COCINA
+  MESERO
+  CAJERO
+  DOMICILIARIO
+  ASEADOR
+  OTRO
+}
+
+enum TipoContrato {
+  TERMINO_FIJO
+  TERMINO_INDEFINIDO
+  PRESTACION_DE_SERVICIOS
+  APRENDIZAJE
+  OBRA_LABOR
+  INFORMAL
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String   @unique
@@ -234,13 +289,13 @@ model DetalleVenta {
 }
 
 model Empleado {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   userId       String
   nombre       String
-  rol          String
-  tipoContrato String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  rol          RolEmpleado
+  tipoContrato TipoContrato
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   deletedAt    DateTime?
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -250,38 +305,53 @@ model Empleado {
 }
 
 model Nomina {
-  id          String   @id @default(cuid())
-  userId      String
-  empleadoId  String
-  fecha       DateTime
-  salarioBase Decimal  @db.Decimal(10, 2)
-  horasExtra  Decimal  @db.Decimal(10, 2) @default(0)
-  deducciones Decimal  @db.Decimal(10, 2) @default(0)
-  totalPagado Decimal  @db.Decimal(10, 2)
-  notas       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  userId                 String
+  empleadoId             String
+  periodo                DateTime
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  empleado Empleado @relation(fields: [empleadoId], references: [id])
+  salarioBase            Decimal  @db.Decimal(12, 2)
+  auxilioTransporte      Decimal  @db.Decimal(12, 2) @default(0)
+  horasExtra             Decimal  @db.Decimal(12, 2) @default(0)
+  otrosIngresos          Decimal  @db.Decimal(12, 2) @default(0)
+
+  deduccionSalud         Decimal  @db.Decimal(12, 2) @default(0)
+  deduccionPension       Decimal  @db.Decimal(12, 2) @default(0)
+  otrasDeduciones        Decimal  @db.Decimal(12, 2) @default(0)
+
+  aportesSeguridadSocial Decimal  @db.Decimal(12, 2) @default(0)
+  aporteParafiscales     Decimal  @db.Decimal(12, 2) @default(0)
+  provisionPrestaciones  Decimal  @db.Decimal(12, 2) @default(0)
+
+  netoEmpleado           Decimal  @db.Decimal(12, 2)
+  costoTotalEmpleador    Decimal  @db.Decimal(12, 2)
+
+  notas                  String?
+
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  empleado               Empleado @relation(fields: [empleadoId], references: [id])
 
   @@index([userId])
   @@index([empleadoId])
+  @@index([userId, periodo])
+  @@unique([empleadoId, periodo])
 }
 
 model GastoFijo {
-  id           String   @id @default(cuid())
+  id           String             @id @default(cuid())
   userId       String
   fecha        DateTime
-  categoria    String
-  descripcion  String?
-  monto        Decimal  @db.Decimal(10, 2)
-  periodicidad String
-  metodoPago   String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  categoria    CategoriaGasto
+  descripcion  String?            @db.VarChar(200)
+  monto        Decimal            @db.Decimal(12, 2)
+  periodicidad PeriodicidadGasto
+  metodoPago   MetodoPagoGasto
+  notas        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, fecha])
 }
