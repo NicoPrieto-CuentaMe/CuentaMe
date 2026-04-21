@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { CategoriaProveedor, Prisma, Unidad } from "@prisma/client";
+import { CategoriaProveedor, Prisma, RolEmpleado, TipoContrato, Unidad } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { calcularNomina } from "@/lib/nomina-constants";
 import { getFamiliaUnidad, sonUnidadesCompatibles } from "@/lib/unidades.config";
 import { UNIT_OPTIONS } from "./units";
 
@@ -56,6 +57,8 @@ const MAX_TELEFONO_CHARS = 20;
 const MAX_NOTAS = 500;
 const MAX_PRECIO_VENTA = new Prisma.Decimal(2_000_000);
 const MAX_CANTIDAD_RECETA = new Prisma.Decimal(9_999);
+const MAX_NOMINA_SALARIO = new Prisma.Decimal(30_000_000);
+const MAX_NOMINA_MONTO_EXTRA = new Prisma.Decimal(5_000_000);
 
 function maxLength(value: string, max: number, campo: string): { ok: false; message: string } | null {
   if (value.length > max) {
@@ -1034,6 +1037,389 @@ export async function deleteEmpleado(formData: FormData): Promise<ActionState> {
   } catch (e) {
     console.error("[deleteEmpleado]", e);
     return { ok: false, message: "No se pudo eliminar el empleado." };
+  }
+}
+
+function parseRolEmpleado(raw: string): RolEmpleado | null {
+  const v = (RolEmpleado as Record<string, RolEmpleado>)[raw];
+  return v ?? null;
+}
+
+function parseTipoContrato(raw: string): TipoContrato | null {
+  const v = (TipoContrato as Record<string, TipoContrato>)[raw];
+  return v ?? null;
+}
+
+function periodoYmToUtcDate(ym: string): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym.trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  if (!Number.isInteger(y) || mo < 1 || mo > 12) return null;
+  const check = new Date(Date.UTC(y, mo - 1, 1));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1) return null;
+  return new Date(Date.UTC(y, mo - 1, 1, 12, 0, 0, 0));
+}
+
+/** COP >= 0 desde dígitos (vacío = 0). */
+function parseCopNoNeg(raw: string): Prisma.Decimal | null {
+  const t = raw.replace(/[^\d]/g, "");
+  if (t === "") return new Prisma.Decimal(0);
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return new Prisma.Decimal(Math.round(n));
+}
+
+/** COP > 0 desde dígitos. */
+function parseCopPositive(raw: string): Prisma.Decimal | null {
+  const t = raw.replace(/[^\d]/g, "");
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return new Prisma.Decimal(Math.round(n));
+}
+
+export async function addEmpleado(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const nombre = requiredString(formData, "nombre");
+    const rolRaw = requiredString(formData, "rol");
+    const tipoRaw = requiredString(formData, "tipoContrato");
+
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return { ...nombreLen, field: "nombre" };
+
+    if (!rolRaw) return { ok: false, message: "Selecciona un rol.", field: "rol" };
+    const rol = parseRolEmpleado(rolRaw);
+    if (!rol) return { ok: false, message: "Rol inválido.", field: "rol" };
+
+    if (!tipoRaw) return { ok: false, message: "Selecciona el tipo de contrato.", field: "tipoContrato" };
+    const tipoContrato = parseTipoContrato(tipoRaw);
+    if (!tipoContrato) return { ok: false, message: "Tipo de contrato inválido.", field: "tipoContrato" };
+
+    await prisma.empleado.create({
+      data: { userId, nombre, rol, tipoContrato },
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Empleado registrado." };
+  } catch (e) {
+    console.error("[addEmpleado]", e);
+    return { ok: false, message: "No se pudo registrar el empleado." };
+  }
+}
+
+export async function updateEmpleado(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    const nombre = requiredString(formData, "nombre");
+    const rolRaw = requiredString(formData, "rol");
+    const tipoRaw = requiredString(formData, "tipoContrato");
+
+    if (!id) return { ok: false, message: "Empleado inválido.", field: "id" };
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return { ...nombreLen, field: "nombre" };
+
+    if (!rolRaw) return { ok: false, message: "Selecciona un rol.", field: "rol" };
+    const rol = parseRolEmpleado(rolRaw);
+    if (!rol) return { ok: false, message: "Rol inválido.", field: "rol" };
+
+    if (!tipoRaw) return { ok: false, message: "Selecciona el tipo de contrato.", field: "tipoContrato" };
+    const tipoContrato = parseTipoContrato(tipoRaw);
+    if (!tipoContrato) return { ok: false, message: "Tipo de contrato inválido.", field: "tipoContrato" };
+
+    const res = await prisma.empleado.updateMany({
+      where: { id, userId, ...notDeleted },
+      data: { nombre, rol, tipoContrato },
+    });
+    if (res.count === 0) return { ok: false, message: "Empleado no encontrado.", field: "id" };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Empleado actualizado." };
+  } catch (e) {
+    console.error("[updateEmpleado]", e);
+    return { ok: false, message: "No se pudo actualizar el empleado." };
+  }
+}
+
+export async function getEmpleadosActivos() {
+  try {
+    const userId = await requireUserId();
+    return await prisma.empleado.findMany({
+      where: { userId, ...notDeleted },
+      orderBy: { nombre: "asc" },
+    });
+  } catch (e) {
+    console.error("[getEmpleadosActivos]", e);
+    return [];
+  }
+}
+
+async function buildNominaPayloadFromForm(
+  formData: FormData,
+  userId: string,
+): Promise<
+  | {
+      ok: true;
+      empleadoId: string;
+      fechaPeriodo: Date;
+      salarioBase: Prisma.Decimal;
+      horasExtra: Prisma.Decimal;
+      otrosIngresos: Prisma.Decimal;
+      otrasDeduciones: Prisma.Decimal;
+      notas: string | null;
+      calc: ReturnType<typeof calcularNomina>;
+    }
+  | { ok: false; state: ActionState }
+> {
+  const empleadoId = requiredString(formData, "empleadoId");
+  const periodoRaw = requiredString(formData, "periodo");
+  const salarioRaw = requiredString(formData, "salarioBase");
+  const horasExtraRaw = requiredString(formData, "horasExtra");
+  const otrosIngresosRaw = requiredString(formData, "otrosIngresos");
+  const otrasDeducionesRaw = requiredString(formData, "otrasDeduciones");
+  const notas = optionalString(formData, "notas");
+
+  if (!empleadoId) {
+    return { ok: false, state: { ok: false, message: "Selecciona un empleado.", field: "empleadoId" } };
+  }
+  const emp = await prisma.empleado.findFirst({
+    where: { id: empleadoId, userId, ...notDeleted },
+    select: { id: true },
+  });
+  if (!emp) {
+    return { ok: false, state: { ok: false, message: "Empleado inválido.", field: "empleadoId" } };
+  }
+
+  if (!periodoRaw) {
+    return { ok: false, state: { ok: false, message: "El período es obligatorio.", field: "periodo" } };
+  }
+  const fechaPeriodo = periodoYmToUtcDate(periodoRaw);
+  if (!fechaPeriodo) {
+    return { ok: false, state: { ok: false, message: "Período inválido (usa AAAA-MM).", field: "periodo" } };
+  }
+
+  const salarioBase = parseCopPositive(salarioRaw);
+  if (!salarioBase) {
+    return { ok: false, state: { ok: false, message: "El salario base debe ser mayor a 0.", field: "salarioBase" } };
+  }
+  if (salarioBase.gt(MAX_NOMINA_SALARIO)) {
+    return {
+      ok: false,
+      state: { ok: false, message: "El salario base no puede superar $30.000.000.", field: "salarioBase" },
+    };
+  }
+
+  const horasExtra = parseCopNoNeg(horasExtraRaw);
+  const otrosIngresos = parseCopNoNeg(otrosIngresosRaw);
+  const otrasDeduciones = parseCopNoNeg(otrasDeducionesRaw);
+  if (!horasExtra || !otrosIngresos || !otrasDeduciones) {
+    return { ok: false, state: { ok: false, message: "Montos inválidos.", field: "horasExtra" } };
+  }
+  if (horasExtra.gt(MAX_NOMINA_MONTO_EXTRA)) {
+    return {
+      ok: false,
+      state: { ok: false, message: "Horas extra no puede superar $5.000.000.", field: "horasExtra" },
+    };
+  }
+  if (otrosIngresos.gt(MAX_NOMINA_MONTO_EXTRA)) {
+    return {
+      ok: false,
+      state: { ok: false, message: "Otros ingresos no puede superar $5.000.000.", field: "otrosIngresos" },
+    };
+  }
+
+  if (notas) {
+    const nl = maxLength(notas, MAX_NOTAS, "Las notas");
+    if (nl) return { ok: false, state: { ...nl, field: "notas" } };
+  }
+
+  const sb = Number(salarioBase.toString());
+  const hx = Number(horasExtra.toString());
+  const oi = Number(otrosIngresos.toString());
+  const od = Number(otrasDeduciones.toString());
+  const calc = calcularNomina({
+    salarioBase: sb,
+    horasExtra: hx,
+    otrosIngresos: oi,
+    otrasDeduciones: od,
+  });
+
+  return {
+    ok: true,
+    empleadoId,
+    fechaPeriodo,
+    salarioBase,
+    horasExtra,
+    otrosIngresos,
+    otrasDeduciones,
+    notas: notas ?? null,
+    calc,
+  };
+}
+
+export async function addNomina(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const built = await buildNominaPayloadFromForm(formData, userId);
+    if (!built.ok) return built.state;
+
+    const {
+      empleadoId,
+      fechaPeriodo,
+      salarioBase,
+      horasExtra,
+      otrosIngresos,
+      otrasDeduciones,
+      notas,
+      calc,
+    } = built;
+
+    await prisma.nomina.create({
+      data: {
+        userId,
+        empleadoId,
+        periodo: fechaPeriodo,
+        salarioBase,
+        auxilioTransporte: new Prisma.Decimal(calc.auxilio),
+        horasExtra,
+        otrosIngresos,
+        deduccionSalud: new Prisma.Decimal(calc.dedSalud),
+        deduccionPension: new Prisma.Decimal(calc.dedPension),
+        otrasDeduciones,
+        aportesSeguridadSocial: new Prisma.Decimal(calc.ss),
+        aporteParafiscales: new Prisma.Decimal(calc.para),
+        provisionPrestaciones: new Prisma.Decimal(calc.prov),
+        netoEmpleado: new Prisma.Decimal(calc.neto),
+        costoTotalEmpleador: new Prisma.Decimal(calc.costoTotal),
+        notas,
+      },
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Nómina registrada." };
+  } catch (e) {
+    console.error("[addNomina]", e);
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { ok: false, message: "Ya existe una nómina para este empleado en ese período." };
+    }
+    return { ok: false, message: "No se pudo registrar la nómina." };
+  }
+}
+
+export async function updateNomina(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Nómina inválida.", field: "id" };
+
+    const existente = await prisma.nomina.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!existente) return { ok: false, message: "Nómina no encontrada.", field: "id" };
+
+    const built = await buildNominaPayloadFromForm(formData, userId);
+    if (!built.ok) return built.state;
+
+    const {
+      empleadoId,
+      fechaPeriodo,
+      salarioBase,
+      horasExtra,
+      otrosIngresos,
+      otrasDeduciones,
+      notas,
+      calc,
+    } = built;
+
+    try {
+      const up = await prisma.nomina.updateMany({
+        where: { id, userId },
+        data: {
+          empleadoId,
+          periodo: fechaPeriodo,
+          salarioBase,
+          auxilioTransporte: new Prisma.Decimal(calc.auxilio),
+          horasExtra,
+          otrosIngresos,
+          deduccionSalud: new Prisma.Decimal(calc.dedSalud),
+          deduccionPension: new Prisma.Decimal(calc.dedPension),
+          otrasDeduciones,
+          aportesSeguridadSocial: new Prisma.Decimal(calc.ss),
+          aporteParafiscales: new Prisma.Decimal(calc.para),
+          provisionPrestaciones: new Prisma.Decimal(calc.prov),
+          netoEmpleado: new Prisma.Decimal(calc.neto),
+          costoTotalEmpleador: new Prisma.Decimal(calc.costoTotal),
+          notas,
+        },
+      });
+      if (up.count === 0) return { ok: false, message: "Nómina no encontrada.", field: "id" };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        return { ok: false, message: "Ya existe una nómina para este empleado en ese período." };
+      }
+      throw e;
+    }
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Nómina actualizada." };
+  } catch (e) {
+    console.error("[updateNomina]", e);
+    return { ok: false, message: "No se pudo actualizar la nómina." };
+  }
+}
+
+export async function deleteNomina(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Nómina inválida." };
+
+    const res = await prisma.nomina.deleteMany({
+      where: { id, userId },
+    });
+    if (res.count === 0) return { ok: false, message: "Nómina no encontrada." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Nómina eliminada." };
+  } catch (e) {
+    console.error("[deleteNomina]", e);
+    return { ok: false, message: "No se pudo eliminar la nómina." };
+  }
+}
+
+export async function getNominasByEmpleado(empleadoId: string) {
+  try {
+    const userId = await requireUserId();
+    const id = empleadoId.trim();
+    if (!id) return [];
+
+    return await prisma.nomina.findMany({
+      where: { empleadoId: id, userId },
+      orderBy: { periodo: "desc" },
+      include: { empleado: { select: { nombre: true } } },
+    });
+  } catch (e) {
+    console.error("[getNominasByEmpleado]", e);
+    return [];
+  }
+}
+
+export async function getAllNominas() {
+  try {
+    const userId = await requireUserId();
+    return await prisma.nomina.findMany({
+      where: { userId },
+      orderBy: { periodo: "desc" },
+      include: { empleado: { select: { nombre: true } } },
+    });
+  } catch (e) {
+    console.error("[getAllNominas]", e);
+    return [];
   }
 }
 

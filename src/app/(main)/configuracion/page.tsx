@@ -2,13 +2,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getAllNominas, getEmpleadosActivos } from "./actions";
 import { InsumosTabPanel, ProveedoresTabPanel } from "./components/MasterTablesInline";
 import { CartaTab } from "./components/CartaTab";
+import { EmpleadosNominaTab } from "./components/EmpleadosNominaTab";
 
 const tabs = [
   { key: "proveedores", label: "Proveedores" },
   { key: "insumos", label: "Insumos" },
   { key: "carta", label: "Carta" },
+  { key: "empleados", label: "Empleados" },
+  { key: "nomina", label: "Nómina" },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
@@ -30,7 +34,15 @@ export default async function ConfiguracionPage({
 
   const tab = normalizeTab(searchParams?.tab);
 
-  const [proveedores, insumos, platos, categorias] = await Promise.all([
+  const empleadosNominaPromise =
+    tab === "empleados" || tab === "nomina"
+      ? Promise.all([getEmpleadosActivos(), getAllNominas()])
+      : Promise.resolve<[Awaited<ReturnType<typeof getEmpleadosActivos>>, Awaited<ReturnType<typeof getAllNominas>>]>([
+          [],
+          [],
+        ]);
+
+  const [proveedores, insumos, platos, categorias, [empleadosActivos, todasNominas]] = await Promise.all([
     prisma.proveedor.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -61,6 +73,7 @@ export default async function ConfiguracionPage({
       },
       orderBy: { nombre: "asc" },
     }),
+    empleadosNominaPromise,
   ]);
 
   return (
@@ -105,6 +118,10 @@ export default async function ConfiguracionPage({
           insumos={insumos}
           initialDishId={searchParams?.dishId}
         />
+      ) : null}
+
+      {tab === "empleados" || tab === "nomina" ? (
+        <EmpleadosNominaTab empleadosInicial={empleadosActivos} nominasInicial={todasNominas} />
       ) : null}
     </div>
   );
