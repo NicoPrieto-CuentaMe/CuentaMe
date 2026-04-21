@@ -5,13 +5,8 @@ import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { GastoFijo } from "@prisma/client";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
-import {
-  addGastoFijo,
-  CATEGORIA_LABELS,
-  METODO_PAGO_LABELS,
-  PERIODICIDAD_LABELS,
-  updateGastoFijo,
-} from "@/app/actions/gastos";
+import { addGastoFijo, updateGastoFijo } from "@/app/actions/gastos";
+import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
 import { GastosHistorial } from "@/components/gastos/GastosHistorial";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "@/app/(main)/configuracion/cop-price";
 import type { CategoriaGasto, MetodoPagoGasto, PeriodicidadGasto } from "@prisma/client";

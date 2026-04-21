@@ -4,11 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import type { GastoFijo } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { deleteGastoFijo } from "@/app/actions/gastos";
-import {
-  CATEGORIA_LABELS,
-  METODO_PAGO_LABELS,
-  PERIODICIDAD_LABELS,
-} from "@/app/actions/gastos";
+import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import type { CategoriaGasto } from "@prisma/client";
 
