@@ -12,7 +12,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 
-const MAX_DESCRIPCION = 200;
 const MAX_NOTAS = 300;
 const MAX_MONTO = new Prisma.Decimal(99_999_999);
 
@@ -88,7 +87,6 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
 
     const fechaRaw = requiredString(formData, "fecha");
     const categoriaRaw = requiredString(formData, "categoria");
-    const descripcion = optionalString(formData, "descripcion");
     const montoRaw = requiredString(formData, "monto");
     const periodicidadRaw = requiredString(formData, "periodicidad");
     const metodoPagoRaw = requiredString(formData, "metodoPago");
@@ -101,11 +99,6 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
     if (!categoriaRaw) return { ok: false, message: "Selecciona una categoría.", field: "categoria" };
     const categoria = parseCategoria(categoriaRaw);
     if (!categoria) return { ok: false, message: "Categoría inválida.", field: "categoria" };
-
-    if (descripcion) {
-      const dl = maxLength(descripcion, MAX_DESCRIPCION, "La descripción");
-      if (dl) return { ...dl, field: "descripcion" };
-    }
 
     const monto = parseMontoCOP(montoRaw);
     if (!monto) return { ok: false, message: "El monto debe ser mayor a 0.", field: "monto" };
@@ -131,7 +124,6 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
         userId,
         fecha: fechaDb,
         categoria,
-        descripcion: descripcion ?? null,
         monto,
         periodicidad,
         metodoPago,
@@ -161,7 +153,6 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
 
     const fechaRaw = requiredString(formData, "fecha");
     const categoriaRaw = requiredString(formData, "categoria");
-    const descripcion = optionalString(formData, "descripcion");
     const montoRaw = requiredString(formData, "monto");
     const periodicidadRaw = requiredString(formData, "periodicidad");
     const metodoPagoRaw = requiredString(formData, "metodoPago");
@@ -174,11 +165,6 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
     if (!categoriaRaw) return { ok: false, message: "Selecciona una categoría.", field: "categoria" };
     const categoria = parseCategoria(categoriaRaw);
     if (!categoria) return { ok: false, message: "Categoría inválida.", field: "categoria" };
-
-    if (descripcion) {
-      const dl = maxLength(descripcion, MAX_DESCRIPCION, "La descripción");
-      if (dl) return { ...dl, field: "descripcion" };
-    }
 
     const monto = parseMontoCOP(montoRaw);
     if (!monto) return { ok: false, message: "El monto debe ser mayor a 0.", field: "monto" };
@@ -204,7 +190,6 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
       data: {
         fecha: fechaDb,
         categoria,
-        descripcion: descripcion ?? null,
         monto,
         periodicidad,
         metodoPago,

@@ -20,7 +20,7 @@ const nav: { href: string; label: string; Icon: LucideIcon }[] = [
   { href: "/ventas", label: "Ventas", Icon: ShoppingCart },
   { href: "/compras", label: "Compras", Icon: PackagePlus },
   { href: "/inventario", label: "Inventario", Icon: Warehouse },
-  { href: "/gastos", label: "Gastos", Icon: Receipt },
+  { href: "/gastos", label: "Gastos fijos", Icon: Receipt },
   { href: "/configuracion", label: "Configuración", Icon: Settings2 },
 ];
 

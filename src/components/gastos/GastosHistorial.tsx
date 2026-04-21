@@ -146,12 +146,11 @@ export function GastosHistorial({
         <p className="text-sm text-text-tertiary">No hay gastos que coincidan con los filtros.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-elevated/80">
                 <th className="px-3 py-2 font-medium text-text-secondary">Fecha</th>
                 <th className="px-3 py-2 font-medium text-text-secondary">Categoría</th>
-                <th className="px-3 py-2 font-medium text-text-secondary">Descripción</th>
                 <th className="px-3 py-2 font-medium text-text-secondary">Monto</th>
                 <th className="px-3 py-2 font-medium text-text-secondary">Periodicidad</th>
                 <th className="px-3 py-2 font-medium text-text-secondary">Método de pago</th>
@@ -165,11 +164,6 @@ export function GastosHistorial({
                   <tr key={row.id} className="border-b border-border last:border-0">
                     <td className="whitespace-nowrap px-3 py-2 text-text-primary">{formatFecha(row.fecha)}</td>
                     <td className="px-3 py-2 text-text-secondary">{CATEGORIA_LABELS[row.categoria]}</td>
-                    <td className="max-w-[200px] px-3 py-2 text-text-tertiary">
-                      <span className="line-clamp-2" title={row.descripcion ?? undefined}>
-                        {row.descripcion?.trim() ? row.descripcion : "—"}
-                      </span>
-                    </td>
                     <td className="whitespace-nowrap px-3 py-2 font-medium tabular-nums text-text-primary">
                       {formatCop(row.monto)}
                     </td>

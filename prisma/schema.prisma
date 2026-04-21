@@ -342,7 +342,6 @@ model GastoFijo {
   userId       String
   fecha        DateTime
   categoria    CategoriaGasto
-  descripcion  String?            @db.VarChar(200)
   monto        Decimal            @db.Decimal(12, 2)
   periodicidad PeriodicidadGasto
   metodoPago   MetodoPagoGasto

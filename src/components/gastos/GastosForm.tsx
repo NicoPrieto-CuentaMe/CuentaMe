@@ -90,7 +90,6 @@ export function GastosForm({
   const [categoria, setCategoria] = useState<CategoriaGasto>(
     () => initialData?.categoria ?? "ARRIENDO",
   );
-  const [descripcion, setDescripcion] = useState(() => initialData?.descripcion ?? "");
   const [montoDigits, setMontoDigits] = useState(() =>
     initialData ? precioVentaToDigits(initialData.monto) : "",
   );
@@ -106,7 +105,6 @@ export function GastosForm({
     if (!initialData) return;
     setFecha(fechaToInputValue(initialData.fecha));
     setCategoria(initialData.categoria);
-    setDescripcion(initialData.descripcion ?? "");
     setMontoDigits(precioVentaToDigits(initialData.monto));
     setPeriodicidad(initialData.periodicidad);
     setMetodoPago(initialData.metodoPago);
@@ -125,7 +123,6 @@ export function GastosForm({
     }
     setFecha(todayLocalISO());
     setCategoria("ARRIENDO");
-    setDescripcion("");
     setMontoDigits("");
     setPeriodicidad("MENSUAL");
     setMetodoPago("EFECTIVO");
@@ -156,72 +153,34 @@ export function GastosForm({
         </div>
 
         <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-categoria">
-            Categoría *
+          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-monto">
+            Monto *
           </label>
-          <select
-            id="gasto-categoria"
-            name="categoria"
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value as CategoriaGasto)}
-            className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            required
-          >
-            {CATEGORIA_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {CATEGORIA_LABELS[k]}
-              </option>
-            ))}
-          </select>
-          <FieldError state={state} field="categoria" />
+          <div className="relative mt-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+              $
+            </span>
+            <input
+              id="gasto-monto"
+              inputMode="numeric"
+              type="text"
+              value={montoFmt}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/[^\d]/g, "");
+                setMontoDigits(digits);
+              }}
+              className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+              placeholder="0"
+              autoComplete="off"
+              required
+              aria-describedby="gasto-monto-hint"
+            />
+          </div>
+          <p id="gasto-monto-hint" className="mt-1 text-xs text-text-tertiary">
+            Ingresa el valor en pesos colombianos (COP).
+          </p>
+          <FieldError state={state} field="monto" />
         </div>
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-descripcion">
-          Descripción
-        </label>
-        <input
-          id="gasto-descripcion"
-          name="descripcion"
-          type="text"
-          value={descripcion}
-          onChange={(e) => setDescripcion(e.target.value)}
-          maxLength={200}
-          placeholder="Ej: Arriendo local principal"
-          className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
-        />
-        <FieldError state={state} field="descripcion" />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-monto">
-          Monto *
-        </label>
-        <div className="relative mt-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
-            $
-          </span>
-          <input
-            id="gasto-monto"
-            inputMode="numeric"
-            type="text"
-            value={montoFmt}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/[^\d]/g, "");
-              setMontoDigits(digits);
-            }}
-            className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
-            placeholder="0"
-            autoComplete="off"
-            required
-            aria-describedby="gasto-monto-hint"
-          />
-        </div>
-        <p id="gasto-monto-hint" className="mt-1 text-xs text-text-tertiary">
-          Ingresa el valor en pesos colombianos (COP).
-        </p>
-        <FieldError state={state} field="monto" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -269,6 +228,27 @@ export function GastosForm({
       </div>
 
       <div>
+        <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-categoria">
+          Categoría *
+        </label>
+        <select
+          id="gasto-categoria"
+          name="categoria"
+          value={categoria}
+          onChange={(e) => setCategoria(e.target.value as CategoriaGasto)}
+          className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+          required
+        >
+          {CATEGORIA_KEYS.map((k) => (
+            <option key={k} value={k}>
+              {CATEGORIA_LABELS[k]}
+            </option>
+          ))}
+        </select>
+        <FieldError state={state} field="categoria" />
+      </div>
+
+      <div>
         <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-notas">
           Notas
         </label>
@@ -280,7 +260,7 @@ export function GastosForm({
           rows={2}
           maxLength={300}
           className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          placeholder="Opcional"
+          placeholder="Ej: Arriendo local principal, pago anticipado, etc."
         />
         <FieldError state={state} field="notas" />
       </div>
