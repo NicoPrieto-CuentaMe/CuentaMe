@@ -11,8 +11,7 @@ const tabs = [
   { key: "proveedores", label: "Proveedores" },
   { key: "insumos", label: "Insumos" },
   { key: "carta", label: "Carta" },
-  { key: "empleados", label: "Empleados" },
-  { key: "nomina", label: "Nómina" },
+  { key: "personal", label: "Personal" },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
@@ -20,6 +19,7 @@ type TabKey = (typeof tabs)[number]["key"];
 function normalizeTab(tab: unknown): TabKey {
   const t = typeof tab === "string" ? tab : "";
   if (t === "platos" || t === "recetas") return "carta";
+  if (t === "empleados" || t === "nomina") return "personal";
   return (tabs.find((x) => x.key === t)?.key ?? "proveedores") as TabKey;
 }
 
@@ -35,7 +35,7 @@ export default async function ConfiguracionPage({
   const tab = normalizeTab(searchParams?.tab);
 
   const empleadosNominaPromise =
-    tab === "empleados" || tab === "nomina"
+    tab === "personal"
       ? Promise.all([getEmpleadosActivos(), getAllNominas()])
       : Promise.resolve<[Awaited<ReturnType<typeof getEmpleadosActivos>>, Awaited<ReturnType<typeof getAllNominas>>]>([
           [],
@@ -120,7 +120,7 @@ export default async function ConfiguracionPage({
         />
       ) : null}
 
-      {tab === "empleados" || tab === "nomina" ? (
+      {tab === "personal" ? (
         <EmpleadosNominaTab empleadosInicial={empleadosActivos} nominasInicial={todasNominas} />
       ) : null}
     </div>
