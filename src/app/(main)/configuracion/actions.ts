@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { CategoriaProveedor, Prisma, RolEmpleado, TipoContrato, Unidad } from "@prisma/client";
+import { CategoriaProveedor, Prisma, RolEmpleado, TipoContrato, TipoPlato, Unidad } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { calcularNomina } from "@/lib/nomina-constants";
@@ -1419,6 +1419,247 @@ export async function getAllNominas() {
     });
   } catch (e) {
     console.error("[getAllNominas]", e);
+    return [];
+  }
+}
+
+// ── COMBOS ──────────────────────────────────────────────────
+
+export async function addCombo(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const nombre = requiredString(formData, "nombre");
+    const precioVentaRaw = requiredString(formData, "precioVenta");
+    const activeRaw = formData.get("active");
+    const active = activeRaw !== "false";
+    const categoriaIdRaw = optionalString(formData, "categoriaId");
+    let categoriaId: string | null = null;
+    if (categoriaIdRaw) {
+      const cat = await prisma.categoria.findFirst({
+        where: { id: categoriaIdRaw, userId, ...notDeleted },
+        select: { id: true },
+      });
+      if (!cat) return { ok: false, message: "Categoría inválida.", field: "categoriaId" };
+      categoriaId = categoriaIdRaw;
+    }
+
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return { ...nombreLen, field: "nombre" };
+    const precioVenta = toPositiveDecimal(precioVentaRaw);
+    if (!precioVenta) return { ok: false, message: "El precio debe ser mayor a 0.", field: "precioVenta" };
+    if (precioVenta.greaterThan(MAX_PRECIO_VENTA))
+      return { ok: false, message: "El precio no puede superar $2.000.000.", field: "precioVenta" };
+
+    await prisma.plato.create({
+      data: {
+        userId,
+        nombre,
+        categoriaId,
+        precioVenta,
+        active,
+        tieneReceta: false,
+        tipo: TipoPlato.COMBO,
+      },
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Combo creado." };
+  } catch (e) {
+    console.error("[addCombo]", e);
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe un plato con ese nombre."
+        : "No se pudo crear el combo. Intenta de nuevo.";
+    return { ok: false, message };
+  }
+}
+
+export async function updateCombo(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    const nombre = requiredString(formData, "nombre");
+    const precioVentaRaw = requiredString(formData, "precioVenta");
+    const activeRaw = formData.get("active");
+    const active = activeRaw !== "false";
+    const categoriaIdRaw = optionalString(formData, "categoriaId");
+    let categoriaId: string | null = null;
+    if (categoriaIdRaw) {
+      const cat = await prisma.categoria.findFirst({
+        where: { id: categoriaIdRaw, userId, ...notDeleted },
+        select: { id: true },
+      });
+      if (!cat) return { ok: false, message: "Categoría inválida.", field: "categoriaId" };
+      categoriaId = categoriaIdRaw;
+    }
+
+    if (!id) return { ok: false, message: "Combo inválido.", field: "id" };
+    const existente = await prisma.plato.findFirst({
+      where: { id, userId, tipo: TipoPlato.COMBO, ...notDeleted },
+      select: { id: true },
+    });
+    if (!existente) return { ok: false, message: "Combo no encontrado.", field: "id" };
+
+    if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
+    const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
+    if (nombreLen) return { ...nombreLen, field: "nombre" };
+    const precioVenta = toPositiveDecimal(precioVentaRaw);
+    if (!precioVenta) return { ok: false, message: "El precio debe ser mayor a 0.", field: "precioVenta" };
+    if (precioVenta.greaterThan(MAX_PRECIO_VENTA))
+      return { ok: false, message: "El precio no puede superar $2.000.000.", field: "precioVenta" };
+
+    const res = await prisma.plato.updateMany({
+      where: { id, userId, tipo: TipoPlato.COMBO, ...notDeleted },
+      data: { nombre, categoriaId, precioVenta, active },
+    });
+    if (res.count === 0) return { ok: false, message: "Combo no encontrado.", field: "id" };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Combo actualizado." };
+  } catch (e) {
+    console.error("[updateCombo]", e);
+    const message =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+        ? "Ya existe un plato con ese nombre."
+        : "No se pudo actualizar el combo.";
+    return { ok: false, message };
+  }
+}
+
+export async function deleteCombo(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Combo inválido.", field: "id" };
+
+    const res = await prisma.plato.updateMany({
+      where: { id, userId, tipo: TipoPlato.COMBO, ...notDeleted },
+      data: { deletedAt: new Date() },
+    });
+    if (res.count === 0) return { ok: false, message: "Combo no encontrado." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Combo eliminado." };
+  } catch (e) {
+    console.error("[deleteCombo]", e);
+    return { ok: false, message: "No se pudo eliminar el combo." };
+  }
+}
+
+// ── COMBO ITEMS ─────────────────────────────────────────────
+
+export async function addComboItem(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const comboId = requiredString(formData, "comboId");
+    const platoId = requiredString(formData, "platoId");
+    const cantidadRaw = requiredString(formData, "cantidad");
+
+    if (!comboId) return { ok: false, message: "Combo inválido.", field: "comboId" };
+    if (!platoId) return { ok: false, message: "Plato inválido.", field: "platoId" };
+
+    const combo = await prisma.plato.findFirst({
+      where: { id: comboId, userId, tipo: TipoPlato.COMBO, ...notDeleted },
+      select: { id: true },
+    });
+    if (!combo) return { ok: false, message: "Combo inválido.", field: "comboId" };
+
+    const plato = await prisma.plato.findFirst({
+      where: { id: platoId, userId, ...notDeleted },
+      select: { id: true, tipo: true },
+    });
+    if (!plato) return { ok: false, message: "Plato inválido.", field: "platoId" };
+    if (plato.tipo === TipoPlato.COMBO) {
+      return { ok: false, message: "Un combo no puede contener otro combo.", field: "platoId" };
+    }
+    if (platoId === comboId) {
+      return { ok: false, message: "No puedes agregar el combo como componente de sí mismo.", field: "platoId" };
+    }
+
+    const cantidad = Number.parseInt(cantidadRaw, 10);
+    if (!Number.isFinite(cantidad) || cantidad < 1 || cantidad > 20) {
+      return { ok: false, message: "La cantidad debe estar entre 1 y 20.", field: "cantidad" };
+    }
+
+    await prisma.comboItem.create({
+      data: { userId, comboId, platoId, cantidad },
+    });
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Plato agregado al combo." };
+  } catch (e) {
+    console.error("[addComboItem]", e);
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { ok: false, message: "Este plato ya está en el combo." };
+    }
+    return { ok: false, message: "No se pudo agregar el plato al combo." };
+  }
+}
+
+export async function removeComboItem(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    if (!id) return { ok: false, message: "Ítem inválido.", field: "id" };
+
+    const res = await prisma.comboItem.deleteMany({
+      where: { id, userId },
+    });
+    if (res.count === 0) return { ok: false, message: "Ítem no encontrado." };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Componente eliminado del combo." };
+  } catch (e) {
+    console.error("[removeComboItem]", e);
+    return { ok: false, message: "No se pudo eliminar el componente." };
+  }
+}
+
+export async function updateComboItemCantidad(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const userId = await requireUserId();
+    const id = requiredString(formData, "id");
+    const cantidadRaw = requiredString(formData, "cantidad");
+    if (!id) return { ok: false, message: "Ítem inválido.", field: "id" };
+
+    const cantidad = Number.parseInt(cantidadRaw, 10);
+    if (!Number.isFinite(cantidad) || cantidad < 1 || cantidad > 20) {
+      return { ok: false, message: "La cantidad debe estar entre 1 y 20.", field: "cantidad" };
+    }
+
+    const res = await prisma.comboItem.updateMany({
+      where: { id, userId },
+      data: { cantidad },
+    });
+    if (res.count === 0) return { ok: false, message: "Ítem no encontrado.", field: "id" };
+
+    revalidatePath("/configuracion");
+    return { ok: true, message: "Cantidad actualizada." };
+  } catch (e) {
+    console.error("[updateComboItemCantidad]", e);
+    return { ok: false, message: "No se pudo actualizar la cantidad." };
+  }
+}
+
+export async function getCombosConComponentes() {
+  try {
+    const userId = await requireUserId();
+    return await prisma.plato.findMany({
+      where: { userId, tipo: TipoPlato.COMBO, ...notDeleted },
+      orderBy: { nombre: "asc" },
+      include: {
+        categoria: { select: { id: true, nombre: true } },
+        itemsCombo: {
+          include: {
+            plato: { select: { id: true, nombre: true, precioVenta: true } },
+          },
+          orderBy: { plato: { nombre: "asc" } },
+        },
+      },
+    });
+  } catch (e) {
+    console.error("[getCombosConComponentes]", e);
     return [];
   }
 }

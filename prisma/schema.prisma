@@ -85,6 +85,11 @@ enum TipoContrato {
   INFORMAL
 }
 
+enum TipoPlato {
+  PLATO
+  COMBO
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String   @unique
@@ -106,6 +111,7 @@ model User {
   empleados     Empleado[]
   nominas       Nomina[]
   gastosFijos   GastoFijo[]
+  comboItems    ComboItem[]
 }
 
 model Proveedor {
@@ -163,6 +169,7 @@ model Plato {
   precioVenta   Decimal   @db.Decimal(10, 2)
   active        Boolean   @default(true)
   tieneReceta   Boolean   @default(true)
+  tipo          TipoPlato @default(PLATO)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
@@ -171,6 +178,8 @@ model Plato {
   categoria     Categoria?     @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
   recetas       Receta[]
   detallesVenta DetalleVenta[]
+  itemsCombo    ComboItem[]    @relation("ComboItems")
+  usadoEnCombos ComboItem[]    @relation("ComboComponente")
 
   @@index([userId, deletedAt])
 }
@@ -193,6 +202,23 @@ model Receta {
   @@index([platoId])
   @@index([insumoId])
   @@unique([platoId, insumoId])
+}
+
+model ComboItem {
+  id       String @id @default(cuid())
+  userId   String
+  comboId  String
+  platoId  String
+  cantidad Int    @default(1)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  combo Plato @relation("ComboItems", fields: [comboId], references: [id], onDelete: Cascade)
+  plato Plato @relation("ComboComponente", fields: [platoId], references: [id], onDelete: Restrict)
+
+  @@unique([comboId, platoId])
+  @@index([comboId])
+  @@index([platoId])
+  @@index([userId])
 }
 
 model Compra {

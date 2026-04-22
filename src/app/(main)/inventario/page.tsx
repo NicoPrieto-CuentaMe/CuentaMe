@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { TipoPlato } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { InventarioForm } from "@/components/inventario/InventarioForm";
@@ -33,7 +34,7 @@ export default async function InventarioPage() {
 
   const insumoIds = insumos.map((i) => i.id);
 
-  const [invRows, compraDetallesRaw, recetas, detalleVentas] = await Promise.all([
+  const [invRows, compraDetallesRaw, recetas, detalleVentas, comboItems] = await Promise.all([
     insumoIds.length === 0
       ? Promise.resolve([])
       : prisma.inventario.findMany({
@@ -63,7 +64,12 @@ export default async function InventarioPage() {
         platoId: true,
         cantidad: true,
         venta: { select: { fecha: true } },
+        plato: { select: { tipo: true } },
       },
+    }),
+    prisma.comboItem.findMany({
+      where: { userId },
+      select: { comboId: true, platoId: true, cantidad: true },
     }),
   ]);
 
@@ -96,6 +102,25 @@ export default async function InventarioPage() {
         recetaCantidad: r.cantidad,
         recetaUnidad: r.unidad,
       });
+    }
+  }
+
+  const detallesDeCombo = detalleVentas.filter((dv) => dv.plato.tipo === TipoPlato.COMBO);
+
+  for (const dv of detallesDeCombo) {
+    for (const item of comboItems) {
+      if (item.comboId !== dv.platoId) continue;
+      for (const r of recetas) {
+        if (r.platoId !== item.platoId) continue;
+        ventasConsumo.push({
+          platoId: item.platoId,
+          ventaFecha: dv.venta.fecha,
+          detalleCantidad: dv.cantidad * item.cantidad,
+          insumoId: r.insumoId,
+          recetaCantidad: r.cantidad,
+          recetaUnidad: r.unidad,
+        });
+      }
     }
   }
 

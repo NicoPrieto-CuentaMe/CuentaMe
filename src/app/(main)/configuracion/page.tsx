@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
+import { TipoPlato } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getAllNominas, getEmpleadosActivos } from "./actions";
+import { getAllNominas, getCombosConComponentes, getEmpleadosActivos } from "./actions";
 import { InsumosTabPanel, ProveedoresTabPanel } from "./components/MasterTablesInline";
 import { CartaTab } from "./components/CartaTab";
 import { EmpleadosNominaTab } from "./components/EmpleadosNominaTab";
@@ -15,6 +17,13 @@ const tabs = [
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
+
+type CartaPlatoPayload = Prisma.PlatoGetPayload<{
+  include: {
+    recetas: { include: { insumo: true } };
+    categoria: true;
+  };
+}>;
 
 function normalizeTab(tab: unknown): TabKey {
   const t = typeof tab === "string" ? tab : "";
@@ -42,7 +51,25 @@ export default async function ConfiguracionPage({
           [],
         ]);
 
-  const [proveedores, insumos, platos, categorias, [empleadosActivos, todasNominas]] = await Promise.all([
+  const cartaPromise =
+    tab === "carta"
+      ? Promise.all([
+          prisma.plato.findMany({
+            where: { userId, deletedAt: null, tipo: TipoPlato.PLATO },
+            orderBy: { nombre: "asc" },
+            include: {
+              recetas: {
+                include: { insumo: true },
+                orderBy: { insumo: { nombre: "asc" } },
+              },
+              categoria: true,
+            },
+          }),
+          getCombosConComponentes(),
+        ])
+      : Promise.resolve<[CartaPlatoPayload[], Awaited<ReturnType<typeof getCombosConComponentes>>]>([[], []]);
+
+  const [proveedores, insumos, [platos, combos], categorias, [empleadosActivos, todasNominas]] = await Promise.all([
     prisma.proveedor.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -51,17 +78,7 @@ export default async function ConfiguracionPage({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.plato.findMany({
-      where: { userId, deletedAt: null },
-      include: {
-        recetas: {
-          include: { insumo: true },
-          orderBy: { insumo: { nombre: "asc" } },
-        },
-        categoria: true,
-      },
-      orderBy: { nombre: "asc" },
-    }),
+    cartaPromise,
     prisma.categoria.findMany({
       where: { userId, deletedAt: null },
       include: {
@@ -116,6 +133,7 @@ export default async function ConfiguracionPage({
           platos={platos}
           categorias={categorias}
           insumos={insumos}
+          combos={combos}
           initialDishId={searchParams?.dishId}
         />
       ) : null}

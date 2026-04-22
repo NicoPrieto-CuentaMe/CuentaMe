@@ -4,12 +4,20 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Categoria, Insumo, Plato, Receta, Unidad } from "@prisma/client";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
+  addCombo,
+  addComboItem,
   createCategoria,
   createPlato,
   deleteCategoria,
+  deleteCombo,
   deletePlatoConReceta,
+  getCombosConComponentes,
+  removeComboItem,
   updateCategoria,
+  updateCombo,
+  updateComboItemCantidad,
   updatePlatoCompleto,
   type ActionState,
 } from "../actions";
@@ -32,6 +40,9 @@ export type CartaPlatoRow = Plato & {
   >;
   categoria: Categoria | null;
 };
+
+export type CombosConComponentesList = Awaited<ReturnType<typeof getCombosConComponentes>>;
+export type ComboConComponentesRow = CombosConComponentesList[number];
 
 function formatPrecioCOP(precio: unknown) {
   return formatCopFromDigits(precioVentaToDigits(precio));
@@ -640,15 +651,585 @@ function DeletePlatoModal({
   );
 }
 
+const comboFormInitial: ActionState = { ok: true };
+const comboActionIdle: ActionState = { ok: true };
+
+const comboInputClass =
+  "w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent";
+const comboBtnSecondary =
+  "inline-flex min-h-[44px] items-center justify-center rounded-lg border border-border bg-transparent px-3 py-2 text-sm font-medium text-text-primary hover:bg-surface-elevated sm:min-h-0";
+const comboBtnDanger =
+  "inline-flex min-h-[44px] items-center justify-center rounded-lg border border-danger bg-danger-light px-3 py-2 text-sm font-medium text-danger hover:opacity-90 sm:min-h-0";
+const comboBtnAccent =
+  "inline-flex min-h-[44px] items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover sm:min-h-0";
+
+function ComboFieldError({ state, field }: { state: ActionState; field: string }) {
+  if (!("ok" in state) || state.ok || state.field !== field) return null;
+  return <p className="mt-1 text-xs text-danger">{state.message}</p>;
+}
+
+function CombosSection({
+  combos,
+  categorias,
+  platos,
+}: {
+  combos: CombosConComponentesList;
+  categorias: CartaCategoriaRow[];
+  platos: CartaPlatoRow[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [addComboState, addComboAction] = useFormState(addCombo, comboFormInitial);
+  const [addComboKey, setAddComboKey] = useState(0);
+  const [precioComboDigits, setPrecioComboDigits] = useState("");
+  const [comboActiveNew, setComboActiveNew] = useState(true);
+
+  const [expandedComboId, setExpandedComboId] = useState<string | null>(null);
+  const [editingComboId, setEditingComboId] = useState<string | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editPrecioDigits, setEditPrecioDigits] = useState("");
+  const [editCategoriaId, setEditCategoriaId] = useState("");
+  const [editActive, setEditActive] = useState(true);
+  const [editComboError, setEditComboError] = useState<string | null>(null);
+
+  const [deleteComboId, setDeleteComboId] = useState<string | null>(null);
+  const [deleteComboError, setDeleteComboError] = useState<string | null>(null);
+
+  const [addItemPlatoId, setAddItemPlatoId] = useState("");
+  const [addItemCantidad, setAddItemCantidad] = useState(1);
+  const [addItemError, setAddItemError] = useState<string | null>(null);
+  const [itemActionError, setItemActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (addComboState.ok && addComboState.message) {
+      setAddComboKey((k) => k + 1);
+      setPrecioComboDigits("");
+      setComboActiveNew(true);
+      router.refresh();
+    }
+  }, [addComboState, router]);
+
+  useEffect(() => {
+    setAddItemPlatoId("");
+    setAddItemCantidad(1);
+    setAddItemError(null);
+    setItemActionError(null);
+  }, [expandedComboId]);
+
+  const precioComboHidden = useMemo(() => digitsToSalePriceString(precioComboDigits), [precioComboDigits]);
+  const precioComboFmt = useMemo(() => formatCopFromDigits(precioComboDigits), [precioComboDigits]);
+  const editPrecioFmt = formatCopFromDigits(editPrecioDigits);
+
+  const beginEditCombo = useCallback((c: ComboConComponentesRow) => {
+    setEditingComboId(c.id);
+    setEditNombre(c.nombre);
+    setEditPrecioDigits(precioVentaToDigits(c.precioVenta));
+    setEditCategoriaId(c.categoriaId ?? "");
+    setEditActive(c.active);
+    setEditComboError(null);
+    setDeleteComboId(null);
+    setExpandedComboId(c.id);
+  }, []);
+
+  const cancelEditCombo = useCallback(() => {
+    setEditingComboId(null);
+    setEditComboError(null);
+  }, []);
+
+  const saveCombo = useCallback(
+    (comboId: string) => {
+      const nombre = editNombre.trim();
+      if (!nombre) {
+        setEditComboError("El nombre es obligatorio.");
+        return;
+      }
+      const precioVenta = digitsToSalePriceString(editPrecioDigits);
+      if (!precioVenta) {
+        setEditComboError("El precio debe ser mayor a 0.");
+        return;
+      }
+      const fd = new FormData();
+      fd.set("id", comboId);
+      fd.set("nombre", nombre);
+      fd.set("precioVenta", precioVenta);
+      fd.set("categoriaId", editCategoriaId);
+      fd.set("active", editActive ? "true" : "false");
+      startTransition(async () => {
+        const res = await updateCombo(comboActionIdle, fd);
+        if (res.ok) {
+          setEditingComboId(null);
+          setEditComboError(null);
+          router.refresh();
+        } else {
+          setEditComboError(res.message ?? "No se pudo guardar.");
+        }
+      });
+    },
+    [editNombre, editPrecioDigits, editCategoriaId, editActive, router],
+  );
+
+  const confirmDeleteCombo = useCallback(
+    (id: string) => {
+      startTransition(async () => {
+        const fd = new FormData();
+        fd.set("id", id);
+        const res = await deleteCombo(comboActionIdle, fd);
+        if (res.ok) {
+          setDeleteComboId(null);
+          setDeleteComboError(null);
+          if (expandedComboId === id) setExpandedComboId(null);
+          if (editingComboId === id) setEditingComboId(null);
+          router.refresh();
+        } else {
+          setDeleteComboError(res.message ?? "No se pudo eliminar.");
+        }
+      });
+    },
+    [expandedComboId, editingComboId, router],
+  );
+
+  const removeItem = useCallback(
+    (itemId: string) => {
+      startTransition(async () => {
+        const fd = new FormData();
+        fd.set("id", itemId);
+        const res = await removeComboItem(comboActionIdle, fd);
+        if (res.ok) {
+          setItemActionError(null);
+          router.refresh();
+        } else {
+          setItemActionError(res.message ?? "No se pudo quitar el plato.");
+        }
+      });
+    },
+    [router],
+  );
+
+  const bumpCantidad = useCallback(
+    (itemId: string, current: number, delta: number) => {
+      const next = current + delta;
+      if (next < 1 || next > 20) return;
+      startTransition(async () => {
+        const fd = new FormData();
+        fd.set("id", itemId);
+        fd.set("cantidad", String(next));
+        const res = await updateComboItemCantidad(comboActionIdle, fd);
+        if (res.ok) {
+          setItemActionError(null);
+          router.refresh();
+        } else {
+          setItemActionError(res.message ?? "No se pudo actualizar la cantidad.");
+        }
+      });
+    },
+    [router],
+  );
+
+  const submitAddItem = useCallback(
+    (comboId: string) => {
+      if (!addItemPlatoId) {
+        setAddItemError("Selecciona un plato.");
+        return;
+      }
+      if (addItemCantidad < 1 || addItemCantidad > 20) {
+        setAddItemError("La cantidad debe estar entre 1 y 20.");
+        return;
+      }
+      setAddItemError(null);
+      startTransition(async () => {
+        const fd = new FormData();
+        fd.set("comboId", comboId);
+        fd.set("platoId", addItemPlatoId);
+        fd.set("cantidad", String(addItemCantidad));
+        const res = await addComboItem(comboActionIdle, fd);
+        if (res.ok) {
+          setAddItemPlatoId("");
+          setAddItemCantidad(1);
+          router.refresh();
+        } else {
+          setAddItemError(res.message ?? "No se pudo agregar.");
+        }
+      });
+    },
+    [addItemPlatoId, addItemCantidad, router],
+  );
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-text-primary">Nuevo combo</h3>
+        <p className="mt-1 text-sm text-text-tertiary">Crea un combo con precio propio; luego agrega platos del menú como componentes.</p>
+
+        <form key={addComboKey} action={addComboAction} className="mt-4 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium text-text-secondary" htmlFor="combo-nombre-new">
+                Nombre *
+              </label>
+              <input
+                id="combo-nombre-new"
+                name="nombre"
+                type="text"
+                maxLength={100}
+                required
+                className={`mt-1 ${comboInputClass}`}
+                placeholder="Ej: Combo familiar"
+              />
+              <ComboFieldError state={addComboState} field="nombre" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary" htmlFor="combo-precio-new">
+                Precio de venta *
+              </label>
+              <input type="hidden" name="precioVenta" value={precioComboHidden} />
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                  $
+                </span>
+                <input
+                  id="combo-precio-new"
+                  inputMode="numeric"
+                  type="text"
+                  value={precioComboFmt}
+                  onChange={(e) => setPrecioComboDigits(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                  placeholder="0"
+                  required
+                />
+              </div>
+              <ComboFieldError state={addComboState} field="precioVenta" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary" htmlFor="combo-cat-new">
+                Categoría
+              </label>
+              <select
+                id="combo-cat-new"
+                name="categoriaId"
+                defaultValue=""
+                className={`mt-1 ${comboInputClass}`}
+              >
+                <option value="">Sin categoría</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+              <ComboFieldError state={addComboState} field="categoriaId" />
+            </div>
+          </div>
+          <input type="hidden" name="active" value={comboActiveNew ? "true" : "false"} />
+          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-text-primary">
+            <input
+              type="checkbox"
+              checked={comboActiveNew}
+              onChange={(e) => setComboActiveNew(e.target.checked)}
+              className="h-4 w-4 rounded border-border text-accent"
+            />
+            Activo
+          </label>
+          <button type="submit" disabled={!precioComboHidden} className={comboBtnAccent}>
+            Agregar combo
+          </button>
+          {addComboState.ok && addComboState.message ? (
+            <p className="text-sm text-accent">{addComboState.message}</p>
+          ) : null}
+          {addComboState.ok === false && !addComboState.field ? (
+            <p className="text-sm text-danger">{addComboState.message}</p>
+          ) : null}
+        </form>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-text-primary">Mis combos</h3>
+        <p className="mt-1 text-sm text-text-tertiary">Expande cada combo para ver componentes y cantidades.</p>
+
+        {combos.length === 0 ? (
+          <p className="mt-4 text-sm text-text-tertiary">Aún no has creado combos.</p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {combos.map((c) => {
+              const expanded = expandedComboId === c.id;
+              const editing = editingComboId === c.id;
+              const isDeleting = deleteComboId === c.id;
+              const idsEnCombo = new Set(c.itemsCombo.map((i) => i.platoId));
+              const platosDisponibles = platos.filter((p) => !idsEnCombo.has(p.id));
+
+              return (
+                <li key={c.id} className="rounded-xl border border-border bg-surface-elevated/40 p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      {editing ? (
+                        <>
+                          <input
+                            type="text"
+                            value={editNombre}
+                            onChange={(e) => setEditNombre(e.target.value)}
+                            maxLength={100}
+                            className={comboInputClass}
+                            aria-label="Nombre del combo"
+                          />
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                              $
+                            </span>
+                            <input
+                              inputMode="numeric"
+                              type="text"
+                              value={editPrecioFmt}
+                              onChange={(e) => setEditPrecioDigits(e.target.value.replace(/[^\d]/g, ""))}
+                              className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                              aria-label="Precio del combo"
+                            />
+                          </div>
+                          <select
+                            value={editCategoriaId}
+                            onChange={(e) => setEditCategoriaId(e.target.value)}
+                            className={comboInputClass}
+                            aria-label="Categoría"
+                          >
+                            <option value="">Sin categoría</option>
+                            {categorias.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.nombre}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-text-primary">
+                            <input
+                              type="checkbox"
+                              checked={editActive}
+                              onChange={(e) => setEditActive(e.target.checked)}
+                              className="h-4 w-4 rounded border-border text-accent"
+                            />
+                            Activo
+                          </label>
+                          {editComboError ? <p className="text-xs text-danger">{editComboError}</p> : null}
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" disabled={pending} className={comboBtnAccent} onClick={() => saveCombo(c.id)}>
+                              Guardar
+                            </button>
+                            <button type="button" className={comboBtnSecondary} onClick={cancelEditCombo}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-text-primary">{c.nombre}</span>
+                            <span className="text-sm text-text-secondary">{formatPrecioCOP(c.precioVenta)}</span>
+                            {c.categoria ? (
+                              <span className="rounded-full border border-border bg-surface-elevated px-2 py-0.5 text-xs text-text-secondary">
+                                {c.categoria.nombre}
+                              </span>
+                            ) : null}
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                c.active ? "bg-accent-light text-accent" : "bg-surface-elevated text-text-tertiary"
+                              }`}
+                            >
+                              {c.active ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {!editing ? (
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <button
+                          type="button"
+                          className={comboBtnSecondary}
+                          aria-expanded={expanded}
+                          onClick={() => setExpandedComboId((prev) => (prev === c.id ? null : c.id))}
+                        >
+                          {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          className={comboBtnSecondary}
+                          onClick={() => beginEditCombo(c)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className={comboBtnDanger}
+                          onClick={() => {
+                            setDeleteComboError(null);
+                            setDeleteComboId(c.id);
+                          }}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {isDeleting && !editing ? (
+                    <div className="mt-3 space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-3">
+                      <p className="text-sm text-danger">¿Eliminar este combo y sus componentes?</p>
+                      {deleteComboError ? <p className="text-xs text-danger">{deleteComboError}</p> : null}
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className={comboBtnDanger} onClick={() => confirmDeleteCombo(c.id)}>
+                          Confirmar
+                        </button>
+                        <button
+                          type="button"
+                          className={comboBtnSecondary}
+                          onClick={() => {
+                            setDeleteComboId(null);
+                            setDeleteComboError(null);
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {expanded ? (
+                    <div className="mt-4 space-y-4 border-t border-border pt-4">
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Componentes</h4>
+                        {c.itemsCombo.length === 0 ? (
+                          <p className="mt-2 text-sm text-text-tertiary">Este combo no tiene platos aún.</p>
+                        ) : (
+                          <ul className="mt-2 space-y-2">
+                            {c.itemsCombo.map((item) => (
+                              <li
+                                key={item.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                              >
+                                <span className="text-text-primary">
+                                  {item.plato.nombre}{" "}
+                                  <span className="text-text-tertiary">× {item.cantidad}</span>
+                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {item.cantidad > 1 ? (
+                                    <button
+                                      type="button"
+                                      className={comboBtnSecondary}
+                                      aria-label="Reducir cantidad"
+                                      onClick={() => bumpCantidad(item.id, item.cantidad, -1)}
+                                    >
+                                      −
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    className={comboBtnSecondary}
+                                    disabled={item.cantidad >= 20}
+                                    aria-label="Aumentar cantidad"
+                                    onClick={() => bumpCantidad(item.id, item.cantidad, 1)}
+                                  >
+                                    +
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`${comboBtnDanger} px-2`}
+                                    aria-label={`Quitar ${item.plato.nombre}`}
+                                    onClick={() => removeItem(item.id)}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      {itemActionError ? <p className="text-xs text-danger">{itemActionError}</p> : null}
+
+                      {platosDisponibles.length > 0 ? (
+                        <div className="rounded-lg border border-border bg-surface p-3">
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Agregar plato al combo</h4>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div className="sm:col-span-2">
+                              <label className="text-sm font-medium text-text-secondary" htmlFor={`add-plato-${c.id}`}>
+                                Plato
+                              </label>
+                              <select
+                                id={`add-plato-${c.id}`}
+                                value={addItemPlatoId}
+                                onChange={(e) => {
+                                  setAddItemPlatoId(e.target.value);
+                                  setAddItemError(null);
+                                }}
+                                className={`mt-1 ${comboInputClass}`}
+                              >
+                                <option value="">Selecciona…</option>
+                                {platosDisponibles.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-text-secondary" htmlFor={`add-cant-${c.id}`}>
+                                Cantidad en el combo
+                              </label>
+                              <input
+                                id={`add-cant-${c.id}`}
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={addItemCantidad}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v === "") {
+                                    setAddItemCantidad(1);
+                                    setAddItemError(null);
+                                    return;
+                                  }
+                                  const n = Number(v);
+                                  if (!Number.isFinite(n)) return;
+                                  setAddItemCantidad(Math.min(20, Math.max(1, Math.round(n))));
+                                  setAddItemError(null);
+                                }}
+                                className={`mt-1 ${comboInputClass}`}
+                              />
+                            </div>
+                          </div>
+                          {addItemError && expandedComboId === c.id ? (
+                            <p className="mt-2 text-xs text-danger">{addItemError}</p>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={`${comboBtnAccent} mt-3`}
+                            onClick={() => submitAddItem(c.id)}
+                          >
+                            Agregar al combo
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function CartaTab({
   platos: platosRaw,
   categorias: categoriasRaw,
   insumos: insumosRaw,
+  combos: combosInicial,
   initialDishId,
 }: {
   platos: CartaPlatoRow[];
   categorias: CartaCategoriaRow[];
   insumos: Insumo[];
+  combos: CombosConComponentesList;
   initialDishId?: string;
 }) {
   const platos = useMemo(
@@ -663,6 +1244,7 @@ export function CartaTab({
     () => insumosRaw.filter((i) => i.deletedAt == null),
     [insumosRaw],
   );
+  const combos = combosInicial;
 
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -994,6 +1576,8 @@ export function CartaTab({
         externalPlatoId={recipePlatoId}
         onExternalClose={() => setRecipePlatoId(null)}
       />
+
+      <CombosSection combos={combos} categorias={categorias} platos={platos} />
     </div>
   );
 }
