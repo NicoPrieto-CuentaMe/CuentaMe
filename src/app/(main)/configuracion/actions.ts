@@ -1451,16 +1451,70 @@ export async function addCombo(_: ActionState, formData: FormData): Promise<Acti
     if (precioVenta.greaterThan(MAX_PRECIO_VENTA))
       return { ok: false, message: "El precio no puede superar $2.000.000.", field: "precioVenta" };
 
-    await prisma.plato.create({
-      data: {
-        userId,
-        nombre,
-        categoriaId,
-        precioVenta,
-        active,
-        tieneReceta: false,
-        tipo: TipoPlato.COMBO,
-      },
+    const componenteRows: { platoId: string; cantidad: number }[] = [];
+    const vistos = new Set<string>();
+    for (let i = 0; ; i++) {
+      const platoIdRaw = formData.get(`componentePlatoId_${i}`);
+      if (platoIdRaw == null) break;
+      if (typeof platoIdRaw !== "string") {
+        return { ok: false, message: "Plato de componente inválido." };
+      }
+      const platoId = platoIdRaw.trim();
+      if (!platoId) break;
+
+      const cantRaw = formData.get(`componenteCantidad_${i}`);
+      if (typeof cantRaw !== "string") {
+        return { ok: false, message: "La cantidad de un componente no es válida." };
+      }
+      const cantidad = Number.parseInt(cantRaw.trim(), 10);
+      if (!Number.isFinite(cantidad) || cantidad < 1 || cantidad > 20) {
+        return { ok: false, message: "La cantidad debe estar entre 1 y 20." };
+      }
+      if (vistos.has(platoId)) {
+        return { ok: false, message: "No puedes repetir el mismo plato en el combo." };
+      }
+      vistos.add(platoId);
+      componenteRows.push({ platoId, cantidad });
+    }
+
+    if (componenteRows.length > 0) {
+      const ids = componenteRows.map((r) => r.platoId);
+      const platosRef = await prisma.plato.findMany({
+        where: { id: { in: ids }, userId, ...notDeleted },
+        select: { id: true, tipo: true },
+      });
+      if (platosRef.length !== ids.length) {
+        return { ok: false, message: "Uno o más platos de componente no existen o no te pertenecen." };
+      }
+      for (const p of platosRef) {
+        if (p.tipo === TipoPlato.COMBO) {
+          return { ok: false, message: "Un combo no puede contener otro combo." };
+        }
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const combo = await tx.plato.create({
+        data: {
+          userId,
+          nombre,
+          categoriaId,
+          precioVenta,
+          active,
+          tieneReceta: false,
+          tipo: TipoPlato.COMBO,
+        },
+      });
+      if (componenteRows.length > 0) {
+        await tx.comboItem.createMany({
+          data: componenteRows.map((r) => ({
+            userId,
+            comboId: combo.id,
+            platoId: r.platoId,
+            cantidad: r.cantidad,
+          })),
+        });
+      }
     });
 
     revalidatePath("/configuracion");
