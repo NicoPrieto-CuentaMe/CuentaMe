@@ -1135,84 +1135,6 @@ function ComboEditModal({
         <h3 className="pr-2 text-lg font-semibold text-text-primary">{combo.nombre}</h3>
         <div key={combo.id} className="mt-4 space-y-6">
           <div className="space-y-3 rounded-lg border border-border bg-surface-elevated/30 p-4">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Datos del combo</h4>
-            <div>
-              <label className="text-sm font-medium text-text-secondary" htmlFor={`edit-combo-nombre-${combo.id}`}>
-                Nombre *
-              </label>
-              <input
-                id={`edit-combo-nombre-${combo.id}`}
-                type="text"
-                value={editNombre}
-                onChange={(e) => {
-                  setEditNombre(e.target.value);
-                  setEditComboError(null);
-                }}
-                maxLength={100}
-                className={`mt-1 ${comboInputClass}`}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-text-secondary" htmlFor={`edit-combo-precio-${combo.id}`}>
-                Precio de venta *
-              </label>
-              <div className="relative mt-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">$</span>
-                <input
-                  id={`edit-combo-precio-${combo.id}`}
-                  inputMode="numeric"
-                  type="text"
-                  value={editPrecioFmt}
-                  onChange={(e) => {
-                    setEditPrecioDigits(e.target.value.replace(/[^\d]/g, ""));
-                    setEditComboError(null);
-                  }}
-                  className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-text-secondary" htmlFor={`edit-combo-cat-${combo.id}`}>
-                Categoría
-              </label>
-              <select
-                id={`edit-combo-cat-${combo.id}`}
-                value={editCategoriaId}
-                onChange={(e) => {
-                  setEditCategoriaId(e.target.value);
-                  setEditComboError(null);
-                }}
-                className={`mt-1 ${comboInputClass}`}
-              >
-                <option value="">Sin categoría</option>
-                {categorias.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-text-primary">
-              <input
-                type="checkbox"
-                checked={editActive}
-                onChange={(e) => setEditActive(e.target.checked)}
-                className="h-4 w-4 rounded border-border text-accent"
-              />
-              Activo
-            </label>
-            {editComboError ? <p className="text-xs text-danger">{editComboError}</p> : null}
-            <button
-              type="button"
-              disabled={pending}
-              className={comboBtnAccent}
-              onClick={saveCombo}
-            >
-              Guardar cambios
-            </button>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-border bg-surface-elevated/30 p-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Componentes</h4>
             {combo.itemsCombo.length === 0 ? (
               <p className="text-sm text-text-tertiary">Este combo no tiene platos aún.</p>
@@ -1321,6 +1243,84 @@ function ComboEditModal({
                 </button>
               </div>
             ) : null}
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border bg-surface-elevated/30 p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Datos del combo</h4>
+            <div>
+              <label className="text-sm font-medium text-text-secondary" htmlFor={`edit-combo-nombre-${combo.id}`}>
+                Nombre *
+              </label>
+              <input
+                id={`edit-combo-nombre-${combo.id}`}
+                type="text"
+                value={editNombre}
+                onChange={(e) => {
+                  setEditNombre(e.target.value);
+                  setEditComboError(null);
+                }}
+                maxLength={100}
+                className={`mt-1 ${comboInputClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary" htmlFor={`edit-combo-precio-${combo.id}`}>
+                Precio de venta *
+              </label>
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">$</span>
+                <input
+                  id={`edit-combo-precio-${combo.id}`}
+                  inputMode="numeric"
+                  type="text"
+                  value={editPrecioFmt}
+                  onChange={(e) => {
+                    setEditPrecioDigits(e.target.value.replace(/[^\d]/g, ""));
+                    setEditComboError(null);
+                  }}
+                  className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary" htmlFor={`edit-combo-cat-${combo.id}`}>
+                Categoría
+              </label>
+              <select
+                id={`edit-combo-cat-${combo.id}`}
+                value={editCategoriaId}
+                onChange={(e) => {
+                  setEditCategoriaId(e.target.value);
+                  setEditComboError(null);
+                }}
+                className={`mt-1 ${comboInputClass}`}
+              >
+                <option value="">Sin categoría</option>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-text-primary">
+              <input
+                type="checkbox"
+                checked={editActive}
+                onChange={(e) => setEditActive(e.target.checked)}
+                className="h-4 w-4 rounded border-border text-accent"
+              />
+              Activo
+            </label>
+            {editComboError ? <p className="text-xs text-danger">{editComboError}</p> : null}
+            <button
+              type="button"
+              disabled={pending}
+              className={comboBtnAccent}
+              onClick={saveCombo}
+            >
+              Guardar cambios
+            </button>
           </div>
 
           <div className="space-y-3 border-t border-danger/30 pt-4">
