@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { GastoFijo } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { deleteGastoFijo } from "@/app/actions/gastos";
 import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import type { CategoriaGasto } from "@prisma/client";
+import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
 const idle: ActionState = { ok: true };
 
@@ -14,6 +15,8 @@ const btnSecondary =
   "rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-surface-elevated";
 const btnDanger =
   "rounded-lg border border-danger bg-danger-light px-3 py-1.5 text-sm font-medium text-danger hover:opacity-90";
+const loadMoreClass =
+  "w-full border border-border border-t-0 bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated";
 
 function monthKeyUtc(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -52,6 +55,15 @@ export function GastosHistorial({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [categoriaFiltro, mesFiltro]);
+
   const mesesDisponibles = useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) {
@@ -78,6 +90,75 @@ export function GastosHistorial({
       return true;
     });
   }, [rows, categoriaFiltro, mesFiltro]);
+
+  const filtradasPorColumna = useMemo(() => {
+    return filtradas.filter((row) => {
+      const qFecha = (columnSearch.fecha ?? "").trim().toLowerCase();
+      if (qFecha && !formatFecha(row.fecha).toLowerCase().includes(qFecha)) return false;
+
+      const qCat = (columnSearch.categoria ?? "").trim().toLowerCase();
+      if (qCat && !CATEGORIA_LABELS[row.categoria].toLowerCase().includes(qCat)) return false;
+
+      const qMonto = (columnSearch.monto ?? "").trim().toLowerCase();
+      if (qMonto && !formatCop(row.monto).toLowerCase().includes(qMonto)) return false;
+
+      const qPer = (columnSearch.periodicidad ?? "").trim().toLowerCase();
+      if (qPer && !PERIODICIDAD_LABELS[row.periodicidad].toLowerCase().includes(qPer)) return false;
+
+      const qMp = (columnSearch.metodoPago ?? "").trim().toLowerCase();
+      if (qMp && !METODO_PAGO_LABELS[row.metodoPago].toLowerCase().includes(qMp)) return false;
+
+      return true;
+    });
+  }, [filtradas, columnSearch]);
+
+  const ordenadas = useMemo(() => {
+    if (!sortColumn) return filtradasPorColumna;
+    const arr = [...filtradasPorColumna];
+    const m = sortDirection === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortColumn) {
+        case "fecha": {
+          return (a.fecha.getTime() - b.fecha.getTime()) * m;
+        }
+        case "categoria": {
+          return CATEGORIA_LABELS[a.categoria].localeCompare(CATEGORIA_LABELS[b.categoria], "es") * m;
+        }
+        case "monto": {
+          return (Number(a.monto) - Number(b.monto)) * m;
+        }
+        case "periodicidad": {
+          return (
+            PERIODICIDAD_LABELS[a.periodicidad].localeCompare(PERIODICIDAD_LABELS[b.periodicidad], "es") * m
+          );
+        }
+        case "metodoPago": {
+          return (
+            METODO_PAGO_LABELS[a.metodoPago].localeCompare(METODO_PAGO_LABELS[b.metodoPago], "es") * m
+          );
+        }
+        default:
+          return 0;
+      }
+    });
+    return arr;
+  }, [filtradasPorColumna, sortColumn, sortDirection]);
+
+  const aMostrar = useMemo(
+    () => ordenadas.slice(0, visibleCount),
+    [ordenadas, visibleCount],
+  );
+
+  const onSort = useCallback((key: string, dir: "asc" | "desc") => {
+    setSortColumn(key);
+    setSortDirection(dir);
+    setVisibleCount(10);
+  }, []);
+
+  const onSearch = useCallback((key: string, value: string) => {
+    setColumnSearch((prev) => ({ ...prev, [key]: value }));
+    setVisibleCount(10);
+  }, []);
 
   const confirmDelete = useCallback(
     (id: string) => {
@@ -144,90 +225,191 @@ export function GastosHistorial({
 
       {filtradas.length === 0 ? (
         <p className="text-sm text-text-tertiary">No hay gastos que coincidan con los filtros.</p>
+      ) : filtradasPorColumna.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No hay gastos que coincidan con la búsqueda de columnas.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-elevated/80">
-                <th className="px-3 py-2 font-medium text-text-secondary">Fecha</th>
-                <th className="px-3 py-2 font-medium text-text-secondary">Categoría</th>
-                <th className="px-3 py-2 font-medium text-text-secondary">Monto</th>
-                <th className="px-3 py-2 font-medium text-text-secondary">Periodicidad</th>
-                <th className="px-3 py-2 font-medium text-text-secondary">Método de pago</th>
-                <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtradas.map((row) => {
-                const isDeleting = deleteId === row.id;
-                return (
-                  <tr key={row.id} className="border-b border-border last:border-0">
-                    <td className="whitespace-nowrap px-3 py-2 text-text-primary">{formatFecha(row.fecha)}</td>
-                    <td className="px-3 py-2 text-text-secondary">{CATEGORIA_LABELS[row.categoria]}</td>
-                    <td className="whitespace-nowrap px-3 py-2 font-medium tabular-nums text-text-primary">
-                      {formatCop(row.monto)}
-                    </td>
-                    <td className="px-3 py-2 text-text-secondary">{PERIODICIDAD_LABELS[row.periodicidad]}</td>
-                    <td className="px-3 py-2 text-text-secondary">{METODO_PAGO_LABELS[row.metodoPago]}</td>
-                    <td className="px-3 py-2 align-top">
-                      {isDeleting ? (
-                        <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
-                          <p className="text-xs text-danger">¿Eliminar este gasto? Esta acción no se puede deshacer.</p>
-                          {deleteError ? (
-                            <p className="text-xs text-danger">{deleteError}</p>
-                          ) : null}
+        <div className="space-y-2">
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface-elevated/80">
+                  <th className="relative px-3 py-2 font-medium text-text-secondary">
+                    <ColumnHeader
+                      label="Fecha"
+                      columnKey="fecha"
+                      sortColumn={sortColumn}
+                      sortDirection={sortDirection}
+                      onSort={onSort}
+                      searchValue={columnSearch.fecha ?? ""}
+                      onSearch={onSearch}
+                      onClear={() => {
+                        if (sortColumn === "fecha") {
+                          setSortColumn(null);
+                          setSortDirection("asc");
+                        }
+                        onSearch("fecha", "");
+                      }}
+                    />
+                  </th>
+                  <th className="relative px-3 py-2 font-medium text-text-secondary">
+                    <ColumnHeader
+                      label="Categoría"
+                      columnKey="categoria"
+                      sortColumn={sortColumn}
+                      sortDirection={sortDirection}
+                      onSort={onSort}
+                      searchValue={columnSearch.categoria ?? ""}
+                      onSearch={onSearch}
+                      onClear={() => {
+                        if (sortColumn === "categoria") {
+                          setSortColumn(null);
+                          setSortDirection("asc");
+                        }
+                        onSearch("categoria", "");
+                      }}
+                    />
+                  </th>
+                  <th className="relative px-3 py-2 font-medium text-text-secondary">
+                    <ColumnHeader
+                      label="Monto"
+                      columnKey="monto"
+                      sortColumn={sortColumn}
+                      sortDirection={sortDirection}
+                      onSort={onSort}
+                      searchValue={columnSearch.monto ?? ""}
+                      onSearch={onSearch}
+                      onClear={() => {
+                        if (sortColumn === "monto") {
+                          setSortColumn(null);
+                          setSortDirection("asc");
+                        }
+                        onSearch("monto", "");
+                      }}
+                    />
+                  </th>
+                  <th className="relative px-3 py-2 font-medium text-text-secondary">
+                    <ColumnHeader
+                      label="Periodicidad"
+                      columnKey="periodicidad"
+                      sortColumn={sortColumn}
+                      sortDirection={sortDirection}
+                      onSort={onSort}
+                      searchValue={columnSearch.periodicidad ?? ""}
+                      onSearch={onSearch}
+                      onClear={() => {
+                        if (sortColumn === "periodicidad") {
+                          setSortColumn(null);
+                          setSortDirection("asc");
+                        }
+                        onSearch("periodicidad", "");
+                      }}
+                    />
+                  </th>
+                  <th className="relative px-3 py-2 font-medium text-text-secondary">
+                    <ColumnHeader
+                      label="Método de pago"
+                      columnKey="metodoPago"
+                      sortColumn={sortColumn}
+                      sortDirection={sortDirection}
+                      onSort={onSort}
+                      searchValue={columnSearch.metodoPago ?? ""}
+                      onSearch={onSearch}
+                      onClear={() => {
+                        if (sortColumn === "metodoPago") {
+                          setSortColumn(null);
+                          setSortDirection("asc");
+                        }
+                        onSearch("metodoPago", "");
+                      }}
+                    />
+                  </th>
+                  <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aMostrar.map((row) => {
+                  const isDeleting = deleteId === row.id;
+                  return (
+                    <tr key={row.id} className="border-b border-border last:border-0">
+                      <td className="whitespace-nowrap px-3 py-2 text-text-primary">{formatFecha(row.fecha)}</td>
+                      <td className="px-3 py-2 text-text-secondary">{CATEGORIA_LABELS[row.categoria]}</td>
+                      <td className="whitespace-nowrap px-3 py-2 font-medium tabular-nums text-text-primary">
+                        {formatCop(row.monto)}
+                      </td>
+                      <td className="px-3 py-2 text-text-secondary">{PERIODICIDAD_LABELS[row.periodicidad]}</td>
+                      <td className="px-3 py-2 text-text-secondary">{METODO_PAGO_LABELS[row.metodoPago]}</td>
+                      <td className="px-3 py-2 align-top">
+                        {isDeleting ? (
+                          <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
+                            <p className="text-xs text-danger">¿Eliminar este gasto? Esta acción no se puede deshacer.</p>
+                            {deleteError ? (
+                              <p className="text-xs text-danger">{deleteError}</p>
+                            ) : null}
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => confirmDelete(row.id)}
+                                disabled={pending}
+                                className={btnDanger}
+                              >
+                                Confirmar eliminación
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteId(null);
+                                  setDeleteError(null);
+                                }}
+                                className={btnSecondary}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              onClick={() => confirmDelete(row.id)}
-                              disabled={pending}
-                              className={btnDanger}
-                            >
-                              Confirmar eliminación
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => {
+                                onEdit(row);
                                 setDeleteId(null);
                                 setDeleteError(null);
                               }}
                               className={btnSecondary}
                             >
-                              Cancelar
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteId(row.id);
+                                setDeleteError(null);
+                              }}
+                              className={btnDanger}
+                            >
+                              Eliminar
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onEdit(row);
-                              setDeleteId(null);
-                              setDeleteError(null);
-                            }}
-                            className={btnSecondary}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteId(row.id);
-                              setDeleteError(null);
-                            }}
-                            className={btnDanger}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {ordenadas.length > visibleCount ? (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((v) => v + 10)}
+                className={loadMoreClass}
+              >
+                Ver {Math.min(10, ordenadas.length - visibleCount)} más
+              </button>
+            ) : null}
+          </div>
+          <p className="text-center text-xs text-text-tertiary">
+            Mostrando {aMostrar.length} de {ordenadas.length} gastos
+          </p>
         </div>
       )}
     </div>

@@ -15,6 +15,7 @@ import {
 } from "../actions";
 import { calcularNomina, ROL_LABELS, TIPO_CONTRATO_LABELS } from "@/lib/nomina-constants";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "../cop-price";
+import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
 const initialState: ActionState = { ok: true };
 const idle: ActionState = { ok: true };
@@ -28,6 +29,9 @@ const btnDanger =
   "rounded-lg border border-danger bg-danger-light px-3 py-1.5 text-sm font-medium text-danger hover:opacity-90 min-h-[44px] sm:min-h-0";
 const inlineField =
   "w-full min-h-[44px] rounded border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent";
+
+const loadMoreNominasClass =
+  "w-full border border-border border-t-0 bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated";
 
 function FieldError({ state, field }: { state: ActionState; field: string }) {
   if (!("ok" in state) || state.ok || state.field !== field) return null;
@@ -97,6 +101,10 @@ export function EmpleadosNominaTab({
   const [otrasDedDigits, setOtrasDedDigits] = useState("");
   const [nomNotas, setNomNotas] = useState("");
   const [deleteNomId, setDeleteNomId] = useState<string | null>(null);
+  const [nominasVisibleCount, setNominasVisibleCount] = useState(10);
+  const [nominasSortColumn, setNominasSortColumn] = useState<string | null>(null);
+  const [nominasSortDirection, setNominasSortDirection] = useState<"asc" | "desc">("asc");
+  const [nominasColumnSearch, setNominasColumnSearch] = useState<Record<string, string>>({});
 
   const nomState = editingNominaId ? updNomState : addNomState;
   const nomFormAction = editingNominaId ? updNomAction : addNomAction;
@@ -237,6 +245,63 @@ export function EmpleadosNominaTab({
     },
     [router, editingNominaId, cancelNomEdit],
   );
+
+  const filtradasNominas = useMemo(() => nominasInicial, [nominasInicial]);
+
+  const filtradasNominasPorCol = useMemo(() => {
+    return filtradasNominas.filter((row) => {
+      const qE = (nominasColumnSearch.empleado ?? "").trim().toLowerCase();
+      if (qE && !row.empleado.nombre.toLowerCase().includes(qE)) return false;
+      const qP = (nominasColumnSearch.periodo ?? "").trim().toLowerCase();
+      if (qP && !formatPeriodo(row.periodo).toLowerCase().includes(qP)) return false;
+      const qS = (nominasColumnSearch.salarioBase ?? "").trim().toLowerCase();
+      if (qS && !formatCopN(Number(row.salarioBase)).toLowerCase().includes(qS)) return false;
+      const qN = (nominasColumnSearch.netoEmpleado ?? "").trim().toLowerCase();
+      if (qN && !formatCopN(Number(row.netoEmpleado)).toLowerCase().includes(qN)) return false;
+      const qC = (nominasColumnSearch.costoTotal ?? "").trim().toLowerCase();
+      if (qC && !formatCopN(Number(row.costoTotalEmpleador)).toLowerCase().includes(qC)) return false;
+      return true;
+    });
+  }, [filtradasNominas, nominasColumnSearch]);
+
+  const nominasOrdenadas = useMemo(() => {
+    if (!nominasSortColumn) return filtradasNominasPorCol;
+    const arr = [...filtradasNominasPorCol];
+    const m = nominasSortDirection === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (nominasSortColumn) {
+        case "empleado":
+          return a.empleado.nombre.localeCompare(b.empleado.nombre, "es") * m;
+        case "periodo":
+          return (a.periodo.getTime() - b.periodo.getTime()) * m;
+        case "salarioBase":
+          return (Number(a.salarioBase) - Number(b.salarioBase)) * m;
+        case "netoEmpleado":
+          return (Number(a.netoEmpleado) - Number(b.netoEmpleado)) * m;
+        case "costoTotal":
+          return (Number(a.costoTotalEmpleador) - Number(b.costoTotalEmpleador)) * m;
+        default:
+          return 0;
+      }
+    });
+    return arr;
+  }, [filtradasNominasPorCol, nominasSortColumn, nominasSortDirection]);
+
+  const nominasAMostrar = useMemo(
+    () => nominasOrdenadas.slice(0, nominasVisibleCount),
+    [nominasOrdenadas, nominasVisibleCount],
+  );
+
+  const onSortNominas = useCallback((key: string, dir: "asc" | "desc") => {
+    setNominasSortColumn(key);
+    setNominasSortDirection(dir);
+    setNominasVisibleCount(10);
+  }, []);
+
+  const onSearchNominas = useCallback((key: string, value: string) => {
+    setNominasColumnSearch((prev) => ({ ...prev, [key]: value }));
+    setNominasVisibleCount(10);
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -637,67 +702,182 @@ export function EmpleadosNominaTab({
           <h4 className="mb-3 text-sm font-semibold text-text-primary">Historial de nóminas</h4>
           {nominasInicial.length === 0 ? (
             <p className="text-sm text-text-tertiary">Aún no hay nóminas registradas.</p>
+          ) : filtradasNominasPorCol.length === 0 ? (
+            <p className="text-sm text-text-tertiary">No hay nóminas que coincidan con la búsqueda de columnas.</p>
           ) : (
-            <table className="w-full min-w-[800px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface-elevated/80">
-                  <th className="px-3 py-2 font-medium text-text-secondary">Empleado</th>
-                  <th className="px-3 py-2 font-medium text-text-secondary">Período</th>
-                  <th className="px-3 py-2 font-medium text-text-secondary">Salario base</th>
-                  <th className="px-3 py-2 font-medium text-text-secondary">Neto empleado</th>
-                  <th className="px-3 py-2 font-medium text-text-secondary">Costo total</th>
-                  <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {nominasInicial.map((row) => {
-                  const isDel = deleteNomId === row.id;
-                  return (
-                    <tr key={row.id} className="border-b border-border last:border-0">
-                      <td className="px-3 py-2 text-text-primary">{row.empleado.nombre}</td>
-                      <td className="px-3 py-2 text-text-secondary">{formatPeriodo(row.periodo)}</td>
-                      <td className="px-3 py-2 tabular-nums text-text-primary">
-                        {formatCopN(Number(row.salarioBase))}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-text-primary">
-                        {formatCopN(Number(row.netoEmpleado))}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-text-primary">
-                        {formatCopN(Number(row.costoTotalEmpleador))}
-                      </td>
-                      <td className="align-top">
-                        {isDel ? (
-                          <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
-                            <p className="text-xs text-danger">¿Eliminar esta nómina?</p>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => confirmDeleteNom(row.id)}
-                                className={btnDanger}
-                              >
-                                Confirmar
-                              </button>
-                              <button type="button" onClick={() => setDeleteNomId(null)} className={btnSecondary}>
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={() => loadNominaEdit(row)} className={btnSecondary}>
-                              Editar
-                            </button>
-                            <button type="button" onClick={() => setDeleteNomId(row.id)} className={btnDanger}>
-                              Eliminar
-                            </button>
-                          </div>
-                        )}
-                      </td>
+            <div className="space-y-2">
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full min-w-[800px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-elevated/80">
+                      <th className="relative px-3 py-2 font-medium text-text-secondary">
+                        <ColumnHeader
+                          label="Empleado"
+                          columnKey="empleado"
+                          sortColumn={nominasSortColumn}
+                          sortDirection={nominasSortDirection}
+                          onSort={onSortNominas}
+                          searchValue={nominasColumnSearch.empleado ?? ""}
+                          onSearch={onSearchNominas}
+                          onClear={() => {
+                            if (nominasSortColumn === "empleado") {
+                              setNominasSortColumn(null);
+                              setNominasSortDirection("asc");
+                            }
+                            onSearchNominas("empleado", "");
+                          }}
+                        />
+                      </th>
+                      <th className="relative px-3 py-2 font-medium text-text-secondary">
+                        <ColumnHeader
+                          label="Período"
+                          columnKey="periodo"
+                          sortColumn={nominasSortColumn}
+                          sortDirection={nominasSortDirection}
+                          onSort={onSortNominas}
+                          searchValue={nominasColumnSearch.periodo ?? ""}
+                          onSearch={onSearchNominas}
+                          onClear={() => {
+                            if (nominasSortColumn === "periodo") {
+                              setNominasSortColumn(null);
+                              setNominasSortDirection("asc");
+                            }
+                            onSearchNominas("periodo", "");
+                          }}
+                        />
+                      </th>
+                      <th className="relative px-3 py-2 font-medium text-text-secondary">
+                        <ColumnHeader
+                          label="Salario base"
+                          columnKey="salarioBase"
+                          sortColumn={nominasSortColumn}
+                          sortDirection={nominasSortDirection}
+                          onSort={onSortNominas}
+                          searchValue={nominasColumnSearch.salarioBase ?? ""}
+                          onSearch={onSearchNominas}
+                          onClear={() => {
+                            if (nominasSortColumn === "salarioBase") {
+                              setNominasSortColumn(null);
+                              setNominasSortDirection("asc");
+                            }
+                            onSearchNominas("salarioBase", "");
+                          }}
+                        />
+                      </th>
+                      <th className="relative px-3 py-2 font-medium text-text-secondary">
+                        <ColumnHeader
+                          label="Neto empleado"
+                          columnKey="netoEmpleado"
+                          sortColumn={nominasSortColumn}
+                          sortDirection={nominasSortDirection}
+                          onSort={onSortNominas}
+                          searchValue={nominasColumnSearch.netoEmpleado ?? ""}
+                          onSearch={onSearchNominas}
+                          onClear={() => {
+                            if (nominasSortColumn === "netoEmpleado") {
+                              setNominasSortColumn(null);
+                              setNominasSortDirection("asc");
+                            }
+                            onSearchNominas("netoEmpleado", "");
+                          }}
+                        />
+                      </th>
+                      <th className="relative px-3 py-2 font-medium text-text-secondary">
+                        <ColumnHeader
+                          label="Costo total"
+                          columnKey="costoTotal"
+                          sortColumn={nominasSortColumn}
+                          sortDirection={nominasSortDirection}
+                          onSort={onSortNominas}
+                          searchValue={nominasColumnSearch.costoTotal ?? ""}
+                          onSearch={onSearchNominas}
+                          onClear={() => {
+                            if (nominasSortColumn === "costoTotal") {
+                              setNominasSortColumn(null);
+                              setNominasSortDirection("asc");
+                            }
+                            onSearchNominas("costoTotal", "");
+                          }}
+                        />
+                      </th>
+                      <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {nominasAMostrar.map((row) => {
+                      const isDel = deleteNomId === row.id;
+                      return (
+                        <tr key={row.id} className="border-b border-border last:border-0">
+                          <td className="px-3 py-2 text-text-primary">{row.empleado.nombre}</td>
+                          <td className="px-3 py-2 text-text-secondary">{formatPeriodo(row.periodo)}</td>
+                          <td className="px-3 py-2 tabular-nums text-text-primary">
+                            {formatCopN(Number(row.salarioBase))}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-text-primary">
+                            {formatCopN(Number(row.netoEmpleado))}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-text-primary">
+                            {formatCopN(Number(row.costoTotalEmpleador))}
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            {isDel ? (
+                              <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
+                                <p className="text-xs text-danger">¿Eliminar esta nómina?</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => confirmDeleteNom(row.id)}
+                                    className={btnDanger}
+                                  >
+                                    Confirmar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteNomId(null)}
+                                    className={btnSecondary}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => loadNominaEdit(row)}
+                                  className={btnSecondary}
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteNomId(row.id)}
+                                  className={btnDanger}
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {nominasOrdenadas.length > nominasVisibleCount ? (
+                  <button
+                    type="button"
+                    onClick={() => setNominasVisibleCount((v) => v + 10)}
+                    className={loadMoreNominasClass}
+                  >
+                    Ver {Math.min(10, nominasOrdenadas.length - nominasVisibleCount)} más
+                  </button>
+                ) : null}
+              </div>
+              <p className="text-center text-xs text-text-tertiary">
+                Mostrando {nominasAMostrar.length} de {nominasOrdenadas.length} nóminas
+              </p>
+            </div>
           )}
         </div>
       </section>

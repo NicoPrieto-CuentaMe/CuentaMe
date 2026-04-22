@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { Unidad } from "@prisma/client";
 import type { Decimal } from "@prisma/client/runtime/library";
 import { useRouter } from "next/navigation";
 import { editarInventario, eliminarInventario } from "@/app/actions/inventario";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import { UNIT_OPTIONS } from "@/app/(main)/configuracion/units";
+import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
 export type InventarioHistorialRow = {
   id: string;
@@ -42,9 +43,12 @@ function formatStock(n: Decimal): string {
   }).format(num);
 }
 
+function notasCelda(row: InventarioHistorialRow): string {
+  return row.notas?.trim() ? row.notas : "—";
+}
+
 function stockToInputString(n: Decimal): string {
-  const s = n.toString();
-  return s;
+  return n.toString();
 }
 
 function groupByFecha(rows: InventarioHistorialRow[]): { fecha: Date; items: InventarioHistorialRow[] }[] {
@@ -67,8 +71,20 @@ const btnSecondary =
   "rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-surface-elevated";
 const btnDanger =
   "rounded-lg border border-danger bg-danger-light px-3 py-1.5 text-sm font-medium text-danger hover:opacity-90";
+const filtroInsumoClass =
+  "w-full min-h-[44px] max-w-md rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent";
 
 const idle: ActionState = { ok: true };
+
+function ordenarItemsPorGrupo(
+  items: InventarioHistorialRow[],
+  sortColumn: "stock" | null,
+  sortDirection: "asc" | "desc",
+): InventarioHistorialRow[] {
+  if (sortColumn !== "stock") return items;
+  const m = sortDirection === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => (Number(a.stockReal) - Number(b.stockReal)) * m);
+}
 
 export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }) {
   const router = useRouter();
@@ -76,6 +92,30 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ stockReal: string; notas: string } | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [busquedaInsumoGlobal, setBusquedaInsumoGlobal] = useState("");
+  const [groupVisibleCount, setGroupVisibleCount] = useState(3);
+  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
+  const [sortColumn, setSortColumn] = useState<"stock" | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const noopSort = useCallback((_: string, __: "asc" | "desc") => {}, []);
+
+  useEffect(() => {
+    setGroupVisibleCount(3);
+  }, [busquedaInsumoGlobal, sortColumn, sortDirection]);
+
+  const onSearchInventario = useCallback((key: string, value: string) => {
+    if (key === "stock") return;
+    setColumnSearch((p) => ({ ...p, [key]: value }));
+    setGroupVisibleCount(3);
+  }, []);
+
+  const onSortInventario = useCallback((key: string, dir: "asc" | "desc") => {
+    if (key !== "stock") return;
+    setSortColumn("stock");
+    setSortDirection(dir);
+  }, []);
 
   const startEdit = useCallback((row: InventarioHistorialRow) => {
     setEditingId(row.id);
@@ -125,134 +165,253 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
     [router],
   );
 
+  const filasTrasInsumoGlobal = useMemo(() => {
+    const q = busquedaInsumoGlobal.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.insumo.nombre.toLowerCase().includes(q));
+  }, [rows, busquedaInsumoGlobal]);
+
+  const filtradasPorColumna = useMemo(() => {
+    return filasTrasInsumoGlobal.filter((row) => {
+      const qI = (columnSearch.insumo ?? "").trim().toLowerCase();
+      if (qI && !row.insumo.nombre.toLowerCase().includes(qI)) return false;
+      const qN = (columnSearch.notas ?? "").trim().toLowerCase();
+      if (qN && !notasCelda(row).toLowerCase().includes(qN)) return false;
+      return true;
+    });
+  }, [filasTrasInsumoGlobal, columnSearch]);
+
+  const grupos = useMemo(() => groupByFecha(filtradasPorColumna), [filtradasPorColumna]);
+  const gruposVis = useMemo(() => grupos.slice(0, groupVisibleCount), [grupos, groupVisibleCount]);
+
   if (rows.length === 0) {
     return <p className="text-sm text-text-tertiary">Aún no tienes conteos registrados.</p>;
   }
 
-  const grupos = groupByFecha(rows);
-
   return (
-    <div className="space-y-8">
-      {grupos.map((g) => {
-        const titulo = formatFechaEncabezado(g.fecha);
-        const capitalized = titulo.charAt(0).toUpperCase() + titulo.slice(1);
-        const n = g.items.length;
-        return (
-          <div key={fechaKeyUtc(g.fecha)}>
-            <h3 className="mb-3 text-sm font-semibold text-text-primary">
-              {capitalized} · {n} {n === 1 ? "insumo contado" : "insumos contados"}
-            </h3>
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface-elevated/80">
-                    <th className="px-3 py-2 font-medium text-text-secondary">Insumo</th>
-                    <th className="px-3 py-2 font-medium text-text-secondary">Stock registrado</th>
-                    <th className="px-3 py-2 font-medium text-text-secondary">Unidad</th>
-                    <th className="px-3 py-2 font-medium text-text-secondary">Notas</th>
-                    <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.items.map((row) => {
-                    const isEditing = editingId === row.id && draft;
-                    const isDeleting = deleteId === row.id;
+    <div className="space-y-4">
+      <div>
+        <label className="text-xs font-medium text-text-secondary" htmlFor="inventario-busq-insumo">
+          Buscar por nombre de insumo
+        </label>
+        <input
+          id="inventario-busq-insumo"
+          type="search"
+          value={busquedaInsumoGlobal}
+          onChange={(e) => setBusquedaInsumoGlobal(e.target.value)}
+          className={`mt-1 ${filtroInsumoClass}`}
+          placeholder="Escribe para filtrar insumos…"
+          autoComplete="off"
+        />
+      </div>
 
-                    return (
-                      <tr key={row.id} className="border-b border-border last:border-0">
-                        <td className="px-3 py-2 text-text-primary">{row.insumo.nombre}</td>
-                        <td className="px-3 py-2">
-                          {isEditing ? (
-                            <input
-                              inputMode="decimal"
-                              type="text"
-                              value={draft!.stockReal}
-                              onChange={(e) => setDraft((d) => (d ? { ...d, stockReal: e.target.value } : d))}
-                              className="w-full max-w-[8rem] rounded border border-border bg-surface-elevated px-2 py-1 tabular-nums text-text-primary"
+      {filasTrasInsumoGlobal.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No hay conteos que coincidan con el nombre de insumo buscado.</p>
+      ) : filtradasPorColumna.length === 0 ? (
+        <p className="text-sm text-text-tertiary">No hay conteos que coincidan con la búsqueda de columnas.</p>
+      ) : grupos.length === 0 ? null : (
+        <div className="space-y-2">
+          <div className="space-y-8">
+            {gruposVis.map((g) => {
+              const titulo = formatFechaEncabezado(g.fecha);
+              const capitalized = titulo.charAt(0).toUpperCase() + titulo.slice(1);
+              const itemsOrdenados = ordenarItemsPorGrupo(g.items, sortColumn, sortDirection);
+              const n = g.items.length;
+              return (
+                <div key={fechaKeyUtc(g.fecha)}>
+                  <h3 className="mb-3 text-sm font-semibold text-text-primary">
+                    {capitalized} · {n} {n === 1 ? "insumo contado" : "insumos contados"}
+                  </h3>
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-surface-elevated/80">
+                          <th className="relative px-3 py-2 font-medium text-text-secondary">
+                            <ColumnHeader
+                              label="Insumo"
+                              columnKey="insumo"
+                              sortColumn={sortColumn}
+                              sortDirection={sortDirection}
+                              onSort={noopSort}
+                              searchValue={columnSearch.insumo ?? ""}
+                              onSearch={onSearchInventario}
+                              sortable={false}
+                              searchable
+                              onClear={() => onSearchInventario("insumo", "")}
                             />
-                          ) : (
-                            <span className="tabular-nums text-text-primary">{formatStock(row.stockReal)}</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-text-secondary">{unitLabel(row.insumo.unidadBase)}</td>
-                        <td className="max-w-[200px] px-3 py-2">
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              maxLength={500}
-                              value={draft!.notas}
-                              onChange={(e) => setDraft((d) => (d ? { ...d, notas: e.target.value } : d))}
-                              className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary"
-                              placeholder="Opcional"
+                          </th>
+                          <th className="relative px-3 py-2 font-medium text-text-secondary">
+                            <ColumnHeader
+                              label="Stock registrado"
+                              columnKey="stock"
+                              sortColumn={sortColumn}
+                              sortDirection={sortDirection}
+                              onSort={onSortInventario}
+                              searchValue=""
+                              onSearch={onSearchInventario}
+                              sortable
+                              searchable={false}
+                              onClear={() => {
+                                if (sortColumn === "stock") {
+                                  setSortColumn(null);
+                                  setSortDirection("asc");
+                                }
+                                onSearchInventario("stock", "");
+                              }}
                             />
-                          ) : (
-                            <span className="truncate text-text-tertiary" title={row.notas ?? undefined}>
-                              {row.notas?.trim() ? row.notas : "—"}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          {isDeleting ? (
-                            <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
-                              <p className="text-xs text-danger">
-                                ¿Eliminar este registro? Esta acción no se puede deshacer.
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => confirmDelete(row.id)}
-                                  disabled={pending}
-                                  className={btnDanger}
-                                >
-                                  Confirmar eliminación
-                                </button>
-                                <button type="button" onClick={() => setDeleteId(null)} className={btnSecondary}>
-                                  Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          ) : isEditing ? (
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => saveEdit(row.id)}
-                                disabled={pending}
-                                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
-                              >
-                                Guardar
-                              </button>
-                              <button type="button" onClick={cancelEdit} disabled={pending} className={btnSecondary}>
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex flex-wrap gap-2">
-                              <button type="button" onClick={() => startEdit(row)} className={btnSecondary}>
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDeleteId(row.id);
-                                  setEditingId(null);
-                                  setDraft(null);
-                                }}
-                                className={btnDanger}
-                              >
-                                Eliminar
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </th>
+                          <th className="px-3 py-2 font-medium text-text-secondary">Unidad</th>
+                          <th className="relative px-3 py-2 font-medium text-text-secondary">
+                            <ColumnHeader
+                              label="Notas"
+                              columnKey="notas"
+                              sortColumn={sortColumn}
+                              sortDirection={sortDirection}
+                              onSort={noopSort}
+                              searchValue={columnSearch.notas ?? ""}
+                              onSearch={onSearchInventario}
+                              sortable={false}
+                              searchable
+                              onClear={() => onSearchInventario("notas", "")}
+                            />
+                          </th>
+                          <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemsOrdenados.map((row) => {
+                          const isEditing = editingId === row.id && draft;
+                          const isDeleting = deleteId === row.id;
+                          return (
+                            <tr key={row.id} className="border-b border-border last:border-0">
+                              <td className="px-3 py-2 text-text-primary">{row.insumo.nombre}</td>
+                              <td className="px-3 py-2">
+                                {isEditing ? (
+                                  <input
+                                    inputMode="decimal"
+                                    type="text"
+                                    value={draft!.stockReal}
+                                    onChange={(e) => setDraft((d) => (d ? { ...d, stockReal: e.target.value } : d))}
+                                    className="w-full max-w-[8rem] rounded border border-border bg-surface-elevated px-2 py-1 tabular-nums text-text-primary"
+                                  />
+                                ) : (
+                                  <span className="tabular-nums text-text-primary">{formatStock(row.stockReal)}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-text-secondary">
+                                {unitLabel(row.insumo.unidadBase)}
+                              </td>
+                              <td className="max-w-[200px] px-3 py-2">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    maxLength={500}
+                                    value={draft!.notas}
+                                    onChange={(e) => setDraft((d) => (d ? { ...d, notas: e.target.value } : d))}
+                                    className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary"
+                                    placeholder="Opcional"
+                                  />
+                                ) : (
+                                  <span
+                                    className="truncate text-text-tertiary"
+                                    title={row.notas ?? undefined}
+                                  >
+                                    {row.notas?.trim() ? row.notas : "—"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                {isDeleting ? (
+                                  <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
+                                    <p className="text-xs text-danger">
+                                      ¿Eliminar este registro? Esta acción no se puede deshacer.
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => confirmDelete(row.id)}
+                                        disabled={pending}
+                                        className={btnDanger}
+                                      >
+                                        Confirmar eliminación
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeleteId(null)}
+                                        className={btnSecondary}
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : isEditing ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => saveEdit(row.id)}
+                                      disabled={pending}
+                                      className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                    >
+                                      Guardar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={cancelEdit}
+                                      disabled={pending}
+                                      className={btnSecondary}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => startEdit(row)}
+                                      className={btnSecondary}
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDeleteId(row.id);
+                                        setEditingId(null);
+                                        setDraft(null);
+                                      }}
+                                      className={btnDanger}
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+          {grupos.length > groupVisibleCount ? (
+            <button
+              type="button"
+              onClick={() => setGroupVisibleCount((v) => v + 3)}
+              className="w-full rounded-b-lg border border-t-0 border-border bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated"
+            >
+              Ver {Math.min(3, grupos.length - groupVisibleCount)} fechas más
+            </button>
+          ) : null}
+          {grupos.length > 0 ? (
+            <p className="text-center text-xs text-text-tertiary">
+              Mostrando {gruposVis.length} de {grupos.length} fechas
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

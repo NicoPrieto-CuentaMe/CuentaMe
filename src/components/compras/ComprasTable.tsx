@@ -8,6 +8,7 @@ import type { ActionState } from "@/app/(main)/configuracion/actions";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "@/app/(main)/configuracion/cop-price";
 import { UNIT_OPTIONS } from "@/app/(main)/configuracion/units";
 import { getFamiliaUnidad, getUnidadesCompatibles } from "@/lib/unidades.config";
+import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
 type Row = Prisma.CompraGetPayload<{
   include: {
@@ -77,6 +78,10 @@ function emptyLine(): LineDraft {
   return { insumoId: "", unidad: "", cantidad: "", totalPagadoDigits: "" };
 }
 
+function notasCompraText(c: Row): string {
+  return c.notas?.trim() ? c.notas : "—";
+}
+
 /** Misma tabla Proveedores (Configuración) */
 const btnEditRow =
   "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
@@ -86,6 +91,9 @@ const btnSaveRow =
   "rounded bg-accent px-2 py-1 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60";
 const btnCancelRow =
   "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
+
+const loadMoreClass =
+  "w-full border border-border border-t-0 bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated";
 
 const idle: ActionState = { ok: true };
 
@@ -115,6 +123,11 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
     lines: LineDraft[];
   } | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
 
   useEffect(() => {
     getComprasCatalogoEdit().then((r) => {
@@ -202,25 +215,157 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
     [draft?.proveedorId, proveedores, insumosCat],
   );
 
+  const filtradas = useMemo(() => rows, [rows]);
+
+  const filtradasPorColumna = useMemo(() => {
+    return filtradas.filter((c) => {
+      const qF = (columnSearch.fecha ?? "").trim().toLowerCase();
+      if (qF && !formatFecha(c.fecha).toLowerCase().includes(qF)) return false;
+      const qP = (columnSearch.proveedor ?? "").trim().toLowerCase();
+      if (qP && !c.proveedor.nombre.toLowerCase().includes(qP)) return false;
+      const qT = (columnSearch.total ?? "").trim().toLowerCase();
+      if (qT && !formatCop(c.total).toLowerCase().includes(qT)) return false;
+      const qN = (columnSearch.notas ?? "").trim().toLowerCase();
+      if (qN && !notasCompraText(c).toLowerCase().includes(qN)) return false;
+      return true;
+    });
+  }, [filtradas, columnSearch]);
+
+  const ordenadas = useMemo(() => {
+    if (!sortColumn) return filtradasPorColumna;
+    const arr = [...filtradasPorColumna];
+    const m = sortDirection === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortColumn) {
+        case "fecha":
+          return (a.fecha.getTime() - b.fecha.getTime()) * m;
+        case "proveedor":
+          return a.proveedor.nombre.localeCompare(b.proveedor.nombre, "es") * m;
+        case "total":
+          return (Number(a.total) - Number(b.total)) * m;
+        case "notas": {
+          const na = a.notas?.trim() ?? "";
+          const nb = b.notas?.trim() ?? "";
+          if (na === "" && nb === "") return 0;
+          if (na === "") return 1 * m;
+          if (nb === "") return -1 * m;
+          return na.localeCompare(nb, "es") * m;
+        }
+        default:
+          return 0;
+      }
+    });
+    return arr;
+  }, [filtradasPorColumna, sortColumn, sortDirection]);
+
+  const aMostrar = useMemo(() => ordenadas.slice(0, visibleCount), [ordenadas, visibleCount]);
+
+  const onSort = useCallback((key: string, dir: "asc" | "desc") => {
+    setSortColumn(key);
+    setSortDirection(dir);
+    setVisibleCount(10);
+  }, []);
+
+  const onSearch = useCallback((key: string, value: string) => {
+    setColumnSearch((prev) => ({ ...prev, [key]: value }));
+    setVisibleCount(10);
+  }, []);
+
   if (rows.length === 0) {
     return <p className="text-sm text-text-tertiary">Aún no hay compras registradas.</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[740px] border-collapse text-left text-sm">
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[740px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border text-text-secondary">
-            <th className="pb-2 pr-3 font-semibold">Fecha</th>
-            <th className="pb-2 pr-3 font-semibold">Proveedor</th>
-            <th className="pb-2 pr-3 font-semibold">Items</th>
-            <th className="pb-2 pr-3 font-semibold">Total</th>
-            <th className="pb-2 pr-3 font-semibold">Notas</th>
-            <th className="pb-2 pr-2 font-semibold">Acciones</th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Fecha"
+                columnKey="fecha"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.fecha ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "fecha") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("fecha", "");
+                }}
+              />
+            </th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Proveedor"
+                columnKey="proveedor"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.proveedor ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "proveedor") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("proveedor", "");
+                }}
+              />
+            </th>
+            <th className="pb-2 pr-3 pl-1 font-semibold">Items</th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Total"
+                columnKey="total"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.total ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "total") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("total", "");
+                }}
+              />
+            </th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Notas"
+                columnKey="notas"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.notas ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "notas") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("notas", "");
+                }}
+              />
+            </th>
+            <th className="pb-2 pr-2 pl-1 font-semibold">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border text-text-primary">
-          {rows.map((c) => {
+          {filtradasPorColumna.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-3 py-6 text-center text-sm text-text-tertiary">
+                No hay compras que coincidan con la búsqueda de columnas.
+              </td>
+            </tr>
+          ) : (
+            aMostrar.map((c) => {
             const nItems = c.detalles.length;
             const isEditing = editingId === c.id && draft;
             const todayMax = todayLocalISO();
@@ -354,9 +499,25 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                 ) : null}
               </Fragment>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
+        {filtradasPorColumna.length > 0 && ordenadas.length > visibleCount ? (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + 10)}
+            className={loadMoreClass}
+          >
+            Ver {Math.min(10, ordenadas.length - visibleCount)} más
+          </button>
+        ) : null}
+      </div>
+      {filtradasPorColumna.length > 0 ? (
+        <p className="text-center text-xs text-text-tertiary">
+          Mostrando {aMostrar.length} de {ordenadas.length} compras
+        </p>
+      ) : null}
     </div>
   );
 }

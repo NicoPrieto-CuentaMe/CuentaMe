@@ -12,6 +12,7 @@ import {
   TIPO_MESA,
   tipoDomicilio,
 } from "@/lib/ventas-constants";
+import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
 type Row = Prisma.VentaGetPayload<{
   include: {
@@ -66,6 +67,9 @@ const btnSaveRow =
 const btnCancelRow =
   "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
 
+const loadMoreClass =
+  "w-full border border-border border-t-0 bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated";
+
 const idle: ActionState = { ok: true };
 
 export function VentasHistorial({ rows }: { rows: Row[] }) {
@@ -82,6 +86,11 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
     lines: { platoId: string; cantidad: number }[];
   } | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
 
   useEffect(() => {
     getPlatosCatalogoVenta().then((r) => {
@@ -159,26 +168,173 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
     return s;
   }, [draft, precioByPlato]);
 
+  const filtradas = useMemo(() => rows, [rows]);
+
+  const filtradasPorColumna = useMemo(() => {
+    return filtradas.filter((v) => {
+      const qFecha = (columnSearch.fecha ?? "").trim().toLowerCase();
+      if (qFecha && !formatFecha(v.fecha).toLowerCase().includes(qFecha)) return false;
+      const qHora = (columnSearch.hora ?? "").trim().toLowerCase();
+      if (qHora && !v.hora.trim().toLowerCase().includes(qHora)) return false;
+      const qTipo = (columnSearch.tipo ?? "").trim().toLowerCase();
+      if (qTipo && !v.tipo.toLowerCase().includes(qTipo)) return false;
+      const qTotal = (columnSearch.total ?? "").trim().toLowerCase();
+      if (qTotal && !formatCop(v.total).toLowerCase().includes(qTotal)) return false;
+      const qMet = (columnSearch.metodoPago ?? "").trim().toLowerCase();
+      if (qMet && !v.metodoPago.toLowerCase().includes(qMet)) return false;
+      return true;
+    });
+  }, [filtradas, columnSearch]);
+
+  const ordenadas = useMemo(() => {
+    if (!sortColumn) return filtradasPorColumna;
+    const arr = [...filtradasPorColumna];
+    const m = sortDirection === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortColumn) {
+        case "fecha":
+          return (a.fecha.getTime() - b.fecha.getTime()) * m;
+        case "hora":
+          return a.hora.trim().localeCompare(b.hora.trim(), "es") * m;
+        case "tipo":
+          return a.tipo.localeCompare(b.tipo, "es") * m;
+        case "total":
+          return (Number(a.total) - Number(b.total)) * m;
+        case "metodoPago":
+          return a.metodoPago.localeCompare(b.metodoPago, "es") * m;
+        default:
+          return 0;
+      }
+    });
+    return arr;
+  }, [filtradasPorColumna, sortColumn, sortDirection]);
+
+  const aMostrar = useMemo(() => ordenadas.slice(0, visibleCount), [ordenadas, visibleCount]);
+
+  const onSort = useCallback((key: string, dir: "asc" | "desc") => {
+    setSortColumn(key);
+    setSortDirection(dir);
+    setVisibleCount(10);
+  }, []);
+
+  const onSearch = useCallback((key: string, value: string) => {
+    setColumnSearch((prev) => ({ ...prev, [key]: value }));
+    setVisibleCount(10);
+  }, []);
+
   if (rows.length === 0) {
     return <p className="text-sm text-text-tertiary">Aún no hay ventas registradas.</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[780px] border-collapse text-left text-sm">
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[780px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border text-text-secondary">
-            <th className="pb-2 pr-3 font-semibold">Fecha</th>
-            <th className="pb-2 pr-3 font-semibold">Hora</th>
-            <th className="pb-2 pr-3 font-semibold">Tipo</th>
-            <th className="pb-2 pr-3 font-semibold">Items</th>
-            <th className="pb-2 pr-3 font-semibold">Total</th>
-            <th className="pb-2 pr-3 font-semibold">Método pago</th>
-            <th className="pb-2 pr-2 font-semibold">Acciones</th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Fecha"
+                columnKey="fecha"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.fecha ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "fecha") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("fecha", "");
+                }}
+              />
+            </th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Hora"
+                columnKey="hora"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.hora ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "hora") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("hora", "");
+                }}
+              />
+            </th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Tipo"
+                columnKey="tipo"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.tipo ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "tipo") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("tipo", "");
+                }}
+              />
+            </th>
+            <th className="pb-2 pr-3 pl-1 font-semibold">Items</th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Total"
+                columnKey="total"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.total ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "total") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("total", "");
+                }}
+              />
+            </th>
+            <th className="relative pb-2 pr-3 pl-1 font-semibold">
+              <ColumnHeader
+                label="Método pago"
+                columnKey="metodoPago"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={onSort}
+                searchValue={columnSearch.metodoPago ?? ""}
+                onSearch={onSearch}
+                onClear={() => {
+                  if (sortColumn === "metodoPago") {
+                    setSortColumn(null);
+                    setSortDirection("asc");
+                  }
+                  onSearch("metodoPago", "");
+                }}
+              />
+            </th>
+            <th className="pb-2 pr-2 pl-1 font-semibold">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border text-text-primary">
-          {rows.map((v) => {
+          {filtradasPorColumna.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="px-3 py-6 text-center text-sm text-text-tertiary">
+                No hay ventas que coincidan con la búsqueda de columnas.
+              </td>
+            </tr>
+          ) : (
+            aMostrar.map((v) => {
             const nItems = v.detalles.reduce((s, d) => s + d.cantidad, 0);
             const isEditing = editingId === v.id && draft;
             const todayMax = new Date().toISOString().slice(0, 10);
@@ -424,9 +580,25 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                 ) : null}
               </Fragment>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
+        {filtradasPorColumna.length > 0 && ordenadas.length > visibleCount ? (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + 10)}
+            className={loadMoreClass}
+          >
+            Ver {Math.min(10, ordenadas.length - visibleCount)} más
+          </button>
+        ) : null}
+      </div>
+      {filtradasPorColumna.length > 0 ? (
+        <p className="text-center text-xs text-text-tertiary">
+          Mostrando {aMostrar.length} de {ordenadas.length} ventas
+        </p>
+      ) : null}
     </div>
   );
 }
