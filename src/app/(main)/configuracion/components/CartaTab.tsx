@@ -86,33 +86,41 @@ function CartaGroupHeading({ title, count }: { title: string; count: number }) {
   );
 }
 
-function buildMenuSections(platos: CartaPlatoRow[], categorias: CartaCategoriaRow[]) {
+type MenuSectionItem =
+  | { tipoItem: "PLATO"; item: CartaPlatoRow }
+  | { tipoItem: "COMBO"; item: ComboConComponentesRow };
+
+function buildMenuSections(platos: CartaPlatoRow[], combos: ComboConComponentesRow[], categorias: CartaCategoriaRow[]) {
   const knownCatIds = new Set(categorias.map((c) => c.id));
-  const byId = new Map<string, CartaPlatoRow[]>();
-  for (const p of platos) {
-    const cid = p.categoriaId ?? "__sin__";
+  const byId = new Map<string, MenuSectionItem[]>();
+
+  const push = (cid: string, entry: MenuSectionItem) => {
     if (!byId.has(cid)) byId.set(cid, []);
-    byId.get(cid)!.push(p);
-  }
+    byId.get(cid)!.push(entry);
+  };
+
+  for (const p of platos) push(p.categoriaId ?? "__sin__", { tipoItem: "PLATO", item: p });
+  for (const c of combos) push(c.categoriaId ?? "__sin__", { tipoItem: "COMBO", item: c });
+
   for (const arr of Array.from(byId.values())) {
-    arr.sort((a: CartaPlatoRow, b: CartaPlatoRow) => a.nombre.localeCompare(b.nombre, "es"));
+    arr.sort((a, b) => a.item.nombre.localeCompare(b.item.nombre, "es"));
   }
 
-  const sections: { key: string; titulo: string; count: number; platos: CartaPlatoRow[] }[] = [];
+  const sections: { key: string; titulo: string; count: number; items: MenuSectionItem[] }[] = [];
   for (const c of categorias) {
     const list = byId.get(c.id) ?? [];
     if (list.length > 0) {
-      sections.push({ key: c.id, titulo: c.nombre, count: list.length, platos: list });
+      sections.push({ key: c.id, titulo: c.nombre, count: list.length, items: list });
     }
   }
   for (const [cid, list] of Array.from(byId.entries())) {
     if (cid === "__sin__" || knownCatIds.has(cid) || list.length === 0) continue;
-    const titulo = list[0]?.categoria?.nombre?.trim() || "Categoría";
-    sections.push({ key: cid, titulo, count: list.length, platos: list });
+    const titulo = list[0]?.item?.categoria?.nombre?.trim() || "Categoría";
+    sections.push({ key: cid, titulo, count: list.length, items: list });
   }
   const sin = byId.get("__sin__") ?? [];
   if (sin.length > 0) {
-    sections.push({ key: "__sin__", titulo: "Sin categoría", count: sin.length, platos: sin });
+    sections.push({ key: "__sin__", titulo: "Sin categoría", count: sin.length, items: sin });
   }
   return sections;
 }
@@ -348,28 +356,49 @@ function CreatePlatoModal({
   categorias: CartaCategoriaRow[];
 }) {
   const router = useRouter();
-  const [state, formAction] = useFormState(createPlato, formIdleState);
+
+  const [tipoCrear, setTipoCrear] = useState<"PLATO" | "COMBO">("PLATO");
+
+  const [statePlato, formActionPlato] = useFormState(createPlato, formIdleState);
   const [precioDisplay, setPrecioDisplay] = useState("");
   const [active, setActive] = useState(true);
   const [tieneReceta, setTieneReceta] = useState(true);
 
+  const [stateCombo, formActionCombo] = useFormState(addCombo, formIdleState);
+  const [precioComboDisplay, setPrecioComboDisplay] = useState("");
+  const [comboActiveNew, setComboActiveNew] = useState(true);
+
   useEffect(() => {
     if (!open) return;
+    setTipoCrear("PLATO");
     setPrecioDisplay("");
     setActive(true);
     setTieneReceta(true);
+    setPrecioComboDisplay("");
+    setComboActiveNew(true);
   }, [open]);
 
   useEffect(() => {
-    if (state.ok && state.message) {
+    if (statePlato.ok && statePlato.message) {
       router.refresh();
       onClose();
       setPrecioDisplay("");
     }
-  }, [state.ok, state.message, onClose, router]);
+  }, [statePlato.ok, statePlato.message, onClose, router]);
 
   const precioNumerico = useMemo(() => digitsToSalePriceString(precioDisplay), [precioDisplay]);
   const precioFormateado = useMemo(() => formatCopFromDigits(precioDisplay), [precioDisplay]);
+
+  useEffect(() => {
+    if (stateCombo.ok && stateCombo.message) {
+      router.refresh();
+      onClose();
+      setPrecioComboDisplay("");
+    }
+  }, [stateCombo.ok, stateCombo.message, onClose, router]);
+
+  const precioComboNumerico = useMemo(() => digitsToSalePriceString(precioComboDisplay), [precioComboDisplay]);
+  const precioComboFormateado = useMemo(() => formatCopFromDigits(precioComboDisplay), [precioComboDisplay]);
 
   if (!open) return null;
 
@@ -377,90 +406,193 @@ function CreatePlatoModal({
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-20">
       <button type="button" className="fixed inset-0 cursor-default" aria-label="Cerrar" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-lg" role="dialog">
-        <h3 className="text-lg font-semibold text-text-primary">Crear plato</h3>
-        <form
-          action={formAction}
-          className="mt-4 grid gap-4"
-          onSubmit={(e) => {
-            if (!precioNumerico) e.preventDefault();
-          }}
-        >
-          <input type="hidden" name="active" value={active ? "true" : "false"} />
-          <input type="hidden" name="tieneReceta" value={tieneReceta ? "true" : "false"} />
-          <div>
-            <label className="text-sm font-medium text-text-secondary">Nombre *</label>
-            <input
-              name="name"
-              required
-              className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
-              placeholder="Ej: Hamburguesa"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-text-secondary">Categoría</label>
-            <select
-              name="categoriaId"
-              defaultValue=""
-              className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            >
-              <option value="">Sin categoría</option>
-              {categorias.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-text-secondary">Precio de venta *</label>
-            <input type="hidden" name="salePrice" value={precioNumerico} />
-            <input
-              required
-              inputMode="numeric"
-              value={precioFormateado}
-              onChange={(e) => setPrecioDisplay(e.target.value.replace(/[^\d]/g, ""))}
-              className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
-              placeholder="Ej: $ 25.000"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-6">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
+        <h3 className="text-lg font-semibold text-text-primary">Crear</h3>
+
+        <div className="mt-4 inline-flex rounded-lg border border-border bg-surface-elevated p-1">
+          <button
+            type="button"
+            onClick={() => setTipoCrear("PLATO")}
+            className={`min-h-[44px] rounded-md px-4 py-2 text-sm font-semibold sm:min-h-0 ${
+              tipoCrear === "PLATO" ? "bg-accent text-white" : "border border-border text-text-secondary"
+            }`}
+          >
+            Plato
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoCrear("COMBO")}
+            className={`min-h-[44px] rounded-md px-4 py-2 text-sm font-semibold sm:min-h-0 ${
+              tipoCrear === "COMBO" ? "bg-accent text-white" : "border border-border text-text-secondary"
+            }`}
+          >
+            Combo
+          </button>
+        </div>
+
+        {tipoCrear === "PLATO" ? (
+          <form
+            action={formActionPlato}
+            className="mt-4 grid gap-4"
+            onSubmit={(e) => {
+              if (!precioNumerico) e.preventDefault();
+            }}
+          >
+            <input type="hidden" name="active" value={active ? "true" : "false"} />
+            <input type="hidden" name="tieneReceta" value={tieneReceta ? "true" : "false"} />
+            <div>
+              <label className="text-sm font-medium text-text-secondary">Nombre *</label>
               <input
-                type="checkbox"
-                checked={tieneReceta}
-                onChange={(e) => setTieneReceta(e.target.checked)}
-                className="h-4 w-4 rounded border-border text-accent"
+                name="name"
+                required
+                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+                placeholder="Ej: Hamburguesa"
               />
-              ¿Tiene receta?
-            </label>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary">Categoría</label>
+              <select
+                name="categoriaId"
+                defaultValue=""
+                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              >
+                <option value="">Sin categoría</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary">Precio de venta *</label>
+              <input type="hidden" name="salePrice" value={precioNumerico} />
+              <input
+                required
+                inputMode="numeric"
+                value={precioFormateado}
+                onChange={(e) => setPrecioDisplay(e.target.value.replace(/[^\d]/g, ""))}
+                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+                placeholder="Ej: $ 25.000"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-6">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
+                <input
+                  type="checkbox"
+                  checked={tieneReceta}
+                  onChange={(e) => setTieneReceta(e.target.checked)}
+                  className="h-4 w-4 rounded border-border text-accent"
+                />
+                ¿Tiene receta?
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="h-4 w-4 rounded border-border text-accent"
+                />
+                Activo
+              </label>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-border"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!precioNumerico}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                Crear plato
+              </button>
+            </div>
+            <Feedback state={statePlato} />
+          </form>
+        ) : (
+          <form
+            action={formActionCombo}
+            className="mt-4 grid gap-4"
+            onSubmit={(e) => {
+              if (!precioComboNumerico) e.preventDefault();
+            }}
+          >
+            <div>
+              <label className="text-sm font-medium text-text-secondary">Nombre *</label>
+              <input
+                name="nombre"
+                required
+                maxLength={100}
+                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+                placeholder="Ej: Combo familiar"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary">Precio de venta *</label>
+              <input type="hidden" name="precioVenta" value={precioComboNumerico} />
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                  $
+                </span>
+                <input
+                  required
+                  inputMode="numeric"
+                  type="text"
+                  value={precioComboFormateado}
+                  onChange={(e) => setPrecioComboDisplay(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary">Categoría</label>
+              <select
+                name="categoriaId"
+                defaultValue=""
+                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              >
+                <option value="">Sin categoría</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <input type="hidden" name="active" value={comboActiveNew ? "true" : "false"} />
             <label className="flex cursor-pointer items-center gap-2 text-sm text-text-primary">
               <input
                 type="checkbox"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
+                checked={comboActiveNew}
+                onChange={(e) => setComboActiveNew(e.target.checked)}
                 className="h-4 w-4 rounded border-border text-accent"
               />
               Activo
             </label>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-border"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={!precioNumerico}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
-            >
-              Crear plato
-            </button>
-          </div>
-          <Feedback state={state} />
-        </form>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-border"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!precioComboNumerico}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                Crear combo
+              </button>
+            </div>
+            <Feedback state={stateCombo} />
+          </form>
+        )}
       </div>
     </div>
   );
@@ -651,7 +783,6 @@ function DeletePlatoModal({
   );
 }
 
-const comboFormInitial: ActionState = { ok: true };
 const comboActionIdle: ActionState = { ok: true };
 
 const comboInputClass =
@@ -662,11 +793,6 @@ const comboBtnDanger =
   "inline-flex min-h-[44px] items-center justify-center rounded-lg border border-danger bg-danger-light px-3 py-2 text-sm font-medium text-danger hover:opacity-90 sm:min-h-0";
 const comboBtnAccent =
   "inline-flex min-h-[44px] items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover sm:min-h-0";
-
-function ComboFieldError({ state, field }: { state: ActionState; field: string }) {
-  if (!("ok" in state) || state.ok || state.field !== field) return null;
-  return <p className="mt-1 text-xs text-danger">{state.message}</p>;
-}
 
 function CombosSection({
   combos,
@@ -679,10 +805,6 @@ function CombosSection({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [addComboState, addComboAction] = useFormState(addCombo, comboFormInitial);
-  const [addComboKey, setAddComboKey] = useState(0);
-  const [precioComboDigits, setPrecioComboDigits] = useState("");
-  const [comboActiveNew, setComboActiveNew] = useState(true);
 
   const [expandedComboId, setExpandedComboId] = useState<string | null>(null);
   const [editingComboId, setEditingComboId] = useState<string | null>(null);
@@ -701,23 +823,12 @@ function CombosSection({
   const [itemActionError, setItemActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (addComboState.ok && addComboState.message) {
-      setAddComboKey((k) => k + 1);
-      setPrecioComboDigits("");
-      setComboActiveNew(true);
-      router.refresh();
-    }
-  }, [addComboState, router]);
-
-  useEffect(() => {
     setAddItemPlatoId("");
     setAddItemCantidad(1);
     setAddItemError(null);
     setItemActionError(null);
   }, [expandedComboId]);
 
-  const precioComboHidden = useMemo(() => digitsToSalePriceString(precioComboDigits), [precioComboDigits]);
-  const precioComboFmt = useMemo(() => formatCopFromDigits(precioComboDigits), [precioComboDigits]);
   const editPrecioFmt = formatCopFromDigits(editPrecioDigits);
 
   const beginEditCombo = useCallback((c: ComboConComponentesRow) => {
@@ -856,91 +967,6 @@ function CombosSection({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-text-primary">Nuevo combo</h3>
-        <p className="mt-1 text-sm text-text-tertiary">Crea un combo con precio propio; luego agrega platos del menú como componentes.</p>
-
-        <form key={addComboKey} action={addComboAction} className="mt-4 space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="text-sm font-medium text-text-secondary" htmlFor="combo-nombre-new">
-                Nombre *
-              </label>
-              <input
-                id="combo-nombre-new"
-                name="nombre"
-                type="text"
-                maxLength={100}
-                required
-                className={`mt-1 ${comboInputClass}`}
-                placeholder="Ej: Combo familiar"
-              />
-              <ComboFieldError state={addComboState} field="nombre" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-text-secondary" htmlFor="combo-precio-new">
-                Precio de venta *
-              </label>
-              <input type="hidden" name="precioVenta" value={precioComboHidden} />
-              <div className="relative mt-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
-                  $
-                </span>
-                <input
-                  id="combo-precio-new"
-                  inputMode="numeric"
-                  type="text"
-                  value={precioComboFmt}
-                  onChange={(e) => setPrecioComboDigits(e.target.value.replace(/[^\d]/g, ""))}
-                  className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
-                  placeholder="0"
-                  required
-                />
-              </div>
-              <ComboFieldError state={addComboState} field="precioVenta" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-text-secondary" htmlFor="combo-cat-new">
-                Categoría
-              </label>
-              <select
-                id="combo-cat-new"
-                name="categoriaId"
-                defaultValue=""
-                className={`mt-1 ${comboInputClass}`}
-              >
-                <option value="">Sin categoría</option>
-                {categorias.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-              <ComboFieldError state={addComboState} field="categoriaId" />
-            </div>
-          </div>
-          <input type="hidden" name="active" value={comboActiveNew ? "true" : "false"} />
-          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-text-primary">
-            <input
-              type="checkbox"
-              checked={comboActiveNew}
-              onChange={(e) => setComboActiveNew(e.target.checked)}
-              className="h-4 w-4 rounded border-border text-accent"
-            />
-            Activo
-          </label>
-          <button type="submit" disabled={!precioComboHidden} className={comboBtnAccent}>
-            Agregar combo
-          </button>
-          {addComboState.ok && addComboState.message ? (
-            <p className="text-sm text-accent">{addComboState.message}</p>
-          ) : null}
-          {addComboState.ok === false && !addComboState.field ? (
-            <p className="text-sm text-danger">{addComboState.message}</p>
-          ) : null}
-        </form>
-      </section>
-
       <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         <h3 className="text-base font-semibold text-text-primary">Mis combos</h3>
         <p className="mt-1 text-sm text-text-tertiary">Expande cada combo para ver componentes y cantidades.</p>
@@ -1257,7 +1283,7 @@ export function CartaTab({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [recipePlatoId, setRecipePlatoId] = useState<string | null>(null);
 
-  const menuSections = useMemo(() => buildMenuSections(platos, categorias), [platos, categorias]);
+  const menuSections = useMemo(() => buildMenuSections(platos, combos, categorias), [platos, combos, categorias]);
 
   /** Platos marcados con receta obligatoria pero sin filas de receta aún. */
   const platosNecesitanReceta = useMemo(() => {
@@ -1421,7 +1447,7 @@ export function CartaTab({
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-base font-semibold text-text-primary">Menú</h3>
-            <p className="mt-1 text-sm text-text-tertiary">Platos agrupados por categoría.</p>
+            <p className="mt-1 text-sm text-text-tertiary">Platos y combos agrupados por categoría.</p>
           </div>
           <button
             type="button"
@@ -1431,7 +1457,7 @@ export function CartaTab({
             }}
             className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-hover"
           >
-            Crear plato
+            Crear plato o combo
           </button>
         </div>
 
@@ -1445,22 +1471,26 @@ export function CartaTab({
               <div key={sec.key}>
                 <CartaGroupHeading title={sec.titulo} count={sec.count} />
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {sec.platos.map((p) => {
-                    const st = cardStatus(p);
-                    const clickable = p.tieneReceta;
+                  {sec.items.map((entry) => {
+                    const isPlato = entry.tipoItem === "PLATO";
+                    const dotClass =
+                      entry.tipoItem === "PLATO" ? statusDot[cardStatus(entry.item)] : "bg-text-tertiary";
+                    const clickable = entry.tipoItem === "PLATO" ? entry.item.tieneReceta : false;
                     return (
                       <div
-                        key={p.id}
-                        id={`carta-plato-${p.id}`}
+                        key={entry.item.id}
+                        id={isPlato ? `carta-plato-${entry.item.id}` : undefined}
                         role={clickable ? "button" : undefined}
                         tabIndex={clickable ? 0 : undefined}
-                        title={!clickable ? "Este plato no requiere receta" : undefined}
-                        onClick={() => handleCardClick(p)}
+                        title={!clickable && isPlato ? "Este plato no requiere receta" : undefined}
+                        onClick={() => {
+                          if (entry.tipoItem === "PLATO") handleCardClick(entry.item);
+                        }}
                         onKeyDown={(e) => {
                           if (!clickable) return;
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            handleCardClick(p);
+                            if (entry.tipoItem === "PLATO") handleCardClick(entry.item);
                           }
                         }}
                         className={`relative rounded-xl border border-border bg-surface p-4 pt-10 shadow-sm transition-shadow ${
@@ -1468,73 +1498,85 @@ export function CartaTab({
                         }`}
                       >
                         <span
-                          className={`absolute left-3 top-3 h-2.5 w-2.5 rounded-full ${statusDot[st]}`}
+                          className={`absolute left-3 top-3 h-2.5 w-2.5 rounded-full ${dotClass}`}
                           title={
-                            st === "complete"
-                              ? "Receta completa"
-                              : st === "needsRecipe"
-                                ? "Falta completar la receta"
-                                : "Sin receta"
+                            entry.tipoItem === "PLATO"
+                              ? cardStatus(entry.item) === "complete"
+                                ? "Receta completa"
+                                : cardStatus(entry.item) === "needsRecipe"
+                                  ? "Falta completar la receta"
+                                  : "Sin receta"
+                              : undefined
                           }
                         />
                         <div className="absolute right-2 top-2 flex items-start gap-1">
                           <span
                             className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                              p.active ? "bg-accent-light text-accent" : "bg-surface-elevated text-text-tertiary"
+                              entry.item.active ? "bg-accent-light text-accent" : "bg-surface-elevated text-text-tertiary"
                             }`}
                           >
-                            {p.active ? "Activo" : "Inactivo"}
+                            {entry.item.active ? "Activo" : "Inactivo"}
                           </span>
-                          <button
-                            type="button"
-                            className="rounded-md px-2 py-1 text-lg leading-none text-text-secondary hover:bg-surface-elevated"
-                            aria-label="Más opciones"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMenuId((prev) => (prev === p.id ? null : p.id));
-                            }}
-                          >
-                            ⋯
-                          </button>
-                          {menuId === p.id ? (
+                          {entry.tipoItem === "COMBO" ? (
+                            <span className="mt-0.5 rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-accent">
+                              Combo
+                            </span>
+                          ) : null}
+
+                          {isPlato ? (
                             <>
                               <button
                                 type="button"
-                                className="fixed inset-0 z-10 cursor-default"
-                                aria-label="Cerrar menú"
-                                onClick={() => setMenuId(null)}
-                              />
-                              <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-lg border border-border bg-surface py-1 shadow-lg">
-                                <button
-                                  type="button"
-                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-border"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMenuId(null);
-                                    setEditModalKey((k) => k + 1);
-                                    setEditPlato(p);
-                                  }}
-                                >
-                                  Editar plato
-                                </button>
-                                <button
-                                  type="button"
-                                  className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger-light"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMenuId(null);
-                                    setDeletePlato(p);
-                                  }}
-                                >
-                                  Eliminar plato
-                                </button>
-                              </div>
+                                className="rounded-md px-2 py-1 text-lg leading-none text-text-secondary hover:bg-surface-elevated"
+                                aria-label="Más opciones"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (entry.tipoItem === "PLATO") setMenuId((prev) => (prev === entry.item.id ? null : entry.item.id));
+                                }}
+                              >
+                                ⋯
+                              </button>
+                              {entry.tipoItem === "PLATO" && menuId === entry.item.id ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="fixed inset-0 z-10 cursor-default"
+                                    aria-label="Cerrar menú"
+                                    onClick={() => setMenuId(null)}
+                                  />
+                                  <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-lg border border-border bg-surface py-1 shadow-lg">
+                                    <button
+                                      type="button"
+                                      className="block w-full px-3 py-2 text-left text-sm hover:bg-border"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMenuId(null);
+                                        setEditModalKey((k) => k + 1);
+                                        setEditPlato(entry.item);
+                                      }}
+                                    >
+                                      Editar plato
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger-light"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMenuId(null);
+                                        setDeletePlato(entry.item);
+                                      }}
+                                    >
+                                      Eliminar plato
+                                    </button>
+                                  </div>
+                                </>
+                              ) : null}
                             </>
                           ) : null}
                         </div>
                         <div className="pr-14">
-                          <div className="text-sm font-semibold text-text-primary">{p.nombre}</div>
-                          <div className="mt-1 text-sm text-text-secondary">{formatPrecioCOP(p.precioVenta)}</div>
+                          <div className="text-sm font-semibold text-text-primary">{entry.item.nombre}</div>
+                          <div className="mt-1 text-sm text-text-secondary">{formatPrecioCOP(entry.item.precioVenta)}</div>
                         </div>
                       </div>
                     );
