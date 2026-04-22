@@ -76,14 +76,37 @@ const filtroInsumoClass =
 
 const idle: ActionState = { ok: true };
 
-function ordenarItemsPorGrupo(
-  items: InventarioHistorialRow[],
-  sortColumn: "stock" | null,
-  sortDirection: "asc" | "desc",
-): InventarioHistorialRow[] {
-  if (sortColumn !== "stock") return items;
-  const m = sortDirection === "asc" ? 1 : -1;
-  return [...items].sort((a, b) => (Number(a.stockReal) - Number(b.stockReal)) * m);
+type ItemInventarioPlano = {
+  row: InventarioHistorialRow;
+  grupoFecha: Date;
+  grupoLabel: string;
+};
+
+function labelGrupoDesdeFecha(fecha: Date): string {
+  const t = formatFechaEncabezado(fecha);
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function reagruparItemsVisiblesPorFecha(vis: ItemInventarioPlano[]): {
+  key: string;
+  label: string;
+  fecha: Date;
+  filas: InventarioHistorialRow[];
+}[] {
+  const orderKeys: string[] = [];
+  const map = new Map<string, { label: string; fecha: Date; filas: ItemInventarioPlano[] }>();
+  for (const p of vis) {
+    const k = fechaKeyUtc(p.row.fecha);
+    if (!map.has(k)) {
+      orderKeys.push(k);
+      map.set(k, { label: p.grupoLabel, fecha: p.grupoFecha, filas: [] });
+    }
+    map.get(k)!.filas.push(p);
+  }
+  return orderKeys.map((k) => {
+    const b = map.get(k)!;
+    return { key: k, label: b.label, fecha: b.fecha, filas: b.filas.map((x) => x.row) };
+  });
 }
 
 export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }) {
@@ -94,7 +117,7 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
   const [pending, startTransition] = useTransition();
 
   const [busquedaInsumoGlobal, setBusquedaInsumoGlobal] = useState("");
-  const [groupVisibleCount, setGroupVisibleCount] = useState(3);
+  const [visibleCount, setVisibleCount] = useState(10);
   const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
   const [sortColumn, setSortColumn] = useState<"stock" | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -102,13 +125,12 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
   const noopSort = useCallback((_: string, __: "asc" | "desc") => {}, []);
 
   useEffect(() => {
-    setGroupVisibleCount(3);
-  }, [busquedaInsumoGlobal, sortColumn, sortDirection]);
+    setVisibleCount(10);
+  }, [busquedaInsumoGlobal, columnSearch, sortColumn, sortDirection]);
 
   const onSearchInventario = useCallback((key: string, value: string) => {
     if (key === "stock") return;
     setColumnSearch((p) => ({ ...p, [key]: value }));
-    setGroupVisibleCount(3);
   }, []);
 
   const onSortInventario = useCallback((key: string, dir: "asc" | "desc") => {
@@ -182,7 +204,32 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
   }, [filasTrasInsumoGlobal, columnSearch]);
 
   const grupos = useMemo(() => groupByFecha(filtradasPorColumna), [filtradasPorColumna]);
-  const gruposVis = useMemo(() => grupos.slice(0, groupVisibleCount), [grupos, groupVisibleCount]);
+
+  const itemsPlanos = useMemo((): ItemInventarioPlano[] => {
+    const planos: ItemInventarioPlano[] = grupos.flatMap((g) => {
+      const grupoLabel = labelGrupoDesdeFecha(g.fecha);
+      return g.items.map((row) => ({
+        row,
+        grupoFecha: g.fecha,
+        grupoLabel,
+      }));
+    });
+    if (sortColumn !== "stock") return planos;
+    const m = sortDirection === "asc" ? 1 : -1;
+    return [...planos].sort(
+      (a, b) => (Number(a.row.stockReal) - Number(b.row.stockReal)) * m,
+    );
+  }, [grupos, sortColumn, sortDirection]);
+
+  const itemsVisibles = useMemo(
+    () => itemsPlanos.slice(0, visibleCount),
+    [itemsPlanos, visibleCount],
+  );
+
+  const bloquesVista = useMemo(
+    () => reagruparItemsVisiblesPorFecha(itemsVisibles),
+    [itemsVisibles],
+  );
 
   if (rows.length === 0) {
     return <p className="text-sm text-text-tertiary">Aún no tienes conteos registrados.</p>;
@@ -209,18 +256,15 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
         <p className="text-sm text-text-tertiary">No hay conteos que coincidan con el nombre de insumo buscado.</p>
       ) : filtradasPorColumna.length === 0 ? (
         <p className="text-sm text-text-tertiary">No hay conteos que coincidan con la búsqueda de columnas.</p>
-      ) : grupos.length === 0 ? null : (
+      ) : itemsPlanos.length === 0 ? null : (
         <div className="space-y-2">
           <div className="space-y-8">
-            {gruposVis.map((g) => {
-              const titulo = formatFechaEncabezado(g.fecha);
-              const capitalized = titulo.charAt(0).toUpperCase() + titulo.slice(1);
-              const itemsOrdenados = ordenarItemsPorGrupo(g.items, sortColumn, sortDirection);
-              const n = g.items.length;
+            {bloquesVista.map((bloque) => {
+              const n = bloque.filas.length;
               return (
-                <div key={fechaKeyUtc(g.fecha)}>
+                <div key={bloque.key}>
                   <h3 className="mb-3 text-sm font-semibold text-text-primary">
-                    {capitalized} · {n} {n === 1 ? "insumo contado" : "insumos contados"}
+                    {bloque.label} · {n} {n === 1 ? "insumo contado" : "insumos contados"}
                   </h3>
                   <div className="overflow-x-auto rounded-lg border border-border">
                     <table className="w-full min-w-[640px] text-left text-sm">
@@ -279,7 +323,7 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
                         </tr>
                       </thead>
                       <tbody>
-                        {itemsOrdenados.map((row) => {
+                        {bloque.filas.map((row) => {
                           const isEditing = editingId === row.id && draft;
                           const isDeleting = deleteId === row.id;
                           return (
@@ -396,18 +440,18 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
               );
             })}
           </div>
-          {grupos.length > groupVisibleCount ? (
+          {itemsPlanos.length > visibleCount ? (
             <button
               type="button"
-              onClick={() => setGroupVisibleCount((v) => v + 3)}
+              onClick={() => setVisibleCount((v) => v + 10)}
               className="w-full rounded-b-lg border border-t-0 border-border bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated"
             >
-              Ver {Math.min(3, grupos.length - groupVisibleCount)} fechas más
+              Ver {Math.min(10, itemsPlanos.length - visibleCount)} más
             </button>
           ) : null}
-          {grupos.length > 0 ? (
+          {itemsPlanos.length > 0 ? (
             <p className="text-center text-xs text-text-tertiary">
-              Mostrando {gruposVis.length} de {grupos.length} fechas
+              Mostrando {itemsVisibles.length} de {itemsPlanos.length} insumos registrados
             </p>
           ) : null}
         </div>
