@@ -21,11 +21,27 @@ function fechaKeyUtc(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+function fechaToInputString(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function formatFechaEncabezado(d: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: "UTC",
+  }).format(d);
+}
+
+function formatFechaCelda(d: Date): string {
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
     timeZone: "UTC",
   }).format(d);
 }
@@ -113,7 +129,7 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ stockReal: string; notas: string } | null>(null);
+  const [draft, setDraft] = useState<{ fecha: string; stockReal: string; notas: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const [busquedaInsumoGlobal, setBusquedaInsumoGlobal] = useState("");
@@ -143,6 +159,7 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
     setEditingId(row.id);
     setDeleteId(null);
     setDraft({
+      fecha: fechaToInputString(row.fecha),
       stockReal: stockToInputString(row.stockReal),
       notas: row.notas?.trim() ?? "",
     });
@@ -158,6 +175,7 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
       if (!draft) return;
       const fd = new FormData();
       fd.set("registroId", registroId);
+      fd.set("fecha", draft.fecha);
       fd.set("stockReal", draft.stockReal);
       fd.set("notas", draft.notas);
       startTransition(async () => {
@@ -267,9 +285,10 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
                     {bloque.label} · {n} {n === 1 ? "insumo contado" : "insumos contados"}
                   </h3>
                   <div className="overflow-x-auto rounded-lg border border-border">
-                    <table className="w-full min-w-[640px] text-left text-sm">
+                    <table className="w-full min-w-[720px] text-left text-sm">
                       <thead>
                         <tr className="border-b border-border bg-surface-elevated/80">
+                          <th className="px-3 py-2 font-medium text-text-secondary">Fecha</th>
                           <th className="relative px-3 py-2 font-medium text-text-secondary">
                             <ColumnHeader
                               label="Insumo"
@@ -328,6 +347,20 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
                           const isDeleting = deleteId === row.id;
                           return (
                             <tr key={row.id} className="border-b border-border last:border-0">
+                              <td className="whitespace-nowrap px-3 py-2 text-text-secondary">
+                                {isEditing ? (
+                                  <input
+                                    type="date"
+                                    value={draft!.fecha}
+                                    onChange={(e) =>
+                                      setDraft((d) => (d ? { ...d, fecha: e.target.value } : d))
+                                    }
+                                    className="w-full min-w-[10rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary"
+                                  />
+                                ) : (
+                                  formatFechaCelda(row.fecha)
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-text-primary">{row.insumo.nombre}</td>
                               <td className="px-3 py-2">
                                 {isEditing ? (

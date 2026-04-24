@@ -248,8 +248,15 @@ export async function editarInventario(_: ActionState, formData: FormData): Prom
     const registroId = requiredString(formData, "registroId");
     const stockRaw = requiredString(formData, "stockReal");
     const notasRaw = typeof formData.get("notas") === "string" ? (formData.get("notas") as string).trim() : "";
+    const fechaRaw = requiredString(formData, "fecha");
 
     if (!registroId) return { ok: false, message: "Registro inválido.", field: "registroId" };
+    if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
+    const fechaDb = fechaCivilToDb(fechaRaw);
+    if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    if (esFechaFutura(fechaRaw)) {
+      return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
+    }
 
     const stockReal = parseStockReal(stockRaw);
     if (stockReal === null) {
@@ -268,7 +275,7 @@ export async function editarInventario(_: ActionState, formData: FormData): Prom
 
     const res = await prisma.inventario.updateMany({
       where: { id: registroId, userId },
-      data: { stockReal, notas },
+      data: { stockReal, notas, fecha: fechaDb },
     });
     if (res.count === 0) {
       return { ok: false, message: "Registro no encontrado.", field: "registroId" };

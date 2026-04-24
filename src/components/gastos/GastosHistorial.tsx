@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import type { GastoFijo } from "@prisma/client";
+import type { CategoriaGasto, GastoFijo, MetodoPagoGasto, PeriodicidadGasto } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { deleteGastoFijo } from "@/app/actions/gastos";
+import { deleteGastoFijo, updateGastoFijo } from "@/app/actions/gastos";
 import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
-import type { CategoriaGasto } from "@prisma/client";
 import { ColumnHeader } from "@/components/ui/ColumnHeader";
+import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "@/app/(main)/configuracion/cop-price";
 
 const idle: ActionState = { ok: true };
 
@@ -20,6 +20,13 @@ const loadMoreClass =
 
 function monthKeyUtc(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function fechaToInputValue(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function formatFecha(d: Date): string {
@@ -41,19 +48,29 @@ function formatCop(monto: { toString(): string }): string {
   }).format(n);
 }
 
-export function GastosHistorial({
-  rows,
-  onEdit,
-}: {
-  rows: GastoFijo[];
-  onEdit: (g: GastoFijo) => void;
-}) {
+const CATEGORIA_KEYS = Object.keys(CATEGORIA_LABELS) as CategoriaGasto[];
+const PERIODICIDAD_KEYS = Object.keys(PERIODICIDAD_LABELS) as PeriodicidadGasto[];
+const METODO_KEYS = Object.keys(METODO_PAGO_LABELS) as MetodoPagoGasto[];
+
+export function GastosHistorial({ rows }: { rows: GastoFijo[] }) {
   const router = useRouter();
   const [categoriaFiltro, setCategoriaFiltro] = useState<CategoriaGasto | "">("");
   const [mesFiltro, setMesFiltro] = useState<string>("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    fecha: string;
+    categoria: CategoriaGasto;
+    monto: string;
+    periodicidad: PeriodicidadGasto;
+    metodoPago: MetodoPagoGasto;
+    notas: string;
+  } | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editPending, startEditTransition] = useTransition();
 
   const [visibleCount, setVisibleCount] = useState(10);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -159,6 +176,51 @@ export function GastosHistorial({
     setColumnSearch((prev) => ({ ...prev, [key]: value }));
     setVisibleCount(10);
   }, []);
+
+  const beginEdit = useCallback((row: GastoFijo) => {
+    setEditingId(row.id);
+    setEditError(null);
+    setEditDraft({
+      fecha: fechaToInputValue(row.fecha),
+      categoria: row.categoria as CategoriaGasto,
+      monto: precioVentaToDigits(row.monto),
+      periodicidad: row.periodicidad as PeriodicidadGasto,
+      metodoPago: row.metodoPago as MetodoPagoGasto,
+      notas: row.notas?.trim() ?? "",
+    });
+    setDeleteId(null);
+    setDeleteError(null);
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditDraft(null);
+    setEditError(null);
+  }, []);
+
+  const saveEdit = useCallback(
+    (id: string) => {
+      if (!editDraft) return;
+      const fd = new FormData();
+      fd.set("id", id);
+      fd.set("fecha", editDraft.fecha);
+      fd.set("categoria", editDraft.categoria);
+      fd.set("monto", digitsToSalePriceString(editDraft.monto));
+      fd.set("periodicidad", editDraft.periodicidad);
+      fd.set("metodoPago", editDraft.metodoPago);
+      fd.set("notas", editDraft.notas);
+      startEditTransition(async () => {
+        const res = await updateGastoFijo(idle, fd);
+        if (res.ok) {
+          cancelEdit();
+          router.refresh();
+        } else {
+          setEditError(res.message ?? "No se pudo guardar.");
+        }
+      });
+    },
+    [editDraft, cancelEdit, router],
+  );
 
   const confirmDelete = useCallback(
     (id: string) => {
@@ -323,23 +385,156 @@ export function GastosHistorial({
                       }}
                     />
                   </th>
+                  <th className="px-3 py-2 font-medium text-text-secondary">Notas</th>
                   <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {aMostrar.map((row) => {
                   const isDeleting = deleteId === row.id;
+                  const isEditing = editingId === row.id && editDraft;
+                  const montoFmt = isEditing ? formatCopFromDigits(editDraft!.monto) : "";
                   return (
                     <tr key={row.id} className="border-b border-border last:border-0">
-                      <td className="whitespace-nowrap px-3 py-2 text-text-primary">{formatFecha(row.fecha)}</td>
-                      <td className="px-3 py-2 text-text-secondary">{CATEGORIA_LABELS[row.categoria]}</td>
-                      <td className="whitespace-nowrap px-3 py-2 font-medium tabular-nums text-text-primary">
-                        {formatCop(row.monto)}
+                      <td className="whitespace-nowrap px-3 py-2 text-text-primary">
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editDraft!.fecha}
+                            onChange={(e) =>
+                              setEditDraft((d) => (d ? { ...d, fecha: e.target.value } : d))
+                            }
+                            className="w-full min-w-[9rem] rounded-lg border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:border-accent"
+                          />
+                        ) : (
+                          formatFecha(row.fecha)
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-text-secondary">{PERIODICIDAD_LABELS[row.periodicidad]}</td>
-                      <td className="px-3 py-2 text-text-secondary">{METODO_PAGO_LABELS[row.metodoPago]}</td>
+                      <td className="px-3 py-2 text-text-secondary">
+                        {isEditing ? (
+                          <select
+                            value={editDraft!.categoria}
+                            onChange={(e) =>
+                              setEditDraft((d) =>
+                                d ? { ...d, categoria: e.target.value as CategoriaGasto } : d,
+                              )
+                            }
+                            className="w-full min-w-[10rem] rounded-lg border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:border-accent"
+                          >
+                            {CATEGORIA_KEYS.map((k) => (
+                              <option key={k} value={k}>
+                                {CATEGORIA_LABELS[k]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          CATEGORIA_LABELS[row.categoria]
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 font-medium tabular-nums text-text-primary">
+                        {isEditing ? (
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                              $
+                            </span>
+                            <input
+                              inputMode="numeric"
+                              type="text"
+                              value={montoFmt}
+                              onChange={(e) =>
+                                setEditDraft((d) =>
+                                  d ? { ...d, monto: e.target.value.replace(/[^\d]/g, "") } : d,
+                                )
+                              }
+                              className="w-full min-w-[10rem] rounded-lg border border-border bg-surface-elevated py-1 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                            />
+                          </div>
+                        ) : (
+                          formatCop(row.monto)
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-text-secondary">
+                        {isEditing ? (
+                          <select
+                            value={editDraft!.periodicidad}
+                            onChange={(e) =>
+                              setEditDraft((d) =>
+                                d ? { ...d, periodicidad: e.target.value as PeriodicidadGasto } : d,
+                              )
+                            }
+                            className="w-full min-w-[10rem] rounded-lg border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:border-accent"
+                          >
+                            {PERIODICIDAD_KEYS.map((k) => (
+                              <option key={k} value={k}>
+                                {PERIODICIDAD_LABELS[k]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          PERIODICIDAD_LABELS[row.periodicidad]
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-text-secondary">
+                        {isEditing ? (
+                          <select
+                            value={editDraft!.metodoPago}
+                            onChange={(e) =>
+                              setEditDraft((d) =>
+                                d ? { ...d, metodoPago: e.target.value as MetodoPagoGasto } : d,
+                              )
+                            }
+                            className="w-full min-w-[10rem] rounded-lg border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:border-accent"
+                          >
+                            {METODO_KEYS.map((k) => (
+                              <option key={k} value={k}>
+                                {METODO_PAGO_LABELS[k]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          METODO_PAGO_LABELS[row.metodoPago]
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-text-secondary">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            maxLength={300}
+                            value={editDraft!.notas}
+                            onChange={(e) =>
+                              setEditDraft((d) => (d ? { ...d, notas: e.target.value } : d))
+                            }
+                            className="w-full min-w-[10rem] rounded-lg border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:border-accent"
+                            placeholder="Opcional"
+                          />
+                        ) : (
+                          <span className="break-words">{row.notas?.trim() ? row.notas : "—"}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 align-top">
-                        {isDeleting ? (
+                        {isEditing ? (
+                          <div className="flex max-w-[min(100%,18rem)] flex-col gap-2">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveEdit(row.id)}
+                                disabled={editPending}
+                                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                              >
+                                Guardar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                disabled={editPending}
+                                className={btnSecondary}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                            {editError ? <p className="text-xs text-danger">{editError}</p> : null}
+                          </div>
+                        ) : isDeleting ? (
                           <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-light/30 p-2">
                             <p className="text-xs text-danger">¿Eliminar este gasto? Esta acción no se puede deshacer.</p>
                             {deleteError ? (
@@ -371,9 +566,7 @@ export function GastosHistorial({
                             <button
                               type="button"
                               onClick={() => {
-                                onEdit(row);
-                                setDeleteId(null);
-                                setDeleteError(null);
+                                beginEdit(row);
                               }}
                               className={btnSecondary}
                             >

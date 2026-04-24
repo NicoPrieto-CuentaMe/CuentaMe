@@ -80,7 +80,7 @@ export function EmpleadosNominaTab({
   const [addEmpKey, setAddEmpKey] = useState(0);
 
   const [addNomState, addNomAction] = useFormState(addNomina, initialState);
-  const [updNomState, updNomAction] = useFormState(updateNomina, initialState);
+  const nomState = addNomState;
 
   const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
   const [empDraft, setEmpDraft] = useState<{
@@ -92,28 +92,37 @@ export function EmpleadosNominaTab({
   const [saveEmpError, setSaveEmpError] = useState<string | null>(null);
   const [deleteEmpError, setDeleteEmpError] = useState<string | null>(null);
 
-  const [editingNominaId, setEditingNominaId] = useState<string | null>(null);
-  const [nomEmpleadoId, setNomEmpleadoId] = useState("");
-  const [nomPeriodo, setNomPeriodo] = useState(todayMonthLocal);
-  const [salarioDigits, setSalarioDigits] = useState("");
-  const [horasExtraDigits, setHorasExtraDigits] = useState("");
-  const [otrosIngresosDigits, setOtrosIngresosDigits] = useState("");
-  const [otrasDedDigits, setOtrasDedDigits] = useState("");
-  const [nomNotas, setNomNotas] = useState("");
+  const [createNomEmpleadoId, setCreateNomEmpleadoId] = useState("");
+  const [createNomPeriodo, setCreateNomPeriodo] = useState(todayMonthLocal);
+  const [createSalarioDigits, setCreateSalarioDigits] = useState("");
+  const [createHorasExtraDigits, setCreateHorasExtraDigits] = useState("");
+  const [createOtrosIngresosDigits, setCreateOtrosIngresosDigits] = useState("");
+  const [createOtrasDedDigits, setCreateOtrasDedDigits] = useState("");
+  const [createNomNotas, setCreateNomNotas] = useState("");
   const [deleteNomId, setDeleteNomId] = useState<string | null>(null);
   const [nominasVisibleCount, setNominasVisibleCount] = useState(10);
   const [nominasSortColumn, setNominasSortColumn] = useState<string | null>(null);
   const [nominasSortDirection, setNominasSortDirection] = useState<"asc" | "desc">("asc");
   const [nominasColumnSearch, setNominasColumnSearch] = useState<Record<string, string>>({});
 
-  const nomState = editingNominaId ? updNomState : addNomState;
-  const nomFormAction = editingNominaId ? updNomAction : addNomAction;
+  const [editNomId, setEditNomId] = useState<string | null>(null);
+  const [editNomDraft, setEditNomDraft] = useState<{
+    empleadoId: string;
+    periodo: string;
+    salarioBase: string;
+    horasExtra: string;
+    otrosIngresos: string;
+    otrasDeduciones: string;
+    notas: string;
+  } | null>(null);
+  const [editNomError, setEditNomError] = useState<string | null>(null);
+  const [editNomPending, startEditNomTransition] = useTransition();
 
   const preview = useMemo(() => {
-    const salario = Number(digitsToSalePriceString(salarioDigits)) || 0;
-    const hx = Number(digitsToSalePriceString(horasExtraDigits)) || 0;
-    const oi = Number(digitsToSalePriceString(otrosIngresosDigits)) || 0;
-    const od = Number(digitsToSalePriceString(otrasDedDigits)) || 0;
+    const salario = Number(digitsToSalePriceString(createSalarioDigits)) || 0;
+    const hx = Number(digitsToSalePriceString(createHorasExtraDigits)) || 0;
+    const oi = Number(digitsToSalePriceString(createOtrosIngresosDigits)) || 0;
+    const od = Number(digitsToSalePriceString(createOtrasDedDigits)) || 0;
     if (salario <= 0) return null;
     return calcularNomina({
       salarioBase: salario,
@@ -121,17 +130,17 @@ export function EmpleadosNominaTab({
       otrosIngresos: oi,
       otrasDeduciones: od,
     });
-  }, [salarioDigits, horasExtraDigits, otrosIngresosDigits, otrasDedDigits]);
+  }, [createSalarioDigits, createHorasExtraDigits, createOtrosIngresosDigits, createOtrasDedDigits]);
 
-  const salarioHidden = digitsToSalePriceString(salarioDigits);
-  const horasHidden = digitsToSalePriceString(horasExtraDigits);
-  const otrosHidden = digitsToSalePriceString(otrosIngresosDigits);
-  const otrasDedHidden = digitsToSalePriceString(otrasDedDigits);
+  const salarioHidden = digitsToSalePriceString(createSalarioDigits);
+  const horasHidden = digitsToSalePriceString(createHorasExtraDigits);
+  const otrosHidden = digitsToSalePriceString(createOtrosIngresosDigits);
+  const otrasDedHidden = digitsToSalePriceString(createOtrasDedDigits);
 
-  const salarioFmt = formatCopFromDigits(salarioDigits);
-  const horasFmt = formatCopFromDigits(horasExtraDigits);
-  const otrosFmt = formatCopFromDigits(otrosIngresosDigits);
-  const otrasDedFmt = formatCopFromDigits(otrasDedDigits);
+  const salarioFmt = formatCopFromDigits(createSalarioDigits);
+  const horasFmt = formatCopFromDigits(createHorasExtraDigits);
+  const otrosFmt = formatCopFromDigits(createOtrosIngresosDigits);
+  const otrasDedFmt = formatCopFromDigits(createOtrasDedDigits);
 
   useEffect(() => {
     if (!addEmpState.ok || !addEmpState.message) return;
@@ -140,17 +149,16 @@ export function EmpleadosNominaTab({
   }, [addEmpState, router]);
 
   useEffect(() => {
-    if (!nomState.ok || !nomState.message) return;
-    setEditingNominaId(null);
-    setNomEmpleadoId("");
-    setNomPeriodo(todayMonthLocal());
-    setSalarioDigits("");
-    setHorasExtraDigits("");
-    setOtrosIngresosDigits("");
-    setOtrasDedDigits("");
-    setNomNotas("");
+    if (!addNomState.ok || !addNomState.message) return;
+    setCreateNomEmpleadoId("");
+    setCreateNomPeriodo(todayMonthLocal());
+    setCreateSalarioDigits("");
+    setCreateHorasExtraDigits("");
+    setCreateOtrosIngresosDigits("");
+    setCreateOtrasDedDigits("");
+    setCreateNomNotas("");
     router.refresh();
-  }, [nomState, router]);
+  }, [addNomState, router]);
 
   const beginEditEmp = useCallback((e: Empleado) => {
     setSaveEmpError(null);
@@ -207,28 +215,66 @@ export function EmpleadosNominaTab({
     [router],
   );
 
-  const loadNominaEdit = useCallback((row: NominaConEmpleado) => {
-    setEditingNominaId(row.id);
-    setNomEmpleadoId(row.empleadoId);
-    setNomPeriodo(dateToMonthInput(row.periodo));
-    setSalarioDigits(precioVentaToDigits(row.salarioBase));
-    setHorasExtraDigits(precioVentaToDigits(row.horasExtra));
-    setOtrosIngresosDigits(precioVentaToDigits(row.otrosIngresos));
-    setOtrasDedDigits(precioVentaToDigits(row.otrasDeduciones));
-    setNomNotas(row.notas ?? "");
+  const beginEditNom = useCallback((row: NominaConEmpleado) => {
+    setEditNomId(row.id);
+    setEditNomError(null);
+    setEditNomDraft({
+      empleadoId: row.empleadoId,
+      periodo: dateToMonthInput(row.periodo),
+      salarioBase: precioVentaToDigits(row.salarioBase),
+      horasExtra: precioVentaToDigits(row.horasExtra),
+      otrosIngresos: precioVentaToDigits(row.otrosIngresos),
+      otrasDeduciones: precioVentaToDigits(row.otrasDeduciones),
+      notas: row.notas ?? "",
+    });
     setDeleteNomId(null);
   }, []);
 
-  const cancelNomEdit = useCallback(() => {
-    setEditingNominaId(null);
-    setNomEmpleadoId("");
-    setNomPeriodo(todayMonthLocal());
-    setSalarioDigits("");
-    setHorasExtraDigits("");
-    setOtrosIngresosDigits("");
-    setOtrasDedDigits("");
-    setNomNotas("");
+  const cancelEditNom = useCallback(() => {
+    setEditNomId(null);
+    setEditNomDraft(null);
+    setEditNomError(null);
   }, []);
+
+  const saveEditNom = useCallback(
+    (id: string) => {
+      if (!editNomDraft) return;
+      const fd = new FormData();
+      fd.set("id", id);
+      fd.set("empleadoId", editNomDraft.empleadoId);
+      fd.set("periodo", editNomDraft.periodo);
+      fd.set("salarioBase", digitsToSalePriceString(editNomDraft.salarioBase));
+      fd.set("horasExtra", digitsToSalePriceString(editNomDraft.horasExtra));
+      fd.set("otrosIngresos", digitsToSalePriceString(editNomDraft.otrosIngresos));
+      fd.set("otrasDeduciones", digitsToSalePriceString(editNomDraft.otrasDeduciones));
+      fd.set("notas", editNomDraft.notas);
+      startEditNomTransition(async () => {
+        const res = await updateNomina(idle, fd);
+        if (res.ok) {
+          cancelEditNom();
+          router.refresh();
+        } else {
+          setEditNomError(res.message ?? "No se pudo guardar.");
+        }
+      });
+    },
+    [editNomDraft, cancelEditNom, router],
+  );
+
+  const editNomPreview = useMemo(() => {
+    if (!editNomDraft) return null;
+    const salario = Number(digitsToSalePriceString(editNomDraft.salarioBase)) || 0;
+    const hx = Number(digitsToSalePriceString(editNomDraft.horasExtra)) || 0;
+    const oi = Number(digitsToSalePriceString(editNomDraft.otrosIngresos)) || 0;
+    const od = Number(digitsToSalePriceString(editNomDraft.otrasDeduciones)) || 0;
+    if (salario <= 0) return null;
+    return calcularNomina({
+      salarioBase: salario,
+      horasExtra: hx,
+      otrosIngresos: oi,
+      otrasDeduciones: od,
+    });
+  }, [editNomDraft]);
 
   const confirmDeleteNom = useCallback(
     (id: string) => {
@@ -238,12 +284,12 @@ export function EmpleadosNominaTab({
         const res = await deleteNomina(idle, fd);
         if (res.ok) {
           setDeleteNomId(null);
-          if (editingNominaId === id) cancelNomEdit();
+          if (editNomId === id) cancelEditNom();
           router.refresh();
         }
       });
     },
-    [router, editingNominaId, cancelNomEdit],
+    [router, editNomId, cancelEditNom],
   );
 
   const filtradasNominas = useMemo(() => nominasInicial, [nominasInicial]);
@@ -510,8 +556,7 @@ export function EmpleadosNominaTab({
           Registra liquidaciones por período. Los valores legales se calculan en el servidor al guardar.
         </p>
 
-        <form action={nomFormAction} className="mt-4 space-y-4">
-          {editingNominaId ? <input type="hidden" name="id" value={editingNominaId} /> : null}
+        <form action={addNomAction} className="mt-4 space-y-4">
           <input type="hidden" name="salarioBase" value={salarioHidden} />
           <input type="hidden" name="horasExtra" value={horasHidden} />
           <input type="hidden" name="otrosIngresos" value={otrosHidden} />
@@ -525,8 +570,8 @@ export function EmpleadosNominaTab({
               <select
                 id="nom-emp"
                 name="empleadoId"
-                value={nomEmpleadoId}
-                onChange={(e) => setNomEmpleadoId(e.target.value)}
+                value={createNomEmpleadoId}
+                onChange={(e) => setCreateNomEmpleadoId(e.target.value)}
                 required
                 className={`mt-1 ${inlineField}`}
               >
@@ -549,8 +594,8 @@ export function EmpleadosNominaTab({
                 id="nom-periodo"
                 name="periodo"
                 type="month"
-                value={nomPeriodo}
-                onChange={(e) => setNomPeriodo(e.target.value)}
+                value={createNomPeriodo}
+                onChange={(e) => setCreateNomPeriodo(e.target.value)}
                 required
                 className={`mt-1 ${inlineField}`}
               />
@@ -572,7 +617,7 @@ export function EmpleadosNominaTab({
                   inputMode="numeric"
                   type="text"
                   value={salarioFmt}
-                  onChange={(e) => setSalarioDigits(e.target.value.replace(/[^\d]/g, ""))}
+                  onChange={(e) => setCreateSalarioDigits(e.target.value.replace(/[^\d]/g, ""))}
                   className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
                   placeholder="0"
                   required
@@ -593,7 +638,7 @@ export function EmpleadosNominaTab({
                   inputMode="numeric"
                   type="text"
                   value={horasFmt}
-                  onChange={(e) => setHorasExtraDigits(e.target.value.replace(/[^\d]/g, ""))}
+                  onChange={(e) => setCreateHorasExtraDigits(e.target.value.replace(/[^\d]/g, ""))}
                   className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
                   placeholder="0"
                 />
@@ -616,7 +661,7 @@ export function EmpleadosNominaTab({
                   inputMode="numeric"
                   type="text"
                   value={otrosFmt}
-                  onChange={(e) => setOtrosIngresosDigits(e.target.value.replace(/[^\d]/g, ""))}
+                  onChange={(e) => setCreateOtrosIngresosDigits(e.target.value.replace(/[^\d]/g, ""))}
                   className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
                   placeholder="0"
                 />
@@ -636,7 +681,7 @@ export function EmpleadosNominaTab({
                   inputMode="numeric"
                   type="text"
                   value={otrasDedFmt}
-                  onChange={(e) => setOtrasDedDigits(e.target.value.replace(/[^\d]/g, ""))}
+                  onChange={(e) => setCreateOtrasDedDigits(e.target.value.replace(/[^\d]/g, ""))}
                   className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
                   placeholder="0"
                 />
@@ -652,8 +697,8 @@ export function EmpleadosNominaTab({
             <textarea
               id="nom-notas"
               name="notas"
-              value={nomNotas}
-              onChange={(e) => setNomNotas(e.target.value)}
+              value={createNomNotas}
+              onChange={(e) => setCreateNomNotas(e.target.value)}
               rows={3}
               maxLength={500}
               className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent min-h-[44px]"
@@ -682,19 +727,14 @@ export function EmpleadosNominaTab({
               type="submit"
               className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover min-h-[44px]"
             >
-              {editingNominaId ? "Actualizar nómina" : "Registrar nómina"}
+              Registrar nómina
             </button>
-            {editingNominaId ? (
-              <button type="button" onClick={cancelNomEdit} className={btnSecondary}>
-                Cancelar edición
-              </button>
-            ) : null}
           </div>
-          {nomState.ok && nomState.message ? (
-            <p className="text-sm text-accent">{nomState.message}</p>
+          {addNomState.ok && addNomState.message ? (
+            <p className="text-sm text-accent">{addNomState.message}</p>
           ) : null}
-          {nomState.ok === false && !nomState.field ? (
-            <p className="text-sm text-danger">{nomState.message}</p>
+          {addNomState.ok === false && !addNomState.field ? (
+            <p className="text-sm text-danger">{addNomState.message}</p>
           ) : null}
         </form>
 
@@ -800,24 +840,161 @@ export function EmpleadosNominaTab({
                           }}
                         />
                       </th>
+                      <th className="px-3 py-2 font-medium text-text-secondary">Notas</th>
                       <th className="px-3 py-2 font-medium text-text-secondary">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {nominasAMostrar.map((row) => {
                       const isDel = deleteNomId === row.id;
+                      const isEdit = editNomId === row.id && editNomDraft;
+                      const salarioEdit = isEdit ? formatCopFromDigits(editNomDraft!.salarioBase) : "";
+                      const hxEdit = isEdit ? formatCopFromDigits(editNomDraft!.horasExtra) : "";
+                      const oiEdit = isEdit ? formatCopFromDigits(editNomDraft!.otrosIngresos) : "";
+                      const odEdit = isEdit ? formatCopFromDigits(editNomDraft!.otrasDeduciones) : "";
+
                       return (
                         <tr key={row.id} className="border-b border-border last:border-0">
-                          <td className="px-3 py-2 text-text-primary">{row.empleado.nombre}</td>
-                          <td className="px-3 py-2 text-text-secondary">{formatPeriodo(row.periodo)}</td>
-                          <td className="px-3 py-2 tabular-nums text-text-primary">
-                            {formatCopN(Number(row.salarioBase))}
+                          <td className="px-3 py-2 text-text-primary">
+                            {isEdit ? (
+                              <select
+                                value={editNomDraft!.empleadoId}
+                                onChange={(e) =>
+                                  setEditNomDraft((d) => (d ? { ...d, empleadoId: e.target.value } : d))
+                                }
+                                className={inlineField}
+                              >
+                                {empleadosInicial.map((e) => (
+                                  <option key={e.id} value={e.id}>
+                                    {e.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              row.empleado.nombre
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-text-secondary">
+                            {isEdit ? (
+                              <input
+                                type="month"
+                                value={editNomDraft!.periodo}
+                                onChange={(e) =>
+                                  setEditNomDraft((d) => (d ? { ...d, periodo: e.target.value } : d))
+                                }
+                                className={inlineField}
+                              />
+                            ) : (
+                              formatPeriodo(row.periodo)
+                            )}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-text-primary">
-                            {formatCopN(Number(row.netoEmpleado))}
+                            {isEdit ? (
+                              <div className="space-y-2">
+                                <div className="relative">
+                                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                                    $
+                                  </span>
+                                  <input
+                                    inputMode="numeric"
+                                    type="text"
+                                    value={salarioEdit}
+                                    onChange={(e) =>
+                                      setEditNomDraft((d) =>
+                                        d ? { ...d, salarioBase: e.target.value.replace(/[^\d]/g, "") } : d,
+                                      )
+                                    }
+                                    className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                                    placeholder="Salario base"
+                                  />
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <div className="relative">
+                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                                      $
+                                    </span>
+                                    <input
+                                      inputMode="numeric"
+                                      type="text"
+                                      value={hxEdit}
+                                      onChange={(e) =>
+                                        setEditNomDraft((d) =>
+                                          d ? { ...d, horasExtra: e.target.value.replace(/[^\d]/g, "") } : d,
+                                        )
+                                      }
+                                      className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                                      placeholder="Horas extra"
+                                    />
+                                  </div>
+                                  <div className="relative">
+                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                                      $
+                                    </span>
+                                    <input
+                                      inputMode="numeric"
+                                      type="text"
+                                      value={oiEdit}
+                                      onChange={(e) =>
+                                        setEditNomDraft((d) =>
+                                          d ? { ...d, otrosIngresos: e.target.value.replace(/[^\d]/g, "") } : d,
+                                        )
+                                      }
+                                      className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                                      placeholder="Otros ingresos"
+                                    />
+                                  </div>
+                                  <div className="relative sm:col-span-2">
+                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                                      $
+                                    </span>
+                                    <input
+                                      inputMode="numeric"
+                                      type="text"
+                                      value={odEdit}
+                                      onChange={(e) =>
+                                        setEditNomDraft((d) =>
+                                          d ? { ...d, otrasDeduciones: e.target.value.replace(/[^\d]/g, "") } : d,
+                                        )
+                                      }
+                                      className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
+                                      placeholder="Otras deducciones"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              formatCopN(Number(row.salarioBase))
+                            )}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-text-primary">
-                            {formatCopN(Number(row.costoTotalEmpleador))}
+                            {isEdit
+                              ? editNomPreview
+                                ? formatCopN(editNomPreview.neto)
+                                : "—"
+                              : formatCopN(Number(row.netoEmpleado))}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-text-primary">
+                            {isEdit
+                              ? editNomPreview
+                                ? formatCopN(editNomPreview.costoTotal)
+                                : "—"
+                              : formatCopN(Number(row.costoTotalEmpleador))}
+                          </td>
+                          <td className="px-3 py-2 text-text-secondary">
+                            {isEdit ? (
+                              <input
+                                type="text"
+                                maxLength={500}
+                                value={editNomDraft!.notas}
+                                onChange={(e) =>
+                                  setEditNomDraft((d) => (d ? { ...d, notas: e.target.value } : d))
+                                }
+                                className={inlineField}
+                                placeholder="Opcional"
+                              />
+                            ) : (
+                              (row.notas?.trim() ? row.notas : "—")
+                            )}
                           </td>
                           <td className="px-3 py-2 align-top">
                             {isDel ? (
@@ -840,11 +1017,33 @@ export function EmpleadosNominaTab({
                                   </button>
                                 </div>
                               </div>
+                            ) : isEdit ? (
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveEditNom(row.id)}
+                                    disabled={editNomPending}
+                                    className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                  >
+                                    Guardar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={cancelEditNom}
+                                    disabled={editNomPending}
+                                    className={btnSecondary}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                                {editNomError ? <p className="text-xs text-danger">{editNomError}</p> : null}
+                              </div>
                             ) : (
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => loadNominaEdit(row)}
+                                  onClick={() => beginEditNom(row)}
                                   className={btnSecondary}
                                 >
                                   Editar

@@ -279,34 +279,16 @@ export function GastosForm({
 }
 
 export function GastosShell({ rows }: { rows: GastoFijo[] }) {
-  const [editing, setEditing] = useState<GastoFijo | null>(null);
   const router = useRouter();
 
   return (
     <div className="space-y-8">
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         <h2 className="mb-4 text-base font-semibold text-text-primary">
-          {editing ? "Editar gasto fijo" : "Nuevo gasto fijo"}
+          Nuevo gasto fijo
         </h2>
-        {editing ? (
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-text-tertiary">
-              Estás editando un registro. Al guardar, los cambios se reflejan en el historial.
-            </p>
-            <button
-              type="button"
-              onClick={() => setEditing(null)}
-              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:bg-surface-elevated"
-            >
-              Cancelar edición
-            </button>
-          </div>
-        ) : null}
         <GastosForm
-          key={editing?.id ?? "new"}
-          initialData={editing ?? undefined}
           onSuccess={() => {
-            setEditing(null);
             router.refresh();
           }}
         />
@@ -314,7 +296,7 @@ export function GastosShell({ rows }: { rows: GastoFijo[] }) {
 
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         <h2 className="mb-4 text-base font-semibold text-text-primary">Historial de gastos</h2>
-        <GastosHistorial rows={rows} onEdit={(g) => setEditing(g)} />
+        <GastosHistorial rows={rows} />
       </div>
     </div>
   );
