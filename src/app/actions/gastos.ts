@@ -6,11 +6,23 @@ import {
   MetodoPagoGasto,
   PeriodicidadGasto,
   Prisma,
-  type GastoFijo,
 } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
+
+export type GastoFijoSerialized = {
+  id: string;
+  userId: string;
+  fecha: Date;
+  categoria: CategoriaGasto;
+  monto: number;
+  periodicidad: PeriodicidadGasto;
+  metodoPago: MetodoPagoGasto;
+  notas: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 const MAX_NOTAS = 300;
 const MAX_MONTO = new Prisma.Decimal(99_999_999);
@@ -81,6 +93,20 @@ function parseMetodoPago(raw: string): MetodoPagoGasto | null {
   return v ?? null;
 }
 
+function validarRangoFecha(fecha: Date): { ok: false; message: string } | null {
+  const hoy = new Date();
+  const hace10Anos = new Date(hoy.getFullYear() - 10, 0, 1);
+  const en30Dias = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  if (fecha < hace10Anos) {
+    return { ok: false, message: "La fecha es muy antigua (más de 10 años atrás)." };
+  }
+  if (fecha > en30Dias) {
+    return { ok: false, message: "La fecha es muy futura (más de 30 días adelante)." };
+  }
+  return null;
+}
+
 export async function addGastoFijo(_: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const userId = await requireUserId();
@@ -95,6 +121,8 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheck = validarRangoFecha(fechaDb);
+    if (rangoCheck) return { ...rangoCheck, field: "fecha" };
 
     if (!categoriaRaw) return { ok: false, message: "Selecciona una categoría.", field: "categoria" };
     const categoria = parseCategoria(categoriaRaw);
@@ -145,12 +173,6 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
     const id = requiredString(formData, "id");
     if (!id) return { ok: false, message: "Gasto inválido.", field: "id" };
 
-    const existente = await prisma.gastoFijo.findFirst({
-      where: { id, userId },
-      select: { id: true },
-    });
-    if (!existente) return { ok: false, message: "Gasto no encontrado.", field: "id" };
-
     const fechaRaw = requiredString(formData, "fecha");
     const categoriaRaw = requiredString(formData, "categoria");
     const montoRaw = requiredString(formData, "monto");
@@ -161,6 +183,8 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheck = validarRangoFecha(fechaDb);
+    if (rangoCheck) return { ...rangoCheck, field: "fecha" };
 
     if (!categoriaRaw) return { ok: false, message: "Selecciona una categoría.", field: "categoria" };
     const categoria = parseCategoria(categoriaRaw);
@@ -225,13 +249,17 @@ export async function deleteGastoFijo(_: ActionState, formData: FormData): Promi
   }
 }
 
-export async function getGastosFijos(): Promise<GastoFijo[]> {
+export async function getGastosFijos(): Promise<GastoFijoSerialized[]> {
   try {
     const userId = await requireUserId();
-    return await prisma.gastoFijo.findMany({
+    const rows = await prisma.gastoFijo.findMany({
       where: { userId },
       orderBy: { fecha: "desc" },
     });
+    return rows.map((r) => ({
+      ...r,
+      monto: Number(r.monto),
+    }));
   } catch (e) {
     console.error("[getGastosFijos]", e);
     return [];

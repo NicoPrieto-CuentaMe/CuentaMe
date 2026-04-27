@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import type { CategoriaGasto, GastoFijo, MetodoPagoGasto, PeriodicidadGasto } from "@prisma/client";
+import type { CategoriaGasto, MetodoPagoGasto, PeriodicidadGasto } from "@prisma/client";
 import { useRouter } from "next/navigation";
+import type { GastoFijoSerialized } from "@/app/actions/gastos";
 import { deleteGastoFijo, updateGastoFijo } from "@/app/actions/gastos";
 import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
@@ -52,7 +53,7 @@ const CATEGORIA_KEYS = Object.keys(CATEGORIA_LABELS) as CategoriaGasto[];
 const PERIODICIDAD_KEYS = Object.keys(PERIODICIDAD_LABELS) as PeriodicidadGasto[];
 const METODO_KEYS = Object.keys(METODO_PAGO_LABELS) as MetodoPagoGasto[];
 
-export function GastosHistorial({ rows }: { rows: GastoFijo[] }) {
+export function GastosHistorial({ rows }: { rows: GastoFijoSerialized[] }) {
   const router = useRouter();
   const [categoriaFiltro, setCategoriaFiltro] = useState<CategoriaGasto | "">("");
   const [mesFiltro, setMesFiltro] = useState<string>("");
@@ -177,7 +178,7 @@ export function GastosHistorial({ rows }: { rows: GastoFijo[] }) {
     setVisibleCount(10);
   }, []);
 
-  const beginEdit = useCallback((row: GastoFijo) => {
+  const beginEdit = useCallback((row: GastoFijoSerialized) => {
     setEditingId(row.id);
     setEditError(null);
     setEditDraft({

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import type { GastoFijo } from "@prisma/client";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
+import type { GastoFijoSerialized } from "@/app/actions/gastos";
 import { addGastoFijo, updateGastoFijo } from "@/app/actions/gastos";
 import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
 import { GastosHistorial } from "@/components/gastos/GastosHistorial";
@@ -74,7 +74,7 @@ export function GastosForm({
   initialData,
 }: {
   onSuccess?: () => void;
-  initialData?: GastoFijo;
+  initialData?: GastoFijoSerialized;
 }) {
   const router = useRouter();
   const isEdit = !!initialData;
@@ -114,8 +114,12 @@ export function GastosForm({
   const montoHidden = useMemo(() => digitsToSalePriceString(montoDigits), [montoDigits]);
   const montoFmt = useMemo(() => formatCopFromDigits(montoDigits), [montoDigits]);
 
+  const lastProcessedState = useRef<ActionState | null>(null);
+
   useEffect(() => {
+    if (state === lastProcessedState.current) return;
     if (!state.ok || !state.message) return;
+    lastProcessedState.current = state;
     if (isEdit) {
       onSuccess?.();
       router.refresh();
@@ -278,7 +282,7 @@ export function GastosForm({
   );
 }
 
-export function GastosShell({ rows }: { rows: GastoFijo[] }) {
+export function GastosShell({ rows }: { rows: GastoFijoSerialized[] }) {
   const router = useRouter();
 
   return (
