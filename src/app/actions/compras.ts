@@ -53,9 +53,10 @@ function optionalString(formData: FormData, key: string) {
 }
 
 function toPositiveDecimal(value: string) {
-  const n = Number(value);
+  const trimmed = value.trim();
+  const n = Number(trimmed);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return new Prisma.Decimal(n);
+  return new Prisma.Decimal(trimmed);
 }
 
 async function requireUserId() {
@@ -85,9 +86,24 @@ function esFechaFutura(isoDate: string): boolean {
   const mo = Number(m[2]);
   const d = Number(m[3]);
   const inputUtc = Date.UTC(y, mo - 1, d);
-  const now = new Date();
-  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return inputUtc > todayUtc;
+  // Colombia = UTC-5 (sin horario de verano)
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+  const ahoraCo = new Date(Date.now() - CO_OFFSET_MS);
+  const todayCo = Date.UTC(
+    ahoraCo.getUTCFullYear(),
+    ahoraCo.getUTCMonth(),
+    ahoraCo.getUTCDate(),
+  );
+  return inputUtc > todayCo;
+}
+
+function validarRangoFechaCompra(fecha: Date): { ok: false; message: string } | null {
+  const hoy = new Date();
+  const hace10Anos = new Date(hoy.getFullYear() - 10, 0, 1);
+  if (fecha < hace10Anos) {
+    return { ok: false, message: "La fecha es muy antigua (más de 10 años atrás)." };
+  }
+  return null;
 }
 
 type LineaJson = {
@@ -109,6 +125,8 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheckReg = validarRangoFechaCompra(fechaDb);
+    if (rangoCheckReg) return { ...rangoCheckReg, field: "fecha" };
     if (esFechaFutura(fechaRaw)) {
       return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
     }
@@ -366,12 +384,6 @@ export async function editarCompra(_: ActionState, formData: FormData): Promise<
     const compraId = requiredString(formData, "compraId");
     if (!compraId) return { ok: false, message: "Compra inválida.", field: "compraId" };
 
-    const existente = await prisma.compra.findFirst({
-      where: { id: compraId, userId },
-      select: { id: true },
-    });
-    if (!existente) return { ok: false, message: "Compra no encontrada.", field: "compraId" };
-
     const fechaRaw = requiredString(formData, "fecha");
     const proveedorId = requiredString(formData, "proveedorId");
     const notas = optionalString(formData, "notas");
@@ -380,6 +392,8 @@ export async function editarCompra(_: ActionState, formData: FormData): Promise<
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheckEdit = validarRangoFechaCompra(fechaDb);
+    if (rangoCheckEdit) return { ...rangoCheckEdit, field: "fecha" };
     if (esFechaFutura(fechaRaw)) {
       return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
     }
@@ -415,7 +429,7 @@ export async function editarCompra(_: ActionState, formData: FormData): Promise<
 
     await prisma.$transaction(async (tx) => {
       await tx.compra.update({
-        where: { id: compraId },
+        where: { id: compraId, userId },
         data: {
           fecha: fechaDb,
           proveedorId,
@@ -423,7 +437,7 @@ export async function editarCompra(_: ActionState, formData: FormData): Promise<
           notas: notas ?? null,
         },
       });
-      await tx.compraDetalle.deleteMany({ where: { compraId } });
+      await tx.compraDetalle.deleteMany({ where: { compraId, userId } });
       await tx.compraDetalle.createMany({
         data: validLines.map((vl) => ({
           userId,
@@ -451,16 +465,11 @@ export async function eliminarCompra(_: ActionState, formData: FormData): Promis
     const compraId = requiredString(formData, "compraId");
     if (!compraId) return { ok: false, message: "Compra inválida." };
 
-    const existente = await prisma.compra.findFirst({
-      where: { id: compraId, userId },
-      select: { id: true },
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.compraDetalle.deleteMany({ where: { compraId, userId } });
+      return tx.compra.deleteMany({ where: { id: compraId, userId } });
     });
-    if (!existente) return { ok: false, message: "Compra no encontrada." };
-
-    await prisma.$transaction(async (tx) => {
-      await tx.compraDetalle.deleteMany({ where: { compraId } });
-      await tx.compra.delete({ where: { id: compraId } });
-    });
+    if (result.count === 0) return { ok: false, message: "Compra no encontrada." };
 
     revalidatePath("/compras");
     return { ok: true, message: "Compra eliminada." };
