@@ -2,18 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
+import type { CanalDomicilio, MetodoPagoVenta, TipoVenta } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import {
   CANALES_DOMICILIO,
-  DOMICILIO_PREFIX,
-  METODOS_PAGO,
-  TIPO_MESA,
+  METODOS_PAGO_VENTA,
 } from "@/lib/ventas-constants";
 
-const CANALES_SET = new Set<string>(CANALES_DOMICILIO);
-const METODOS_SET = new Set<string>(METODOS_PAGO);
+const CANALES_SET = new Set<CanalDomicilio>(CANALES_DOMICILIO);
+const METODOS_SET = new Set<MetodoPagoVenta>(METODOS_PAGO_VENTA);
 
 const MIN_LINEAS = 1;
 const MAX_LINEAS = 30;
@@ -58,9 +57,23 @@ function esFechaFutura(isoDate: string): boolean {
   const mo = Number(m[2]);
   const d = Number(m[3]);
   const inputUtc = Date.UTC(y, mo - 1, d);
-  const now = new Date();
-  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return inputUtc > todayUtc;
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+  const ahoraCo = new Date(Date.now() - CO_OFFSET_MS);
+  const todayCo = Date.UTC(
+    ahoraCo.getUTCFullYear(),
+    ahoraCo.getUTCMonth(),
+    ahoraCo.getUTCDate(),
+  );
+  return inputUtc > todayCo;
+}
+
+function validarRangoFechaVenta(fecha: Date): { ok: false; message: string } | null {
+  const hoy = new Date();
+  const hace10Anos = new Date(hoy.getFullYear() - 10, 0, 1);
+  if (fecha < hace10Anos) {
+    return { ok: false, message: "La fecha es muy antigua (más de 10 años atrás)." };
+  }
+  return null;
 }
 
 /** HH:MM 24h */
@@ -68,17 +81,21 @@ function esHoraValida(s: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(s.trim());
 }
 
-function validarTipo(tipo: string): { ok: true; value: string } | { ok: false; message: string } {
-  const t = tipo.trim();
-  if (t === TIPO_MESA) return { ok: true, value: TIPO_MESA };
-  if (!t.startsWith(DOMICILIO_PREFIX)) {
-    return { ok: false, message: "Tipo de venta inválido." };
-  }
-  const canal = t.slice(DOMICILIO_PREFIX.length).trim();
-  if (!canal || !CANALES_SET.has(canal)) {
-    return { ok: false, message: "Canal de domicilio inválido." };
-  }
-  return { ok: true, value: `${DOMICILIO_PREFIX}${canal}` };
+const TIPOS_VENTA_VALIDOS = new Set<TipoVenta>(["MESA", "DOMICILIO", "PARA_LLEVAR"]);
+
+function validarTipoVenta(raw: string): TipoVenta | null {
+  if (TIPOS_VENTA_VALIDOS.has(raw as TipoVenta)) return raw as TipoVenta;
+  return null;
+}
+
+function validarCanalDomicilio(raw: string): CanalDomicilio | null {
+  if (CANALES_SET.has(raw as CanalDomicilio)) return raw as CanalDomicilio;
+  return null;
+}
+
+function validarMetodoPago(raw: string): MetodoPagoVenta | null {
+  if (METODOS_SET.has(raw as MetodoPagoVenta)) return raw as MetodoPagoVenta;
+  return null;
 }
 
 type LineaJson = {
@@ -93,12 +110,15 @@ export async function registrarVenta(_: ActionState, formData: FormData): Promis
     const fechaRaw = requiredString(formData, "fecha");
     const horaRaw = requiredString(formData, "hora");
     const tipoRaw = requiredString(formData, "tipo");
+    const canalRaw = requiredString(formData, "canal");
     const metodoPagoRaw = requiredString(formData, "metodoPago");
     const lineasRaw = requiredString(formData, "lineas");
 
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheck = validarRangoFechaVenta(fechaDb);
+    if (rangoCheck) return { ...rangoCheck, field: "fecha" };
     if (esFechaFutura(fechaRaw)) {
       return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
     }
@@ -108,12 +128,17 @@ export async function registrarVenta(_: ActionState, formData: FormData): Promis
       return { ok: false, message: "Hora inválida (usa HH:MM).", field: "hora" };
     }
 
-    const tipoRes = validarTipo(tipoRaw);
-    if (!tipoRes.ok) return { ...tipoRes, field: "tipo" };
+    const tipo = validarTipoVenta(tipoRaw);
+    if (!tipo) return { ok: false, message: "Tipo de venta inválido.", field: "tipo" };
 
-    if (!metodoPagoRaw || !METODOS_SET.has(metodoPagoRaw)) {
-      return { ok: false, message: "Método de pago inválido.", field: "metodoPago" };
+    let canal: CanalDomicilio | null = null;
+    if (tipo === "DOMICILIO") {
+      canal = validarCanalDomicilio(canalRaw);
+      if (!canal) return { ok: false, message: "Canal de domicilio inválido.", field: "canal" };
     }
+
+    const metodoPago = validarMetodoPago(metodoPagoRaw);
+    if (!metodoPago) return { ok: false, message: "Método de pago inválido.", field: "metodoPago" };
 
     let parsed: unknown;
     try {
@@ -148,9 +173,10 @@ export async function registrarVenta(_: ActionState, formData: FormData): Promis
           userId,
           fecha: fechaDb,
           hora: horaRaw.trim(),
-          tipo: tipoRes.value,
+          tipo,
+          canal,
           total: totalGeneral,
-          metodoPago: metodoPagoRaw,
+          metodoPago,
         },
       });
       await tx.detalleVenta.createMany({
@@ -285,21 +311,18 @@ export async function editarVenta(_: ActionState, formData: FormData): Promise<A
     const ventaId = requiredString(formData, "ventaId");
     if (!ventaId) return { ok: false, message: "Venta inválida.", field: "ventaId" };
 
-    const existente = await prisma.venta.findFirst({
-      where: { id: ventaId, userId },
-      select: { id: true },
-    });
-    if (!existente) return { ok: false, message: "Venta no encontrada.", field: "ventaId" };
-
     const fechaRaw = requiredString(formData, "fecha");
     const horaRaw = requiredString(formData, "hora");
     const tipoRaw = requiredString(formData, "tipo");
+    const canalRaw = requiredString(formData, "canal");
     const metodoPagoRaw = requiredString(formData, "metodoPago");
     const lineasRaw = requiredString(formData, "lineas");
 
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheck = validarRangoFechaVenta(fechaDb);
+    if (rangoCheck) return { ...rangoCheck, field: "fecha" };
     if (esFechaFutura(fechaRaw)) {
       return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
     }
@@ -307,11 +330,17 @@ export async function editarVenta(_: ActionState, formData: FormData): Promise<A
     if (!esHoraValida(horaRaw)) {
       return { ok: false, message: "Hora inválida (usa HH:MM).", field: "hora" };
     }
-    const tipoRes = validarTipo(tipoRaw);
-    if (!tipoRes.ok) return { ...tipoRes, field: "tipo" };
-    if (!metodoPagoRaw || !METODOS_SET.has(metodoPagoRaw)) {
-      return { ok: false, message: "Método de pago inválido.", field: "metodoPago" };
+    const tipo = validarTipoVenta(tipoRaw);
+    if (!tipo) return { ok: false, message: "Tipo de venta inválido.", field: "tipo" };
+
+    let canal: CanalDomicilio | null = null;
+    if (tipo === "DOMICILIO") {
+      canal = validarCanalDomicilio(canalRaw);
+      if (!canal) return { ok: false, message: "Canal de domicilio inválido.", field: "canal" };
     }
+
+    const metodoPago = validarMetodoPago(metodoPagoRaw);
+    if (!metodoPago) return { ok: false, message: "Método de pago inválido.", field: "metodoPago" };
 
     let parsed: unknown;
     try {
@@ -347,16 +376,17 @@ export async function editarVenta(_: ActionState, formData: FormData): Promise<A
 
     await prisma.$transaction(async (tx) => {
       await tx.venta.update({
-        where: { id: ventaId },
+        where: { id: ventaId, userId },
         data: {
           fecha: fechaDb,
           hora: horaRaw.trim(),
-          tipo: tipoRes.value,
+          tipo,
+          canal,
           total: totalGeneral,
-          metodoPago: metodoPagoRaw,
+          metodoPago,
         },
       });
-      await tx.detalleVenta.deleteMany({ where: { ventaId } });
+      await tx.detalleVenta.deleteMany({ where: { ventaId, userId } });
       await tx.detalleVenta.createMany({
         data: validLines.map((vl) => ({
           userId,
@@ -382,16 +412,11 @@ export async function eliminarVenta(_: ActionState, formData: FormData): Promise
     const ventaId = requiredString(formData, "ventaId");
     if (!ventaId) return { ok: false, message: "Venta inválida." };
 
-    const existente = await prisma.venta.findFirst({
-      where: { id: ventaId, userId },
-      select: { id: true },
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.detalleVenta.deleteMany({ where: { ventaId, userId } });
+      return tx.venta.deleteMany({ where: { id: ventaId, userId } });
     });
-    if (!existente) return { ok: false, message: "Venta no encontrada." };
-
-    await prisma.$transaction(async (tx) => {
-      await tx.detalleVenta.deleteMany({ where: { ventaId } });
-      await tx.venta.delete({ where: { id: ventaId } });
-    });
+    if (result.count === 0) return { ok: false, message: "Venta no encontrada." };
 
     revalidatePath("/ventas");
     return { ok: true, message: "Venta eliminada." };

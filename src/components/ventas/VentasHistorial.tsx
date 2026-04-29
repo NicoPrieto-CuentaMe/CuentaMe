@@ -1,16 +1,16 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import type { Prisma } from "@prisma/client";
+import type { CanalDomicilio, MetodoPagoVenta, Prisma, TipoVenta } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { editarVenta, eliminarVenta, getPlatosCatalogoVenta } from "@/app/actions/ventas";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import {
+  CANAL_DOMICILIO_LABELS,
   CANALES_DOMICILIO,
-  DOMICILIO_PREFIX,
-  METODOS_PAGO,
-  TIPO_MESA,
-  tipoDomicilio,
+  METODO_PAGO_VENTA_LABELS,
+  METODOS_PAGO_VENTA,
+  TIPO_VENTA_LABELS,
 } from "@/lib/ventas-constants";
 import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
@@ -33,15 +33,13 @@ function fechaToInput(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-const CANALES_SET = new Set<string>(CANALES_DOMICILIO);
-
-function parseTipoRow(tipo: string): { kind: "mesa" | "domicilio"; canal: string } {
-  if (tipo === TIPO_MESA) return { kind: "mesa", canal: CANALES_DOMICILIO[0]! };
-  if (tipo.startsWith(DOMICILIO_PREFIX)) {
-    const c = tipo.slice(DOMICILIO_PREFIX.length).trim();
-    return { kind: "domicilio", canal: CANALES_SET.has(c) ? c : CANALES_DOMICILIO[0]! };
-  }
-  return { kind: "domicilio", canal: CANALES_DOMICILIO[0]! };
+function parseTipoRow(tipo: TipoVenta, canal: CanalDomicilio | null): {
+  kind: "mesa" | "domicilio" | "llevar";
+  canal: CanalDomicilio;
+} {
+  if (tipo === "MESA") return { kind: "mesa", canal: CANALES_DOMICILIO[0]! };
+  if (tipo === "PARA_LLEVAR") return { kind: "llevar", canal: CANALES_DOMICILIO[0]! };
+  return { kind: "domicilio", canal: canal ?? CANALES_DOMICILIO[0]! };
 }
 
 function formatFecha(d: Date): string {
@@ -55,6 +53,12 @@ function formatCop(n: unknown): string {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
   return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(x);
+}
+
+function tipoRowLabel(v: Row): string {
+  const base = TIPO_VENTA_LABELS[v.tipo];
+  if (v.tipo === "DOMICILIO" && v.canal) return `${base} · ${CANAL_DOMICILIO_LABELS[v.canal]}`;
+  return base;
 }
 
 /** Misma tabla Proveedores (Configuración) */
@@ -80,9 +84,9 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
   const [draft, setDraft] = useState<{
     fecha: string;
     hora: string;
-    kind: "mesa" | "domicilio";
-    canal: string;
-    metodoPago: string;
+    kind: "mesa" | "domicilio" | "llevar";
+    canal: CanalDomicilio;
+    metodoPago: MetodoPagoVenta;
     lines: { platoId: string; cantidad: number }[];
   } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -105,7 +109,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
   }, [catalog]);
 
   const startEdit = useCallback((v: Row) => {
-    const t = parseTipoRow(v.tipo);
+    const t = parseTipoRow(v.tipo, v.canal);
     setEditingId(v.id);
     setDeleteId(null);
     setDraft({
@@ -125,12 +129,14 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
 
   const saveEdit = useCallback(() => {
     if (!editingId || !draft) return;
-    const tipoStr = draft.kind === "mesa" ? TIPO_MESA : tipoDomicilio(draft.canal);
+    const tipoStr =
+      draft.kind === "mesa" ? "MESA" : draft.kind === "llevar" ? "PARA_LLEVAR" : "DOMICILIO";
     const fd = new FormData();
     fd.set("ventaId", editingId);
     fd.set("fecha", draft.fecha);
     fd.set("hora", draft.hora);
     fd.set("tipo", tipoStr);
+    fd.set("canal", draft.kind === "domicilio" ? draft.canal : "");
     fd.set("metodoPago", draft.metodoPago);
     fd.set("lineas", JSON.stringify(draft.lines.map((l) => ({ platoId: l.platoId, cantidad: l.cantidad }))));
     startTransition(async () => {
@@ -177,11 +183,11 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
       const qHora = (columnSearch.hora ?? "").trim().toLowerCase();
       if (qHora && !v.hora.trim().toLowerCase().includes(qHora)) return false;
       const qTipo = (columnSearch.tipo ?? "").trim().toLowerCase();
-      if (qTipo && !v.tipo.toLowerCase().includes(qTipo)) return false;
+      if (qTipo && !tipoRowLabel(v).toLowerCase().includes(qTipo)) return false;
       const qTotal = (columnSearch.total ?? "").trim().toLowerCase();
       if (qTotal && !formatCop(v.total).toLowerCase().includes(qTotal)) return false;
       const qMet = (columnSearch.metodoPago ?? "").trim().toLowerCase();
-      if (qMet && !v.metodoPago.toLowerCase().includes(qMet)) return false;
+      if (qMet && !METODO_PAGO_VENTA_LABELS[v.metodoPago].toLowerCase().includes(qMet)) return false;
       return true;
     });
   }, [filtradas, columnSearch]);
@@ -197,11 +203,14 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
         case "hora":
           return a.hora.trim().localeCompare(b.hora.trim(), "es") * m;
         case "tipo":
-          return a.tipo.localeCompare(b.tipo, "es") * m;
+          return tipoRowLabel(a).localeCompare(tipoRowLabel(b), "es") * m;
         case "total":
           return (Number(a.total) - Number(b.total)) * m;
         case "metodoPago":
-          return a.metodoPago.localeCompare(b.metodoPago, "es") * m;
+          return METODO_PAGO_VENTA_LABELS[a.metodoPago].localeCompare(
+            METODO_PAGO_VENTA_LABELS[b.metodoPago],
+            "es",
+          ) * m;
         default:
           return 0;
       }
@@ -380,6 +389,13 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                           </button>
                           <button
                             type="button"
+                            onClick={() => setDraft((d) => (d ? { ...d, kind: "llevar" } : d))}
+                            className={`rounded-full border px-2 py-0.5 text-xs ${draft!.kind === "llevar" ? "border-accent bg-accent-light text-accent" : "border-border"}`}
+                          >
+                            Para llevar
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setDraft((d) => (d ? { ...d, kind: "domicilio" } : d))}
                             className={`rounded-full border px-2 py-0.5 text-xs ${draft!.kind === "domicilio" ? "border-accent bg-accent-light text-accent" : "border-border"}`}
                           >
@@ -389,19 +405,28 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                         {draft!.kind === "domicilio" ? (
                           <select
                             value={draft!.canal}
-                            onChange={(e) => setDraft((d) => (d ? { ...d, canal: e.target.value } : d))}
+                            onChange={(e) =>
+                              setDraft((d) =>
+                                d ? { ...d, canal: e.target.value as CanalDomicilio } : d,
+                              )
+                            }
                             className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-xs"
                           >
                             {CANALES_DOMICILIO.map((c) => (
                               <option key={c} value={c}>
-                                {c}
+                                {CANAL_DOMICILIO_LABELS[c]}
                               </option>
                             ))}
                           </select>
                         ) : null}
                       </div>
                     ) : (
-                      <span>{v.tipo}</span>
+                      <span className="break-words">
+                        {TIPO_VENTA_LABELS[v.tipo]}
+                        {v.tipo === "DOMICILIO" && v.canal
+                          ? ` · ${CANAL_DOMICILIO_LABELS[v.canal]}`
+                          : ""}
+                      </span>
                     )}
                   </td>
                   <td className="py-2 pr-3 align-middle tabular-nums">
@@ -414,17 +439,23 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                     {isEditing ? (
                       <select
                         value={draft!.metodoPago}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, metodoPago: e.target.value } : d))}
+                        onChange={(e) =>
+                          setDraft((d) =>
+                            d ? { ...d, metodoPago: e.target.value as MetodoPagoVenta } : d,
+                          )
+                        }
                         className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-xs"
                       >
-                        {METODOS_PAGO.map((m) => (
+                        {METODOS_PAGO_VENTA.map((m) => (
                           <option key={m} value={m}>
-                            {m}
+                            {METODO_PAGO_VENTA_LABELS[m]}
                           </option>
                         ))}
                       </select>
                     ) : (
-                      <span className="break-words">{v.metodoPago}</span>
+                      <span className="break-words">
+                        {METODO_PAGO_VENTA_LABELS[v.metodoPago]}
+                      </span>
                     )}
                   </td>
                   <td className="py-2 pr-2 align-top">
@@ -541,13 +572,17 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
                                       <td className="py-2">
                                         <button
                                           type="button"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            if (!draft || draft.lines.length <= 1) {
+                                              cancelEdit();
+                                              return;
+                                            }
                                             setDraft((d) => {
-                                              if (!d || d.lines.length <= 1) return d;
+                                              if (!d) return d;
                                               const next = d.lines.filter((_, i) => i !== idx);
                                               return { ...d, lines: next };
-                                            })
-                                          }
+                                            });
+                                          }}
                                           className="text-danger hover:underline"
                                           aria-label="Quitar línea"
                                         >

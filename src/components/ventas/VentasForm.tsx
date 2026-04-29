@@ -13,11 +13,12 @@ import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import { registrarVenta } from "@/app/actions/ventas";
+import type { CanalDomicilio, MetodoPagoVenta } from "@prisma/client";
 import {
+  CANAL_DOMICILIO_LABELS,
   CANALES_DOMICILIO,
-  METODOS_PAGO,
-  TIPO_MESA,
-  tipoDomicilio,
+  METODO_PAGO_VENTA_LABELS,
+  METODOS_PAGO_VENTA,
 } from "@/lib/ventas-constants";
 
 const initialState: ActionState = { ok: true };
@@ -377,9 +378,9 @@ export function VentasForm({
 
   const [fecha, setFecha] = useState(todayLocalISO);
   const [hora, setHora] = useState(nowTimeHHMM);
-  const [ventaKind, setVentaKind] = useState<"mesa" | "domicilio">("mesa");
-  const [canal, setCanal] = useState<string>(CANALES_DOMICILIO[0]!);
-  const [metodoPago, setMetodoPago] = useState<string>(METODOS_PAGO[0]!);
+  const [ventaKind, setVentaKind] = useState<"mesa" | "domicilio" | "llevar">("mesa");
+  const [canal, setCanal] = useState<CanalDomicilio>(CANALES_DOMICILIO[0]!);
+  const [metodoPago, setMetodoPago] = useState<MetodoPagoVenta>(METODOS_PAGO_VENTA[0]!);
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [lineasError, setLineasError] = useState<string | null>(null);
 
@@ -388,7 +389,8 @@ export function VentasForm({
   const [busqueda, setBusqueda] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const tipoStr = ventaKind === "mesa" ? TIPO_MESA : tipoDomicilio(canal);
+  const tipoValue =
+    ventaKind === "mesa" ? "MESA" : ventaKind === "llevar" ? "PARA_LLEVAR" : "DOMICILIO";
 
   const sections = useMemo(() => buildPlatoSections(platos), [platos]);
 
@@ -490,7 +492,8 @@ export function VentasForm({
     <form action={formAction} onSubmit={handleSubmit} className="flex flex-col pb-2">
       <input type="hidden" name="fecha" value={fecha} />
       <input type="hidden" name="hora" value={hora} />
-      <input type="hidden" name="tipo" value={tipoStr} />
+      <input type="hidden" name="tipo" value={tipoValue} />
+      <input type="hidden" name="canal" value={ventaKind === "domicilio" ? canal : ""} />
       <input type="hidden" name="metodoPago" value={metodoPago} />
       <input type="hidden" name="lineas" value={lineasPayload} />
 
@@ -538,6 +541,13 @@ export function VentasForm({
             </button>
             <button
               type="button"
+              onClick={() => setVentaKind("llevar")}
+              className={ventaKind === "llevar" ? pillOn : pillOff}
+            >
+              Para llevar
+            </button>
+            <button
+              type="button"
               onClick={() => setVentaKind("domicilio")}
               className={ventaKind === "domicilio" ? pillOn : pillOff}
             >
@@ -547,13 +557,13 @@ export function VentasForm({
           {ventaKind === "domicilio" ? (
             <select
               value={canal}
-              onChange={(e) => setCanal(e.target.value)}
+              onChange={(e) => setCanal(e.target.value as CanalDomicilio)}
               className="mt-2 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
               aria-label="Canal de domicilio"
             >
               {CANALES_DOMICILIO.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {CANAL_DOMICILIO_LABELS[c]}
                 </option>
               ))}
             </select>
@@ -568,12 +578,12 @@ export function VentasForm({
           <select
             id="venta-metodo"
             value={metodoPago}
-            onChange={(e) => setMetodoPago(e.target.value)}
+            onChange={(e) => setMetodoPago(e.target.value as MetodoPagoVenta)}
             className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
           >
-            {METODOS_PAGO.map((m) => (
+            {METODOS_PAGO_VENTA.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {METODO_PAGO_VENTA_LABELS[m]}
               </option>
             ))}
           </select>
