@@ -87,9 +87,10 @@ function optionalString(formData: FormData, key: string) {
 }
 
 function toPositiveDecimal(value: string) {
-  const n = Number(value);
+  const trimmed = value.trim();
+  const n = Number(trimmed);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return new Prisma.Decimal(n);
+  return new Prisma.Decimal(trimmed);
 }
 
 async function requireUserId() {
@@ -623,12 +624,6 @@ export async function updateCategoria(id: string, nombre: string): Promise<Actio
     const nombreLen = maxLength(trimmed, MAX_NOMBRE, "El nombre");
     if (nombreLen) return nombreLen;
 
-    const existing = await prisma.categoria.findFirst({
-      where: { id, userId, ...notDeleted },
-      select: { id: true },
-    });
-    if (!existing) return { ok: false, message: "Categoría no encontrada." };
-
     const dup = await prisma.categoria.findFirst({
       where: {
         userId,
@@ -663,12 +658,6 @@ export async function deleteCategoria(_: ActionState, formData: FormData): Promi
     const userId = await requireUserId();
     const id = requiredString(formData, "id");
     if (!id) return { ok: false, message: "Categoría inválida." };
-
-    const existing = await prisma.categoria.findFirst({
-      where: { id, userId, ...notDeleted },
-      select: { id: true },
-    });
-    if (!existing) return { ok: false, message: "Categoría no encontrada." };
 
     const platosActivos = await prisma.plato.count({
       where: {
@@ -1316,12 +1305,6 @@ export async function updateNomina(_: ActionState, formData: FormData): Promise<
     const id = requiredString(formData, "id");
     if (!id) return { ok: false, message: "Nómina inválida.", field: "id" };
 
-    const existente = await prisma.nomina.findFirst({
-      where: { id, userId },
-      select: { id: true },
-    });
-    if (!existente) return { ok: false, message: "Nómina no encontrada.", field: "id" };
-
     const built = await buildNominaPayloadFromForm(formData, userId);
     if (!built.ok) return built.state;
 
@@ -1549,11 +1532,6 @@ export async function updateCombo(_: ActionState, formData: FormData): Promise<A
     }
 
     if (!id) return { ok: false, message: "Combo inválido.", field: "id" };
-    const existente = await prisma.plato.findFirst({
-      where: { id, userId, tipo: TipoPlato.COMBO, ...notDeleted },
-      select: { id: true },
-    });
-    if (!existente) return { ok: false, message: "Combo no encontrado.", field: "id" };
 
     if (!nombre) return { ok: false, message: "El nombre es obligatorio.", field: "nombre" };
     const nombreLen = maxLength(nombre, MAX_NOMBRE, "El nombre");
