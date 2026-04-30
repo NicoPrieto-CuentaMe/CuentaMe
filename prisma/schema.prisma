@@ -301,6 +301,7 @@ model Inventario {
   @@index([userId])
   @@index([insumoId])
   @@index([userId, insumoId, fecha])
+  @@unique([userId, insumoId, fecha])
 }
 
 model Venta {

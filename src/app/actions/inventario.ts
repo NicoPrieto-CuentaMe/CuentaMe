@@ -59,9 +59,24 @@ function esFechaFutura(isoDate: string): boolean {
   const mo = Number(m[2]);
   const d = Number(m[3]);
   const inputUtc = Date.UTC(y, mo - 1, d);
-  const now = new Date();
-  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return inputUtc > todayUtc;
+  // Colombia = UTC-5 (sin horario de verano)
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+  const ahoraCo = new Date(Date.now() - CO_OFFSET_MS);
+  const todayCo = Date.UTC(
+    ahoraCo.getUTCFullYear(),
+    ahoraCo.getUTCMonth(),
+    ahoraCo.getUTCDate(),
+  );
+  return inputUtc > todayCo;
+}
+
+function validarRangoFechaInventario(fecha: Date): { ok: false; message: string } | null {
+  const hoy = new Date();
+  const hace10Anos = new Date(hoy.getFullYear() - 10, 0, 1);
+  if (fecha < hace10Anos) {
+    return { ok: false, message: "La fecha es muy antigua (más de 10 años atrás)." };
+  }
+  return null;
 }
 
 /** stockReal >= 0, máximo 9.999, hasta 4 decimales razonables */
@@ -89,6 +104,8 @@ export async function registrarInventario(_: ActionState, formData: FormData): P
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheck = validarRangoFechaInventario(fechaDb);
+    if (rangoCheck) return { ...rangoCheck, field: "fecha" };
     if (esFechaFutura(fechaRaw)) {
       return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
     }
@@ -200,33 +217,26 @@ export async function registrarInventario(_: ActionState, formData: FormData): P
 
     await prisma.$transaction(async (tx) => {
       for (const line of validLines) {
-        const existing = await tx.inventario.findMany({
-          where: { userId, insumoId: line.insumoId, fecha: fechaDb },
-          orderBy: { createdAt: "asc" },
-        });
-
-        if (existing.length > 0) {
-          const keep = existing[0]!;
-          await tx.inventario.update({
-            where: { id: keep.id },
-            data: { stockReal: line.stockReal, notas: line.notas },
-          });
-          if (existing.length > 1) {
-            await tx.inventario.deleteMany({
-              where: { id: { in: existing.slice(1).map((e) => e.id) } },
-            });
-          }
-        } else {
-          await tx.inventario.create({
-            data: {
+        await tx.inventario.upsert({
+          where: {
+            userId_insumoId_fecha: {
               userId,
               insumoId: line.insumoId,
               fecha: fechaDb,
-              stockReal: line.stockReal,
-              notas: line.notas,
             },
-          });
-        }
+          },
+          update: {
+            stockReal: line.stockReal,
+            notas: line.notas,
+          },
+          create: {
+            userId,
+            insumoId: line.insumoId,
+            fecha: fechaDb,
+            stockReal: line.stockReal,
+            notas: line.notas,
+          },
+        });
       }
     });
 
@@ -254,6 +264,8 @@ export async function editarInventario(_: ActionState, formData: FormData): Prom
     if (!fechaRaw) return { ok: false, message: "La fecha es obligatoria.", field: "fecha" };
     const fechaDb = fechaCivilToDb(fechaRaw);
     if (!fechaDb) return { ok: false, message: "Fecha inválida.", field: "fecha" };
+    const rangoCheck = validarRangoFechaInventario(fechaDb);
+    if (rangoCheck) return { ...rangoCheck, field: "fecha" };
     if (esFechaFutura(fechaRaw)) {
       return { ok: false, message: "La fecha no puede ser futura.", field: "fecha" };
     }
@@ -285,6 +297,17 @@ export async function editarInventario(_: ActionState, formData: FormData): Prom
     return { ok: true, message: "Conteo actualizado." };
   } catch (e) {
     console.error("[editarInventario]", e);
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code: string }).code === "P2002"
+    ) {
+      return {
+        ok: false,
+        message: "Ya existe un conteo de este insumo en esa fecha.",
+        field: "fecha",
+      };
+    }
     return { ok: false, message: "No se pudo actualizar el registro." };
   }
 }
