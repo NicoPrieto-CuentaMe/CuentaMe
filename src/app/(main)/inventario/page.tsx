@@ -82,6 +82,20 @@ export default async function InventarioPage() {
     compraFecha: d.compra.fecha,
   }));
 
+  // Pre-indexar recetas por platoId — elimina O(N×M)
+  const recetasPorPlato = new Map<string, (typeof recetas[number])[]>();
+  for (const r of recetas) {
+    if (!recetasPorPlato.has(r.platoId)) recetasPorPlato.set(r.platoId, []);
+    recetasPorPlato.get(r.platoId)!.push(r);
+  }
+
+  // Pre-indexar comboItems por comboId — elimina O(N×M×K)
+  const itemsPorCombo = new Map<string, typeof comboItems>();
+  for (const item of comboItems) {
+    if (!itemsPorCombo.has(item.comboId)) itemsPorCombo.set(item.comboId, []);
+    itemsPorCombo.get(item.comboId)!.push(item);
+  }
+
   const ventasConsumo: {
     platoId: string;
     ventaFecha: Date;
@@ -92,8 +106,8 @@ export default async function InventarioPage() {
   }[] = [];
 
   for (const dv of detalleVentas) {
-    for (const r of recetas) {
-      if (r.platoId !== dv.platoId) continue;
+    const recetasPlato = recetasPorPlato.get(dv.platoId) ?? [];
+    for (const r of recetasPlato) {
       ventasConsumo.push({
         platoId: dv.platoId,
         ventaFecha: dv.venta.fecha,
@@ -103,23 +117,21 @@ export default async function InventarioPage() {
         recetaUnidad: r.unidad,
       });
     }
-  }
 
-  const detallesDeCombo = detalleVentas.filter((dv) => dv.plato.tipo === TipoPlato.COMBO);
-
-  for (const dv of detallesDeCombo) {
-    for (const item of comboItems) {
-      if (item.comboId !== dv.platoId) continue;
-      for (const r of recetas) {
-        if (r.platoId !== item.platoId) continue;
-        ventasConsumo.push({
-          platoId: item.platoId,
-          ventaFecha: dv.venta.fecha,
-          detalleCantidad: dv.cantidad * item.cantidad,
-          insumoId: r.insumoId,
-          recetaCantidad: r.cantidad,
-          recetaUnidad: r.unidad,
-        });
+    if (dv.plato.tipo === TipoPlato.COMBO) {
+      const items = itemsPorCombo.get(dv.platoId) ?? [];
+      for (const item of items) {
+        const recetasComponente = recetasPorPlato.get(item.platoId) ?? [];
+        for (const r of recetasComponente) {
+          ventasConsumo.push({
+            platoId: item.platoId,
+            ventaFecha: dv.venta.fecha,
+            detalleCantidad: dv.cantidad * item.cantidad,
+            insumoId: r.insumoId,
+            recetaCantidad: r.cantidad,
+            recetaUnidad: r.unidad,
+          });
+        }
       }
     }
   }
@@ -143,6 +155,12 @@ export default async function InventarioPage() {
           orderBy: [{ fecha: "desc" }, { insumo: { nombre: "asc" } }],
         });
 
+  // Serializar Decimal → number para Client Components
+  const inventarioRowsSerialized = inventarioRows.map((r) => ({
+    ...r,
+    stockReal: Number(r.stockReal.toString()),
+  }));
+
   return (
     <div className="space-y-8">
       <div>
@@ -159,7 +177,7 @@ export default async function InventarioPage() {
 
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         <h2 className="mb-4 text-base font-semibold text-text-primary">Historial de conteos</h2>
-        <InventarioHistorial rows={inventarioRows} />
+        <InventarioHistorial rows={inventarioRowsSerialized} />
       </div>
     </div>
   );

@@ -47,6 +47,20 @@ export function calcularStockReferenciaPorInsumo(
     recetaUnidad: Unidad;
   }[],
 ): Map<string, StockCalculadoInfo> {
+  // Pre-indexar compras por insumoId — O(M) en lugar de O(N×M)
+  const comprasPorInsumo = new Map<string, typeof compraDetalles>();
+  for (const d of compraDetalles) {
+    if (!comprasPorInsumo.has(d.insumoId)) comprasPorInsumo.set(d.insumoId, []);
+    comprasPorInsumo.get(d.insumoId)!.push(d);
+  }
+
+  // Pre-indexar ventas por insumoId — O(K) en lugar de O(N×K)
+  const ventasPorInsumo = new Map<string, typeof ventasConsumo>();
+  for (const v of ventasConsumo) {
+    if (!ventasPorInsumo.has(v.insumoId)) ventasPorInsumo.set(v.insumoId, []);
+    ventasPorInsumo.get(v.insumoId)!.push(v);
+  }
+
   const out = new Map<string, StockCalculadoInfo>();
 
   for (const ins of insumos) {
@@ -62,8 +76,9 @@ export function calcularStockReferenciaPorInsumo(
 
     let comprado = 0;
     let unidadesMixtas = false;
-    for (const d of compraDetalles) {
-      if (d.insumoId !== ins.id) continue;
+
+    const comprasIns = comprasPorInsumo.get(ins.id) ?? [];
+    for (const d of comprasIns) {
       if (d.compraFecha.getTime() < fechaBase.getTime()) continue;
       if (d.unidad === uBase) {
         comprado += decToNumber(d.cantidad);
@@ -73,8 +88,8 @@ export function calcularStockReferenciaPorInsumo(
     }
 
     let consumido = 0;
-    for (const v of ventasConsumo) {
-      if (v.insumoId !== ins.id) continue;
+    const ventasIns = ventasPorInsumo.get(ins.id) ?? [];
+    for (const v of ventasIns) {
       if (v.ventaFecha.getTime() < fechaBase.getTime()) continue;
       if (!sonUnidadesCompatibles(uBase as string, v.recetaUnidad as string)) continue;
       if (v.recetaUnidad !== uBase) {

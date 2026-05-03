@@ -20,9 +20,13 @@ export const TIPO_CONTRATO_LABELS: Record<TipoContrato, string> = {
   INFORMAL: "Informal",
 };
 
-// Constantes de nómina colombiana 2025
-export const SMLMV_2025 = 1_423_500;
-export const AUXILIO_TRANSPORTE_2025 = 200_000;
+// Constantes de nómina colombiana 2026 (Decretos 1469 de 2025 y 0159 de 2026).
+// Los porcentajes (salud, pensión, ARL, parafiscales, prestaciones) son estables
+// porque vienen del Código Sustantivo del Trabajo, no se actualizan cada año.
+// TODO: cuando se implemente la edición de constantes por usuario, mover esto
+// a un módulo de configuración con UI para editar.
+export const SMLMV_2026 = 1_750_905;
+export const AUXILIO_TRANSPORTE_2026 = 249_095;
 export const PORC_SALUD_EMPLEADO = 0.04;
 export const PORC_PENSION_EMPLEADO = 0.04;
 export const PORC_SALUD_EMPLEADOR = 0.085;
@@ -40,7 +44,7 @@ export function calcularNomina(params: {
 }) {
   const { salarioBase, horasExtra, otrosIngresos } = params;
   const otrasDed = Math.max(0, Math.round(params.otrasDeduciones ?? 0));
-  const auxilio = salarioBase <= SMLMV_2025 * 2 ? AUXILIO_TRANSPORTE_2025 : 0;
+  const auxilio = salarioBase <= SMLMV_2026 * 2 ? AUXILIO_TRANSPORTE_2026 : 0;
   const dedSalud = Math.round(salarioBase * PORC_SALUD_EMPLEADO);
   const dedPension = Math.round(salarioBase * PORC_PENSION_EMPLEADO);
   const ss = Math.round(salarioBase * (PORC_SALUD_EMPLEADOR + PORC_PENSION_EMPLEADOR + PORC_ARL));

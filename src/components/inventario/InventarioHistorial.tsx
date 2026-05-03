@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { Unidad } from "@prisma/client";
-import type { Decimal } from "@prisma/client/runtime/library";
 import { useRouter } from "next/navigation";
 import { editarInventario, eliminarInventario } from "@/app/actions/inventario";
 import type { ActionState } from "@/app/(main)/configuracion/actions";
@@ -12,7 +11,7 @@ import { ColumnHeader } from "@/components/ui/ColumnHeader";
 export type InventarioHistorialRow = {
   id: string;
   fecha: Date;
-  stockReal: Decimal;
+  stockReal: number;
   notas: string | null;
   insumo: { nombre: string; unidadBase: Unidad };
 };
@@ -50,8 +49,8 @@ function unitLabel(u: Unidad): string {
   return UNIT_OPTIONS.find((x) => x.value === u)?.label ?? u;
 }
 
-function formatStock(n: Decimal): string {
-  const num = Number(n.toString());
+function formatStock(n: number): string {
+  const num = n;
   if (!Number.isFinite(num)) return "—";
   return new Intl.NumberFormat("es-CO", {
     minimumFractionDigits: 0,
@@ -63,8 +62,8 @@ function notasCelda(row: InventarioHistorialRow): string {
   return row.notas?.trim() ? row.notas : "—";
 }
 
-function stockToInputString(n: Decimal): string {
-  return n.toString();
+function stockToInputString(n: number): string {
+  return String(n);
 }
 
 function groupByFecha(rows: InventarioHistorialRow[]): { fecha: Date; items: InventarioHistorialRow[] }[] {
@@ -235,7 +234,7 @@ export function InventarioHistorial({ rows }: { rows: InventarioHistorialRow[] }
     if (sortColumn !== "stock") return planos;
     const m = sortDirection === "asc" ? 1 : -1;
     return [...planos].sort(
-      (a, b) => (Number(a.row.stockReal) - Number(b.row.stockReal)) * m,
+      (a, b) => (a.row.stockReal - b.row.stockReal) * m,
     );
   }, [grupos, sortColumn, sortDirection]);
 
