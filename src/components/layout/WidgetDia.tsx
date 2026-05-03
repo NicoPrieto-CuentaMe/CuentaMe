@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { TrendingUp, X } from "lucide-react";
 import type { MetricasDia } from "@/app/actions/metricas-dia";
+import type { MetodoPagoVenta } from "@prisma/client";
+import { METODO_PAGO_VENTA_LABELS } from "@/lib/ventas-constants";
 
 const fmtCop = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -13,7 +15,10 @@ const fmtCop = new Intl.NumberFormat("es-CO", {
 function desgloseMetodoLinea(porMetodo: Record<string, number>) {
   return Object.entries(porMetodo)
     .filter(([, monto]) => monto > 0)
-    .map(([metodo, monto]) => `${metodo} ${fmtCop.format(monto)}`);
+    .map(([metodo, monto]) => {
+      const label = METODO_PAGO_VENTA_LABELS[metodo as MetodoPagoVenta] ?? metodo;
+      return `${label} ${fmtCop.format(monto)}`;
+    });
 }
 
 export function WidgetDia({ metricas }: { metricas: MetricasDia | null }) {
