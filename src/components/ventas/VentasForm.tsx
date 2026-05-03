@@ -23,17 +23,24 @@ import {
 
 const initialState: ActionState = { ok: true };
 
+// Colombia = UTC-5 (sin horario de verano). Usamos offset fijo para
+// que la fecha y hora coincidan con las almacenadas en BD.
+function nowEnColombia(): Date {
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+  return new Date(Date.now() - CO_OFFSET_MS);
+}
+
 function todayLocalISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const d = nowEnColombia();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
 function nowTimeHHMM(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const d = nowEnColombia();
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 type PlatoRow = {
@@ -448,16 +455,21 @@ export function VentasForm({
     }
   }, [view]);
 
+  const lastProcessedState = useRef<ActionState | null>(null);
+
   useEffect(() => {
-    if (state.ok) {
-      setCantidades({});
-      setLineasError(null);
-      setView("home");
-      setCategoriaKey(null);
-      setBusqueda("");
-      router.refresh();
-    }
-  }, [state.ok, router]);
+    if (state === lastProcessedState.current) return;
+    if (!state.ok || !state.message) return;
+    lastProcessedState.current = state;
+    setFecha(todayLocalISO());
+    setHora(nowTimeHHMM());
+    setCantidades({});
+    setLineasError(null);
+    setView("home");
+    setCategoriaKey(null);
+    setBusqueda("");
+    router.refresh();
+  }, [state, router]);
 
   function setQty(platoId: string, delta: number) {
     setLineasError(null);
