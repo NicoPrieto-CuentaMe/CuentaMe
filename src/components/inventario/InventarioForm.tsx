@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { CategoriaProveedor, Unidad } from "@prisma/client";
@@ -12,11 +12,17 @@ import type { StockCalculadoInfo } from "@/lib/inventario-stock-calculado";
 
 const initialState: ActionState = { ok: true };
 
+// Colombia = UTC-5 (sin horario de verano).
+function nowEnColombia(): Date {
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+  return new Date(Date.now() - CO_OFFSET_MS);
+}
+
 function todayLocalISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const d = nowEnColombia();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -232,13 +238,20 @@ export function InventarioForm({
     return insumosEnCategoria(insumos, categoriaSel);
   }, [insumos, categoriaSel]);
 
+  const lastProcessedState = useRef<ActionState | null>(null);
+
   useEffect(() => {
-    if (state.ok) {
-      setLines({});
-      setInlineEmptyError(null);
-      router.refresh();
-    }
-  }, [state.ok, router]);
+    if (state === lastProcessedState.current) return;
+    if (!state.ok || !state.message) return;
+    lastProcessedState.current = state;
+    setFecha(todayLocalISO());
+    setLines({});
+    setView("home");
+    setCategoriaSel(null);
+    setBusqueda("");
+    setInlineEmptyError(null);
+    router.refresh();
+  }, [state, router]);
 
   function handleFormSubmit(e: React.FormEvent<HTMLFormElement>) {
     if (filledCount === 0) {
