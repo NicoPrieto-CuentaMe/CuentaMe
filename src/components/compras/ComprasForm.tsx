@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { CategoriaProveedor, Unidad } from "@prisma/client";
@@ -12,11 +12,17 @@ import { UNIT_OPTIONS } from "@/app/(main)/configuracion/units";
 
 const initialState: ActionState = { ok: true };
 
+// Colombia = UTC-5 (sin horario de verano).
+function nowEnColombia(): Date {
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+  return new Date(Date.now() - CO_OFFSET_MS);
+}
+
 function todayLocalISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const d = nowEnColombia();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -125,15 +131,18 @@ export function ComprasForm({
     return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(sum);
   }, [lines]);
 
+  const lastProcessedState = useRef<ActionState | null>(null);
+
   useEffect(() => {
-    if (state.ok) {
-      setFecha(todayLocalISO());
-      setProveedorId("");
-      setNotas("");
-      setLines([emptyLine()]);
-      router.refresh();
-    }
-  }, [state.ok, router]);
+    if (state === lastProcessedState.current) return;
+    if (!state.ok || !state.message) return;
+    lastProcessedState.current = state;
+    setFecha(todayLocalISO());
+    setProveedorId("");
+    setNotas("");
+    setLines([emptyLine()]);
+    router.refresh();
+  }, [state, router]);
 
   useEffect(() => {
     setLines([emptyLine()]);
