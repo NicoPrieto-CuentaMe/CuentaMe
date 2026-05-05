@@ -167,6 +167,7 @@ export async function registrarVenta(_: ActionState, formData: FormData): Promis
       totalGeneral = totalGeneral.add(vl.subtotal);
     }
 
+    let ventaId = "";
     await prisma.$transaction(async (tx) => {
       const venta = await tx.venta.create({
         data: {
@@ -188,13 +189,25 @@ export async function registrarVenta(_: ActionState, formData: FormData): Promis
           precioUnitario: vl.precioUnitario,
         })),
       });
+      ventaId = venta.id;
     });
 
     revalidatePath("/ventas");
-    return { ok: true, message: "Venta registrada." };
+    return { ok: true, message: "Venta registrada.", createdId: ventaId };
   } catch (e) {
     console.error("[registrarVenta]", e);
-    return { ok: false, message: "No se pudo registrar la venta. Intenta de nuevo." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al registrar la venta.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo registrar la venta. Intenta de nuevo.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
@@ -286,7 +299,7 @@ async function buildValidVentaLinesFromParsed(
       typeof cantRaw === "number" && Number.isInteger(cantRaw)
         ? cantRaw
         : typeof cantRaw === "string"
-          ? parseInt(cantRaw.trim(), 10)
+          ? Number(cantRaw.trim())
           : NaN;
     if (!Number.isInteger(cant) || cant < MIN_CANT || cant > MAX_CANT) {
       return {
@@ -402,7 +415,18 @@ export async function editarVenta(_: ActionState, formData: FormData): Promise<A
     return { ok: true, message: "Venta actualizada." };
   } catch (e) {
     console.error("[editarVenta]", e);
-    return { ok: false, message: "No se pudo actualizar la venta. Intenta de nuevo." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al actualizar la venta.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo actualizar la venta. Intenta de nuevo.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
@@ -422,6 +446,17 @@ export async function eliminarVenta(_: ActionState, formData: FormData): Promise
     return { ok: true, message: "Venta eliminada." };
   } catch (e) {
     console.error("[eliminarVenta]", e);
-    return { ok: false, message: "No se pudo eliminar la venta." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al eliminar la venta.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo eliminar la venta.",
+      errorCode: "UNKNOWN",
+    };
   }
 }

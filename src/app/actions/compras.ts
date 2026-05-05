@@ -171,6 +171,7 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
       totalGeneral = totalGeneral.add(vl.total);
     }
 
+    let compraId = "";
     await prisma.$transaction(async (tx) => {
       const compra = await tx.compra.create({
         data: {
@@ -192,13 +193,25 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
           total: vl.total,
         })),
       });
+      compraId = compra.id;
     });
 
     revalidatePath("/compras");
-    return { ok: true, message: "Compra registrada." };
+    return { ok: true, message: "Compra registrada.", createdId: compraId };
   } catch (e) {
     console.error("[registrarCompra]", e);
-    return { ok: false, message: "No se pudo registrar la compra. Intenta de nuevo." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al registrar la compra.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo registrar la compra. Intenta de nuevo.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
@@ -455,7 +468,18 @@ export async function editarCompra(_: ActionState, formData: FormData): Promise<
     return { ok: true, message: "Compra actualizada." };
   } catch (e) {
     console.error("[editarCompra]", e);
-    return { ok: false, message: "No se pudo actualizar la compra. Intenta de nuevo." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al actualizar la compra.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo actualizar la compra. Intenta de nuevo.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
@@ -475,6 +499,17 @@ export async function eliminarCompra(_: ActionState, formData: FormData): Promis
     return { ok: true, message: "Compra eliminada." };
   } catch (e) {
     console.error("[eliminarCompra]", e);
-    return { ok: false, message: "No se pudo eliminar la compra." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al eliminar la compra.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo eliminar la compra.",
+      errorCode: "UNKNOWN",
+    };
   }
 }

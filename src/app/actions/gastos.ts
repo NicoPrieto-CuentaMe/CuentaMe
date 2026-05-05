@@ -147,7 +147,7 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
       if (nl) return { ...nl, field: "notas" };
     }
 
-    await prisma.gastoFijo.create({
+    const gasto = await prisma.gastoFijo.create({
       data: {
         userId,
         fecha: fechaDb,
@@ -160,10 +160,21 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
     });
 
     revalidatePath("/gastos");
-    return { ok: true, message: "Gasto registrado." };
+    return { ok: true, message: "Gasto registrado.", createdId: gasto.id };
   } catch (e) {
     console.error("[addGastoFijo]", e);
-    return { ok: false, message: "No se pudo registrar el gasto. Intenta de nuevo." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al registrar el gasto.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo registrar el gasto. Intenta de nuevo.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
@@ -226,7 +237,18 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
     return { ok: true, message: "Gasto actualizado." };
   } catch (e) {
     console.error("[updateGastoFijo]", e);
-    return { ok: false, message: "No se pudo actualizar el gasto. Intenta de nuevo." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al actualizar el gasto.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo actualizar el gasto. Intenta de nuevo.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
@@ -245,7 +267,18 @@ export async function deleteGastoFijo(_: ActionState, formData: FormData): Promi
     return { ok: true, message: "Gasto eliminado." };
   } catch (e) {
     console.error("[deleteGastoFijo]", e);
-    return { ok: false, message: "No se pudo eliminar el gasto." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      return {
+        ok: false,
+        message: "Error de base de datos al eliminar el gasto.",
+        errorCode: "DB_ERROR",
+      };
+    }
+    return {
+      ok: false,
+      message: "No se pudo eliminar el gasto.",
+      errorCode: "UNKNOWN",
+    };
   }
 }
 
