@@ -460,3 +460,53 @@ export async function eliminarVenta(_: ActionState, formData: FormData): Promise
     };
   }
 }
+
+/**
+ * Catálogo completo de platos para el chat IA.
+ * A diferencia de getPlatosCatalogoVenta (que filtra active:true),
+ * este endpoint incluye platos inactivos para que la IA pueda
+ * responder preguntas sobre historial y distinguir entre
+ * "el plato no existe" y "el plato está pausado".
+ */
+export async function getPlatosCatalogoCompleto() {
+  try {
+    const userId = await requireUserId();
+    const platos = await prisma.plato.findMany({
+      where: { userId, deletedAt: null },
+      select: {
+        id: true,
+        nombre: true,
+        precioVenta: true,
+        active: true,
+        tipo: true,
+        categoria: { select: { id: true, nombre: true } },
+      },
+      orderBy: { nombre: "asc" },
+    });
+    return {
+      ok: true as const,
+      platos: platos.map((p) => ({
+        id: p.id,
+        nombre: p.nombre,
+        precioVenta: Number(p.precioVenta.toString()),
+        active: p.active,
+        tipo: p.tipo,
+        categoria: p.categoria ?? null,
+      })),
+    };
+  } catch (e) {
+    console.error("[getPlatosCatalogoCompleto]", e);
+    return {
+      ok: false as const,
+      platos: [] as {
+        id: string;
+        nombre: string;
+        precioVenta: number;
+        active: boolean;
+        tipo: import("@prisma/client").TipoPlato;
+        categoria: { id: string; nombre: string } | null;
+      }[],
+    };
+  }
+}
+
