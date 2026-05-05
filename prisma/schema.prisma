@@ -137,6 +137,8 @@ model User {
   nominas       Nomina[]
   gastosFijos   GastoFijo[]
   comboItems    ComboItem[]
+  conversaciones Conversacion[]
+  mensajes       Mensaje[]
 }
 
 model Proveedor {
@@ -406,4 +408,34 @@ model GastoFijo {
 
   @@index([userId])
   @@index([userId, fecha])
+}
+
+model Conversacion {
+  id        String    @id @default(cuid())
+  userId    String
+  titulo    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mensajes Mensaje[]
+
+  @@index([userId, updatedAt])
+}
+
+model Mensaje {
+  id              String       @id @default(cuid())
+  userId          String
+  conversacionId  String
+  role            String
+  content         String       @db.Text
+  toolCalls       Json?
+  toolResults     Json?
+  createdAt       DateTime     @default(now())
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversacion  Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId, createdAt])
+  @@index([userId])
 }
