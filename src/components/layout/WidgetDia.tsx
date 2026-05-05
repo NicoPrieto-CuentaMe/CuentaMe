@@ -26,7 +26,7 @@ export function WidgetDia({ metricas }: { metricas: MetricasDia | null }) {
 
   const isEmptyDia =
     metricas != null &&
-    metricas.numVentas === 0 &&
+    metricas.numTransacciones === 0 &&
     metricas.totalCompras === 0 &&
     metricas.totalGastos === 0;
 
@@ -51,7 +51,7 @@ export function WidgetDia({ metricas }: { metricas: MetricasDia | null }) {
                   <span className="text-sm font-semibold text-accent">{fmtCop.format(metricas.totalVentas)}</span>
                 </div>
                 <p className="mt-0.5 text-xs text-text-tertiary">
-                  {metricas.numVentas} {metricas.numVentas === 1 ? "transacción" : "transacciones"}
+                  {metricas.numTransacciones} {metricas.numTransacciones === 1 ? "transacción" : "transacciones"}
                 </p>
                 {(() => {
                   const linea = desgloseMetodoLinea(metricas.porMetodo);
