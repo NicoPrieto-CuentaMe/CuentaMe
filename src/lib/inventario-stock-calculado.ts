@@ -1,11 +1,16 @@
 import type { Unidad } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
-import { sonUnidadesCompatibles } from "@/lib/unidades.config";
 import { UNIT_OPTIONS } from "@/app/(main)/configuracion/units";
 
 export type StockCalculadoInfo =
   | { status: "sin-base" }
-  | { status: "ok"; valor: number; unidadLabel: string; unidadesMixtas: boolean };
+  | {
+      status: "ok";
+      valor: number;
+      valorNegativo: boolean;
+      unidadLabel: string;
+      unidadesMixtas: boolean;
+    };
 
 type InsumoLite = { id: string; unidadBase: Unidad };
 
@@ -27,6 +32,40 @@ export function mapUltimoInventarioPorInsumo(
     if (!m.has(r.insumoId)) m.set(r.insumoId, { fecha: r.fecha, stockReal: r.stockReal });
   }
   return m;
+}
+
+/**
+ * Convierte `cantidad` desde `desde` hacia `hacia`.
+ * Retorna null si las unidades no son del mismo grupo dimensional.
+ */
+function convertirAUnidad(
+  cantidad: number,
+  desde: Unidad,
+  hacia: Unidad,
+): number | null {
+  if (desde === hacia) return cantidad;
+
+  const factorMasa: Partial<Record<Unidad, number>> = {
+    GRAMO: 1,
+    KILOGRAMO: 1000,
+    LIBRA: 453.592,
+  };
+  const factorVolumen: Partial<Record<Unidad, number>> = {
+    MILILITRO: 1,
+    LITRO: 1000,
+  };
+
+  const enMasa = (u: Unidad) => u in factorMasa;
+  const enVolumen = (u: Unidad) => u in factorVolumen;
+
+  if (enMasa(desde) && enMasa(hacia)) {
+    return (cantidad * factorMasa[desde]!) / factorMasa[hacia]!;
+  }
+  if (enVolumen(desde) && enVolumen(hacia)) {
+    return (cantidad * factorVolumen[desde]!) / factorVolumen[hacia]!;
+  }
+
+  return null;
 }
 
 export function calcularStockReferenciaPorInsumo(
@@ -80,8 +119,10 @@ export function calcularStockReferenciaPorInsumo(
     const comprasIns = comprasPorInsumo.get(ins.id) ?? [];
     for (const d of comprasIns) {
       if (d.compraFecha.getTime() < fechaBase.getTime()) continue;
-      if (d.unidad === uBase) {
-        comprado += decToNumber(d.cantidad);
+      const cantidadConvertida = convertirAUnidad(decToNumber(d.cantidad), d.unidad, uBase);
+      if (cantidadConvertida !== null) {
+        comprado += cantidadConvertida;
+        if (d.unidad !== uBase) unidadesMixtas = true;
       } else {
         unidadesMixtas = true;
       }
@@ -91,18 +132,26 @@ export function calcularStockReferenciaPorInsumo(
     const ventasIns = ventasPorInsumo.get(ins.id) ?? [];
     for (const v of ventasIns) {
       if (v.ventaFecha.getTime() < fechaBase.getTime()) continue;
-      if (!sonUnidadesCompatibles(uBase as string, v.recetaUnidad as string)) continue;
-      if (v.recetaUnidad !== uBase) {
+      const cantidadReceta = decToNumber(v.recetaCantidad);
+      const cantidadConvertida = convertirAUnidad(
+        v.detalleCantidad * cantidadReceta,
+        v.recetaUnidad,
+        uBase,
+      );
+      if (cantidadConvertida !== null) {
+        consumido += cantidadConvertida;
+        if (v.recetaUnidad !== uBase) unidadesMixtas = true;
+      } else {
         unidadesMixtas = true;
-        continue;
       }
-      consumido += v.detalleCantidad * decToNumber(v.recetaCantidad);
     }
 
-    const valor = stockBase + comprado - consumido;
+    const valorBruto = stockBase + comprado - consumido;
+    const valor = Math.round(valorBruto * 1000) / 1000;
     out.set(ins.id, {
       status: "ok",
       valor,
+      valorNegativo: valor < 0,
       unidadLabel: unitLabel(uBase),
       unidadesMixtas,
     });

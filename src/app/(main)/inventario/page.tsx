@@ -1,165 +1,51 @@
 import { redirect } from "next/navigation";
-import { TipoPlato } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { InventarioForm } from "@/components/inventario/InventarioForm";
 import { InventarioHistorial } from "@/components/inventario/InventarioHistorial";
-import {
-  calcularStockReferenciaPorInsumo,
-  mapUltimoInventarioPorInsumo,
-  type StockCalculadoInfo,
-} from "@/lib/inventario-stock-calculado";
-
-const notDeleted = { deletedAt: null } as const;
+import { getStockActual } from "@/lib/get-stock-actual";
 
 export default async function InventarioPage() {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 
-  const [insumos, fechasTop] = await Promise.all([
-    prisma.insumo.findMany({
-      where: { userId, ...notDeleted },
-      select: { id: true, nombre: true, unidadBase: true, categoria: true },
-      orderBy: { nombre: "asc" },
-    }),
-    prisma.inventario.findMany({
-      where: { userId },
-      select: { fecha: true },
-      distinct: ["fecha"],
-      orderBy: { fecha: "desc" },
-      take: 10,
-    }),
-  ]);
-
-  const insumoIds = insumos.map((i) => i.id);
-
-  const [invRows, compraDetallesRaw, recetas, detalleVentas, comboItems] = await Promise.all([
-    insumoIds.length === 0
-      ? Promise.resolve([])
-      : prisma.inventario.findMany({
-          where: { userId, insumoId: { in: insumoIds } },
-          select: { insumoId: true, fecha: true, stockReal: true },
-        }),
-    insumoIds.length === 0
-      ? Promise.resolve([])
-      : prisma.compraDetalle.findMany({
-          where: { userId, insumoId: { in: insumoIds } },
-          select: {
-            insumoId: true,
-            cantidad: true,
-            unidad: true,
-            compra: { select: { fecha: true } },
-          },
-        }),
-    insumoIds.length === 0
-      ? Promise.resolve([])
-      : prisma.receta.findMany({
-          where: { userId, insumoId: { in: insumoIds } },
-          select: { platoId: true, insumoId: true, cantidad: true, unidad: true },
-        }),
-    prisma.detalleVenta.findMany({
-      where: { userId },
-      select: {
-        platoId: true,
-        cantidad: true,
-        venta: { select: { fecha: true } },
-        plato: { select: { tipo: true } },
-      },
-    }),
-    prisma.comboItem.findMany({
-      where: { userId },
-      select: { comboId: true, platoId: true, cantidad: true },
-    }),
-  ]);
-
-  const ultimoPorInsumo = mapUltimoInventarioPorInsumo(invRows);
-
-  const compraDetalles = compraDetallesRaw.map((d) => ({
-    insumoId: d.insumoId,
-    cantidad: d.cantidad,
-    unidad: d.unidad,
-    compraFecha: d.compra.fecha,
-  }));
-
-  // Pre-indexar recetas por platoId — elimina O(N×M)
-  const recetasPorPlato = new Map<string, (typeof recetas[number])[]>();
-  for (const r of recetas) {
-    if (!recetasPorPlato.has(r.platoId)) recetasPorPlato.set(r.platoId, []);
-    recetasPorPlato.get(r.platoId)!.push(r);
-  }
-
-  // Pre-indexar comboItems por comboId — elimina O(N×M×K)
-  const itemsPorCombo = new Map<string, typeof comboItems>();
-  for (const item of comboItems) {
-    if (!itemsPorCombo.has(item.comboId)) itemsPorCombo.set(item.comboId, []);
-    itemsPorCombo.get(item.comboId)!.push(item);
-  }
-
-  const ventasConsumo: {
-    platoId: string;
-    ventaFecha: Date;
-    detalleCantidad: number;
-    insumoId: string;
-    recetaCantidad: (typeof recetas)[number]["cantidad"];
-    recetaUnidad: (typeof recetas)[number]["unidad"];
-  }[] = [];
-
-  for (const dv of detalleVentas) {
-    const recetasPlato = recetasPorPlato.get(dv.platoId) ?? [];
-    for (const r of recetasPlato) {
-      ventasConsumo.push({
-        platoId: dv.platoId,
-        ventaFecha: dv.venta.fecha,
-        detalleCantidad: dv.cantidad,
-        insumoId: r.insumoId,
-        recetaCantidad: r.cantidad,
-        recetaUnidad: r.unidad,
-      });
-    }
-
-    if (dv.plato.tipo === TipoPlato.COMBO) {
-      const items = itemsPorCombo.get(dv.platoId) ?? [];
-      for (const item of items) {
-        const recetasComponente = recetasPorPlato.get(item.platoId) ?? [];
-        for (const r of recetasComponente) {
-          ventasConsumo.push({
-            platoId: item.platoId,
-            ventaFecha: dv.venta.fecha,
-            detalleCantidad: dv.cantidad * item.cantidad,
-            insumoId: r.insumoId,
-            recetaCantidad: r.cantidad,
-            recetaUnidad: r.unidad,
-          });
-        }
-      }
-    }
-  }
-
-  const stockMap = calcularStockReferenciaPorInsumo(insumos, ultimoPorInsumo, compraDetalles, ventasConsumo);
-  const stockCalculadoById: Record<string, StockCalculadoInfo> = {};
-  stockMap.forEach((info, id) => {
-    stockCalculadoById[id] = info;
+  // Fechas recientes para el historial (últimas 10 fechas distintas con conteos)
+  const fechasTop = await prisma.inventario.findMany({
+    where: { userId },
+    select: { fecha: true },
+    distinct: ["fecha"],
+    orderBy: { fecha: "desc" },
+    take: 10,
   });
 
-  const fechasList = fechasTop.map((f) => f.fecha);
-
-  const inventarioRows =
-    fechasList.length === 0
-      ? []
-      : await prisma.inventario.findMany({
-          where: { userId, fecha: { in: fechasList } },
+  const [{ stockById, error: stockError }, inventarioRows] = await Promise.all([
+    getStockActual(userId),
+    fechasTop.length === 0
+      ? Promise.resolve([])
+      : prisma.inventario.findMany({
+          where: { userId, fecha: { in: fechasTop.map((f) => f.fecha) } },
           include: {
             insumo: { select: { nombre: true, unidadBase: true } },
           },
           orderBy: [{ fecha: "desc" }, { insumo: { nombre: "asc" } }],
-        });
+        }),
+  ]);
+
+  // Obtener lista de insumos para el formulario (sin deletedAt)
+  const insumos = await prisma.insumo.findMany({
+    where: { userId, deletedAt: null },
+    select: { id: true, nombre: true, unidadBase: true, categoria: true },
+    orderBy: { nombre: "asc" },
+  });
 
   // Serializar Decimal → number para Client Components
-  const inventarioRowsSerialized = inventarioRows.map((r) => ({
-    ...r,
-    stockReal: Number(r.stockReal.toString()),
-  }));
+  const inventarioRowsSerialized = (Array.isArray(inventarioRows) ? inventarioRows : []).map(
+    (r) => ({
+      ...r,
+      stockReal: Number(r.stockReal.toString()),
+    }),
+  );
 
   return (
     <div className="space-y-8">
@@ -170,9 +56,15 @@ export default async function InventarioPage() {
         </p>
       </div>
 
+      {stockError && (
+        <div className="rounded-lg border border-warning bg-warning/10 px-4 py-3 text-sm text-warning">
+          No se pudo calcular el stock actualizado. Los datos mostrados pueden estar incompletos.
+        </div>
+      )}
+
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
         <h2 className="mb-4 text-base font-semibold text-text-primary">Nuevo conteo</h2>
-        <InventarioForm insumos={insumos} stockCalculadoById={stockCalculadoById} />
+        <InventarioForm insumos={insumos} stockCalculadoById={stockById} />
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
