@@ -48,9 +48,34 @@ function parseOptionalCategoriaProveedorSingle(
   return { ok: true, value: t as CategoriaProveedor };
 }
 
+/**
+ * Códigos de error discriminables para que el cliente (especialmente el chat IA)
+ * pueda decidir si reintentar, pedir clarificación al usuario, o detenerse.
+ */
+export type ActionErrorCode =
+  | "VALIDATION"          // Input inválido (no reintentar, pedir corrección)
+  | "NOT_FOUND"           // Registro no existe o no pertenece al usuario
+  | "CONSTRAINT_VIOLATION"// Unique violation u otra restricción de BD
+  | "UNAUTHORIZED"        // Sesión inválida
+  | "DB_ERROR"            // Error transitorio (puede reintentar)
+  | "UNKNOWN";            // Catch-all
+
 export type ActionState =
-  | { ok: true; message?: string }
-  | { ok: false; message: string; field?: string };
+  | {
+      ok: true;
+      message?: string;
+      /** ID del registro creado (presente solo en actions de creación). */
+      createdId?: string;
+      /** Datos arbitrarios del registro afectado (uso libre por la action). */
+      data?: Record<string, unknown>;
+    }
+  | {
+      ok: false;
+      message: string;
+      field?: string;
+      /** Código discriminable para clientes que necesiten lógica condicional. */
+      errorCode?: ActionErrorCode;
+    };
 
 const MAX_NOMBRE = 100;
 const MAX_TELEFONO_CHARS = 20;
