@@ -6,7 +6,11 @@ import { prisma } from "@/lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
+  session: {
+    strategy: "jwt",
+    maxAge: 7 * 24 * 60 * 60,    // 7 días máximo de inactividad
+    updateAge: 24 * 60 * 60,     // refrescar token cada 24h de uso activo
+  },
   providers: [
     Credentials({
       name: "credentials",
@@ -24,7 +28,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findUnique({
           where: { email: normalized },
         });
-        if (!user) return null;
+
+        if (!user) {
+          // Hash dummy para evitar timing attack:
+          // sin esto, un atacante puede enumerar emails
+          // midiendo que las respuestas fallidas son ~150ms más
+          // rápidas que las exitosas (bcrypt.compare no se ejecuta).
+          await bcrypt.compare(
+            password,
+            "$2a$12$dummyhashfortimingnobodyusesthis",
+          );
+          return null;
+        }
 
         const ok = await bcrypt.compare(password, user.password);
         if (!ok) return null;
