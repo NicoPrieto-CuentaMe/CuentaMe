@@ -1,0 +1,522 @@
+import { NextRequest } from "next/server";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { anthropic, CHAT_MODEL, CHAT_MAX_TOKENS, CHAT_MAX_HISTORIAL } from "@/lib/anthropic";
+import { buildSystemPrompt, buildContextoTemporal } from "@/lib/chat-system-prompt";
+import { getMetricasDia } from "@/app/actions/metricas-dia";
+import { getStockActual } from "@/lib/get-stock-actual";
+import { getPlatosCatalogoCompleto } from "@/app/actions/ventas";
+import { getVentasRango } from "@/app/actions/chat-queries";
+import { getGastosRango } from "@/app/actions/chat-queries";
+import { getComprasRango } from "@/app/actions/chat-queries";
+import { registrarVenta } from "@/app/actions/ventas";
+import { registrarCompra } from "@/app/actions/compras";
+import { addGastoFijo } from "@/app/actions/gastos";
+import type { AnthropicMessage } from "@/lib/chat-types";
+import type Anthropic from "@anthropic-ai/sdk";
+import type { Prisma } from "@prisma/client";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+// ─── DEFINICIÓN DE TOOLS ────────────────────────────────────────────────────
+
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: "get_metricas_dia",
+    description:
+      "Obtiene las métricas del día actual: total de ventas, compras, gastos, balance, número de transacciones, platos vendidos y desglose por método de pago. Úsala cuando el usuario pregunte sobre el rendimiento de hoy.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_ventas_rango",
+    description:
+      "Obtiene ventas en un rango de fechas con resumen agregado (total, transacciones, top platos, desglose por tipo/método/canal). Úsala para preguntas como '¿cuánto vendí esta semana?', '¿cuáles son mis platos más vendidos?'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fechaDesde: {
+          type: "string",
+          description: "Fecha inicio en formato YYYY-MM-DD (hora Colombia UTC-5)",
+        },
+        fechaHasta: {
+          type: "string",
+          description: "Fecha fin en formato YYYY-MM-DD (hora Colombia UTC-5)",
+        },
+        tipo: {
+          type: "string",
+          enum: ["MESA", "DOMICILIO", "PARA_LLEVAR"],
+          description: "Filtrar por tipo de venta (opcional)",
+        },
+        metodoPago: {
+          type: "string",
+          enum: ["EFECTIVO", "TARJETA_DEBITO", "TARJETA_CREDITO", "NEQUI", "DAVIPLATA", "TRANSFERENCIA"],
+          description: "Filtrar por método de pago (opcional)",
+        },
+      },
+      required: ["fechaDesde", "fechaHasta"],
+    },
+  },
+  {
+    name: "get_gastos_rango",
+    description:
+      "Obtiene gastos fijos en un rango de fechas con resumen por categoría, periodicidad y método de pago. Úsala para preguntas como '¿cuánto gasté en arriendo este mes?'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fechaDesde: {
+          type: "string",
+          description: "Fecha inicio en formato YYYY-MM-DD",
+        },
+        fechaHasta: {
+          type: "string",
+          description: "Fecha fin en formato YYYY-MM-DD",
+        },
+        categoria: {
+          type: "string",
+          enum: [
+            "ARRIENDO", "SERVICIOS_PUBLICOS", "NOMINA", "IMPUESTOS_Y_TASAS",
+            "MANTENIMIENTO", "PUBLICIDAD", "CONTABILIDAD", "SEGURO",
+            "TECNOLOGIA", "TRANSPORTE", "OTRO",
+          ],
+          description: "Filtrar por categoría de gasto (opcional)",
+        },
+      },
+      required: ["fechaDesde", "fechaHasta"],
+    },
+  },
+  {
+    name: "get_compras_rango",
+    description:
+      "Obtiene compras de insumos en un rango de fechas con resumen por proveedor y top insumos. Úsala para preguntas sobre gastos de materia prima.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fechaDesde: {
+          type: "string",
+          description: "Fecha inicio en formato YYYY-MM-DD",
+        },
+        fechaHasta: {
+          type: "string",
+          description: "Fecha fin en formato YYYY-MM-DD",
+        },
+      },
+      required: ["fechaDesde", "fechaHasta"],
+    },
+  },
+  {
+    name: "get_stock_actual",
+    description:
+      "Obtiene el stock calculado de todos los insumos del restaurante. Úsala cuando el usuario pregunte por inventario o stock disponible.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_platos_catalogo",
+    description:
+      "Obtiene el catálogo completo de platos incluyendo inactivos, con precio y categoría. Úsala para validar nombres de platos antes de registrar una venta o responder preguntas sobre el menú.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "registrar_venta",
+    description:
+      "Registra una venta en el sistema SOLO después de que el usuario haya confirmado explícitamente el preview. NUNCA llames esta tool sin confirmación previa del usuario.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fecha: {
+          type: "string",
+          description: "Fecha en formato YYYY-MM-DD (hora Colombia)",
+        },
+        hora: {
+          type: "string",
+          description: "Hora en formato HH:MM (24h, hora Colombia)",
+        },
+        tipo: {
+          type: "string",
+          enum: ["MESA", "DOMICILIO", "PARA_LLEVAR"],
+        },
+        canal: {
+          type: "string",
+          enum: ["RAPPI", "IFOOD", "DIDI_FOOD", "TU_PEDIDO_CO"],
+          description: "Requerido solo si tipo es DOMICILIO",
+        },
+        metodoPago: {
+          type: "string",
+          enum: ["EFECTIVO", "TARJETA_DEBITO", "TARJETA_CREDITO", "NEQUI", "DAVIPLATA", "TRANSFERENCIA"],
+        },
+        lineas: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              platoId: { type: "string" },
+              cantidad: { type: "number" },
+            },
+            required: ["platoId", "cantidad"],
+          },
+          description: "Lista de platos vendidos con su ID y cantidad",
+        },
+      },
+      required: ["fecha", "hora", "tipo", "metodoPago", "lineas"],
+    },
+  },
+  {
+    name: "registrar_compra",
+    description:
+      "Registra una compra de insumos SOLO después de confirmación explícita del usuario.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fecha: { type: "string", description: "Fecha YYYY-MM-DD" },
+        proveedorId: { type: "string", description: "ID del proveedor" },
+        lineas: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              insumoId: { type: "string" },
+              cantidad: { type: "number" },
+              unidad: {
+                type: "string",
+                enum: ["GRAMO", "KILOGRAMO", "LIBRA", "MILILITRO", "LITRO", "UNIDAD", "PORCION", "CAJA", "BULTO", "GARRAFA"],
+              },
+              total: { type: "number", description: "Total pagado en COP por esta línea" },
+            },
+            required: ["insumoId", "cantidad", "unidad", "total"],
+          },
+        },
+        notas: { type: "string", description: "Notas opcionales" },
+      },
+      required: ["fecha", "proveedorId", "lineas"],
+    },
+  },
+  {
+    name: "registrar_gasto",
+    description:
+      "Registra un gasto fijo SOLO después de confirmación explícita del usuario.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fecha: { type: "string", description: "Fecha YYYY-MM-DD" },
+        categoria: {
+          type: "string",
+          enum: [
+            "ARRIENDO", "SERVICIOS_PUBLICOS", "NOMINA", "IMPUESTOS_Y_TASAS",
+            "MANTENIMIENTO", "PUBLICIDAD", "CONTABILIDAD", "SEGURO",
+            "TECNOLOGIA", "TRANSPORTE", "OTRO",
+          ],
+        },
+        monto: { type: "number", description: "Monto en COP" },
+        periodicidad: {
+          type: "string",
+          enum: ["DIARIO", "SEMANAL", "QUINCENAL", "MENSUAL", "BIMESTRAL", "TRIMESTRAL", "SEMESTRAL", "ANUAL", "UNICO"],
+        },
+        metodoPago: {
+          type: "string",
+          enum: ["EFECTIVO", "TRANSFERENCIA", "TARJETA_DEBITO", "TARJETA_CREDITO", "CHEQUE", "OTRO"],
+        },
+        notas: { type: "string", description: "Notas opcionales" },
+      },
+      required: ["fecha", "categoria", "monto", "periodicidad", "metodoPago"],
+    },
+  },
+];
+
+// ─── EJECUTOR DE TOOLS ───────────────────────────────────────────────────────
+
+async function ejecutarTool(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+): Promise<string> {
+  try {
+    switch (toolName) {
+      case "get_metricas_dia": {
+        const result = await getMetricasDia();
+        if (!result) return JSON.stringify({ error: "No se pudieron obtener las métricas.", errorCode: "DB_ERROR" });
+        return JSON.stringify(result);
+      }
+
+      case "get_ventas_rango": {
+        const result = await getVentasRango({
+          fechaDesde: toolInput.fechaDesde as string,
+          fechaHasta: toolInput.fechaHasta as string,
+          tipo: toolInput.tipo as never,
+          canal: toolInput.canal as never,
+          metodoPago: toolInput.metodoPago as never,
+        });
+        return JSON.stringify(result);
+      }
+
+      case "get_gastos_rango": {
+        const result = await getGastosRango({
+          fechaDesde: toolInput.fechaDesde as string,
+          fechaHasta: toolInput.fechaHasta as string,
+          categoria: toolInput.categoria as never,
+        });
+        return JSON.stringify(result);
+      }
+
+      case "get_compras_rango": {
+        const result = await getComprasRango({
+          fechaDesde: toolInput.fechaDesde as string,
+          fechaHasta: toolInput.fechaHasta as string,
+          proveedorId: toolInput.proveedorId as string | undefined,
+        });
+        return JSON.stringify(result);
+      }
+
+      case "get_stock_actual": {
+        const result = await getStockActual(
+          (await auth())?.user?.id ?? "",
+        );
+        return JSON.stringify(result);
+      }
+
+      case "get_platos_catalogo": {
+        const result = await getPlatosCatalogoCompleto();
+        return JSON.stringify(result);
+      }
+
+      case "registrar_venta": {
+        const formData = new FormData();
+        formData.set("fecha", toolInput.fecha as string);
+        formData.set("hora", toolInput.hora as string);
+        formData.set("tipo", toolInput.tipo as string);
+        if (toolInput.canal) formData.set("canal", toolInput.canal as string);
+        formData.set("metodoPago", toolInput.metodoPago as string);
+        formData.set("lineas", JSON.stringify(toolInput.lineas));
+        const result = await registrarVenta({ ok: false, message: "" }, formData);
+        return JSON.stringify(result);
+      }
+
+      case "registrar_compra": {
+        const formData = new FormData();
+        formData.set("fecha", toolInput.fecha as string);
+        formData.set("proveedorId", toolInput.proveedorId as string);
+        formData.set("lineas", JSON.stringify(toolInput.lineas));
+        if (toolInput.notas) formData.set("notas", toolInput.notas as string);
+        const result = await registrarCompra({ ok: false, message: "" }, formData);
+        return JSON.stringify(result);
+      }
+
+      case "registrar_gasto": {
+        const formData = new FormData();
+        formData.set("fecha", toolInput.fecha as string);
+        formData.set("categoria", toolInput.categoria as string);
+        formData.set("monto", String(toolInput.monto));
+        formData.set("periodicidad", toolInput.periodicidad as string);
+        formData.set("metodoPago", toolInput.metodoPago as string);
+        if (toolInput.notas) formData.set("notas", toolInput.notas as string);
+        const result = await addGastoFijo({ ok: false, message: "" }, formData);
+        return JSON.stringify(result);
+      }
+
+      default:
+        return JSON.stringify({ error: `Tool desconocida: ${toolName}` });
+    }
+  } catch (e) {
+    console.error(`[ejecutarTool:${toolName}]`, e);
+    return JSON.stringify({ error: "Error interno al ejecutar la herramienta.", errorCode: "DB_ERROR" });
+  }
+}
+
+// ─── HANDLER PRINCIPAL ───────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(obj: object) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      }
+
+      try {
+        // 1. Autenticación
+        const session = await auth();
+        const userId = session?.user?.id;
+        const restaurantName = (session?.user as { restaurantName?: string })?.restaurantName ?? "el restaurante";
+        if (!userId) {
+          send({ type: "error", message: "No autenticado." });
+          controller.close();
+          return;
+        }
+
+        // 2. Parsear body
+        const body = await req.json() as { conversacionId?: string | null; mensaje?: string };
+        const { conversacionId: convIdInput, mensaje } = body;
+
+        if (!mensaje?.trim()) {
+          send({ type: "error", message: "Mensaje vacío." });
+          controller.close();
+          return;
+        }
+
+        // 3. Crear o cargar conversación
+        let conversacionId: string;
+        if (!convIdInput) {
+          const nueva = await prisma.conversacion.create({
+            data: { userId, titulo: null },
+          });
+          conversacionId = nueva.id;
+        } else {
+          const existente = await prisma.conversacion.findFirst({
+            where: { id: convIdInput, userId },
+          });
+          if (!existente) {
+            send({ type: "error", message: "Conversación no encontrada." });
+            controller.close();
+            return;
+          }
+          conversacionId = convIdInput;
+        }
+
+        // 4. Cargar historial (últimos N mensajes)
+        const historialDb = await prisma.mensaje.findMany({
+          where: { conversacionId },
+          orderBy: { createdAt: "asc" },
+          take: CHAT_MAX_HISTORIAL,
+        });
+
+        // 5. Persistir mensaje del usuario
+        const mensajeUsuarioDb = await prisma.mensaje.create({
+          data: {
+            userId,
+            conversacionId,
+            role: "user",
+            content: mensaje.trim(),
+          },
+        });
+
+        // 6. Construir historial para Anthropic
+        const historialAnthopic: AnthropicMessage[] = historialDb.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+
+        // Agregar mensaje actual del usuario
+        historialAnthopic.push({
+          role: "user",
+          content: mensaje.trim(),
+        });
+
+        // 7. System prompt con contexto temporal
+        const systemPrompt = `${buildSystemPrompt(restaurantName)}\n\n${buildContextoTemporal()}`;
+
+        // 8. Loop de tool calling
+        let respuestaFinal = "";
+        let toolCallsLog: unknown[] = [];
+        let toolResultsLog: unknown[] = [];
+        let mensajes = [...historialAnthopic];
+
+        let iteraciones = 0;
+        const MAX_ITERACIONES = 10;
+
+        while (iteraciones < MAX_ITERACIONES) {
+          iteraciones++;
+
+          const response = await anthropic.messages.create({
+            model: CHAT_MODEL,
+            max_tokens: CHAT_MAX_TOKENS,
+            system: systemPrompt,
+            tools: TOOLS,
+            messages: mensajes,
+          });
+
+          // Procesar bloques de respuesta
+          for (const block of response.content) {
+            if (block.type === "text") {
+              respuestaFinal += block.text;
+              send({ type: "text", text: block.text });
+            } else if (block.type === "tool_use") {
+              send({ type: "tool_start", toolName: block.name });
+              toolCallsLog.push({ name: block.name, input: block.input });
+
+              const toolResult = await ejecutarTool(
+                block.name,
+                block.input as Record<string, unknown>,
+              );
+
+              toolResultsLog.push({ name: block.name, result: toolResult });
+              send({ type: "tool_end", toolName: block.name, result: toolResult });
+
+              // Agregar respuesta del asistente y resultado de tool al historial
+              mensajes = [
+                ...mensajes,
+                { role: "assistant" as const, content: response.content },
+                {
+                  role: "user" as const,
+                  content: [
+                    {
+                      type: "tool_result" as const,
+                      tool_use_id: block.id,
+                      content: toolResult,
+                    },
+                  ],
+                },
+              ];
+            }
+          }
+
+          // Si Claude terminó (no hay más tool calls), salir del loop
+          if (response.stop_reason === "end_turn") break;
+          if (response.stop_reason !== "tool_use") break;
+        }
+
+        // 9. Persistir respuesta del asistente
+        const mensajeAsistenteDb = await prisma.mensaje.create({
+          data: {
+            userId,
+            conversacionId,
+            role: "assistant",
+            content: respuestaFinal,
+            toolCalls:
+              toolCallsLog.length > 0 ? (toolCallsLog as Prisma.InputJsonValue) : undefined,
+            toolResults:
+              toolResultsLog.length > 0 ? (toolResultsLog as Prisma.InputJsonValue) : undefined,
+          },
+        });
+
+        // 10. Actualizar updatedAt de la conversación
+        await prisma.conversacion.update({
+          where: { id: conversacionId },
+          data: { updatedAt: new Date() },
+        });
+
+        // 11. Señal de fin
+        send({
+          type: "done",
+          conversacionId,
+          mensajeId: mensajeAsistenteDb.id,
+          mensajeUsuarioId: mensajeUsuarioDb.id,
+        });
+
+        controller.close();
+      } catch (e) {
+        console.error("[/api/chat POST]", e);
+        send({ type: "error", message: "Error interno del servidor." });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
