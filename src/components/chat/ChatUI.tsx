@@ -1,5 +1,6 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Plus, MessageSquare, Loader2, ChevronDown } from "lucide-react";
 
@@ -53,6 +54,7 @@ export function ChatUI({
   const [isLoading, setIsLoading] = useState(false);
   const [toolActiva, setToolActiva] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [esperandoConfirmacion, setEsperandoConfirmacion] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -100,6 +102,7 @@ export function ChatUI({
     setInput("");
     setIsLoading(true);
     setToolActiva(null);
+    setEsperandoConfirmacion(false);
 
     const idMensajeUsuario = `user-${Date.now()}`;
     const idMensajeAsistente = `asst-${Date.now()}`;
@@ -194,6 +197,14 @@ export function ChatUI({
                   : m,
               ),
             );
+            // Detectar si Claude está esperando confirmación
+            const textoFinal = textoAcumulado.toLowerCase();
+            const esPreview =
+              textoFinal.includes("confirmas") ||
+              textoFinal.includes("¿confirmas") ||
+              textoFinal.includes("para registrar") ||
+              textoFinal.includes("resumen para confirmar");
+            setEsperandoConfirmacion(esPreview);
           }
         }
       }
@@ -332,7 +343,20 @@ export function ChatUI({
                 }`}
               >
                 {m.content ? (
-                  <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                  m.role === "assistant" ? (
+                    <div className="prose prose-sm prose-invert max-w-none leading-relaxed
+                      [&>p]:mb-2 [&>p:last-child]:mb-0
+                      [&>ul]:mb-2 [&>ul]:pl-4 [&>li]:mb-0.5
+                      [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:mb-1.5 [&>h3]:mt-2
+                      [&>table]:text-xs [&>table]:w-full [&>table]:border-collapse
+                      [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-border/50 [&>table>thead>tr>th]:px-2 [&>table>thead>tr>th]:py-1
+                      [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-border/50 [&>table>tbody>tr>td]:px-2 [&>table>tbody>tr>td]:py-1
+                      [&>strong]:font-semibold">
+                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                  )
                 ) : m.isStreaming ? (
                   <span className="flex gap-1 items-center py-0.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:0ms]" />
@@ -361,6 +385,31 @@ export function ChatUI({
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Botones de confirmación */}
+        {esperandoConfirmacion && !isLoading && (
+          <div className="flex gap-2 px-4 py-2 border-t border-border bg-surface">
+            <button
+              onClick={() => {
+                setInput("Sí, confirma");
+                setTimeout(() => void enviar(), 50);
+              }}
+              className="flex-1 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition"
+            >
+              ✓ Confirmar registro
+            </button>
+            <button
+              onClick={() => {
+                setEsperandoConfirmacion(false);
+                setInput("Cancela, no registres nada");
+                setTimeout(() => void enviar(), 50);
+              }}
+              className="rounded-xl border border-border px-4 py-2 text-sm text-text-secondary hover:border-danger hover:text-danger transition"
+            >
+              ✕ Cancelar
+            </button>
+          </div>
+        )}
 
         {/* Input */}
         <div className="border-t border-border bg-surface px-4 py-3">
