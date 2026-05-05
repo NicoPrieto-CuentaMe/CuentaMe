@@ -361,33 +361,36 @@ export async function updateInsumo(formData: FormData): Promise<ActionState> {
     const unidadBase = (Unidad as Record<string, Unidad>)[baseUnitRaw];
     if (!unidadBase) return { ok: false, message: "Unidad base inválida." };
 
-    const existing = await prisma.insumo.findFirst({
-      where: { id, userId, ...notDeleted },
-      select: { unidadBase: true },
-    });
-    if (!existing) {
-      return { ok: false, message: "Insumo no encontrado.", field: "id" };
-    }
-
-    if (existing.unidadBase !== unidadBase) {
-      const recetasCount = await prisma.receta.count({
-        where: { insumoId: id, userId },
+    const resultado = await prisma.$transaction(async (tx) => {
+      const existing = await tx.insumo.findFirst({
+        where: { id, userId, ...notDeleted },
+        select: { unidadBase: true },
       });
-      if (recetasCount > 0) {
-        return {
-          ok: false,
-          message:
-            "No puedes cambiar la unidad base de este insumo porque ya tiene recetas asociadas. Elimina o ajusta las recetas primero.",
-          field: "unidadBase",
-        };
-      }
-    }
+      if (!existing) return { ok: false, message: "Insumo no encontrado.", field: "id" } as const;
 
-    const res = await prisma.insumo.updateMany({
-      where: { id, userId, ...notDeleted },
-      data: { nombre, unidadBase, categoria: categoriaParsed.value },
+      if (existing.unidadBase !== unidadBase) {
+        const recetasCount = await tx.receta.count({
+          where: { insumoId: id, userId },
+        });
+        if (recetasCount > 0) {
+          return {
+            ok: false,
+            message:
+              "No puedes cambiar la unidad base de este insumo porque ya tiene recetas asociadas. Elimina o ajusta las recetas primero.",
+            field: "unidadBase",
+          } as const;
+        }
+      }
+
+      const res = await tx.insumo.updateMany({
+        where: { id, userId, ...notDeleted },
+        data: { nombre, unidadBase, categoria: categoriaParsed.value },
+      });
+      if (res.count === 0) return { ok: false, message: "Insumo no encontrado." } as const;
+      return { ok: true } as const;
     });
-    if (res.count === 0) return { ok: false, message: "Insumo no encontrado." };
+
+    if (!resultado.ok) return resultado;
 
     revalidatePath("/configuracion");
     return { ok: true, message: "Insumo actualizado." };
@@ -1075,9 +1078,15 @@ function periodoYmToUtcDate(ym: string): Date | null {
   return new Date(Date.UTC(y, mo - 1, 1, 12, 0, 0, 0));
 }
 
-/** COP >= 0 desde dígitos (vacío = 0). */
+/** COP >= 0 desde dígitos (vacío o solo ceros = 0).
+ *  Si el string contiene caracteres no numéricos distintos de separadores
+ *  de miles (punto, coma, espacio), retorna null para forzar error explícito.
+ */
 function parseCopNoNeg(raw: string): Prisma.Decimal | null {
-  const t = raw.replace(/[^\d]/g, "");
+  const stripped = raw.trim();
+  // Rechazar si hay letras u otros caracteres no numéricos
+  if (stripped !== "" && !/^[\d.,\s]+$/.test(stripped)) return null;
+  const t = stripped.replace(/[^\d]/g, "");
   if (t === "") return new Prisma.Decimal(0);
   const n = Number(t);
   if (!Number.isFinite(n) || n < 0) return null;
@@ -1702,7 +1711,7 @@ export async function updateComboItemCantidad(_: ActionState, formData: FormData
 export async function getCombosConComponentes() {
   try {
     const userId = await requireUserId();
-    return await prisma.plato.findMany({
+    const combos = await prisma.plato.findMany({
       where: { userId, tipo: TipoPlato.COMBO, ...notDeleted },
       orderBy: { nombre: "asc" },
       include: {
@@ -1715,6 +1724,17 @@ export async function getCombosConComponentes() {
         },
       },
     });
+    return combos.map((combo) => ({
+      ...combo,
+      precioVenta: Number(combo.precioVenta.toString()),
+      itemsCombo: combo.itemsCombo.map((item) => ({
+        ...item,
+        plato: {
+          ...item.plato,
+          precioVenta: Number(item.plato.precioVenta.toString()),
+        },
+      })),
+    }));
   } catch (e) {
     console.error("[getCombosConComponentes]", e);
     return [];
