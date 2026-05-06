@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { anthropic, CHAT_MODEL, CHAT_MAX_TOKENS, CHAT_MAX_HISTORIAL } from "@/lib/anthropic";
+import { anthropic, CHAT_MODEL, CHAT_MAX_HISTORIAL } from "@/lib/anthropic";
 import { buildSystemPrompt, buildContextoTemporal } from "@/lib/chat-system-prompt";
 import { getMetricasDia } from "@/app/actions/metricas-dia";
 import { getStockActual } from "@/lib/get-stock-actual";
@@ -18,6 +18,7 @@ import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const CHAT_MAX_TOKENS_CONTEXT = 180_000; // límite de tokens en el array de mensajes antes de podar
 
 // ─── DEFINICIÓN DE TOOLS ────────────────────────────────────────────────────
 
@@ -429,7 +430,7 @@ export async function POST(req: NextRequest) {
 
           const response = await anthropic.messages.create({
             model: CHAT_MODEL,
-            max_tokens: CHAT_MAX_TOKENS,
+            max_tokens: 4096,
             system: [
               {
                 type: "text",
@@ -477,9 +478,41 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Si Claude terminó (no hay más tool calls), salir del loop
+          // Si Claude cortó por límite de tokens, avisar al usuario y salir
+          if (response.stop_reason === "max_tokens") {
+            const aviso = "\n\n_(Respuesta cortada por longitud. Puedes pedirme que continúe o que sea más conciso.)_";
+            respuestaFinal += aviso;
+            send({ type: "text", text: aviso });
+            break;
+          }
+
+          // Si Claude terminó limpiamente, salir del loop
           if (response.stop_reason === "end_turn") break;
+
+          // Si no es tool_use tampoco, salir para evitar loop infinito
           if (response.stop_reason !== "tool_use") break;
+
+          // Podar historial si crece demasiado — evita superar ventana de contexto
+          // Estimación simple: 1 token ≈ 4 caracteres
+          const totalChars = mensajes.reduce((acc, m) => {
+            if (typeof m.content === "string") return acc + m.content.length;
+            if (Array.isArray(m.content)) {
+              return acc + m.content.reduce((a, b) => {
+                if ("text" in b && typeof b.text === "string") return a + b.text.length;
+                if ("content" in b && typeof b.content === "string") return a + b.content.length;
+                return a;
+              }, 0);
+            }
+            return acc;
+          }, 0);
+
+          const estimadoTokens = Math.round(totalChars / 4);
+          if (estimadoTokens > CHAT_MAX_TOKENS_CONTEXT) {
+            // Conservar solo los primeros 2 mensajes (contexto inicial) + los últimos 6
+            if (mensajes.length > 8) {
+              mensajes = [...mensajes.slice(0, 2), ...mensajes.slice(-6)];
+            }
+          }
         }
 
         // 9. Persistir respuesta del asistente
