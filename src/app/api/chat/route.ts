@@ -430,8 +430,15 @@ export async function POST(req: NextRequest) {
           const response = await anthropic.messages.create({
             model: CHAT_MODEL,
             max_tokens: CHAT_MAX_TOKENS,
-            system: systemPrompt,
+            system: [
+              {
+                type: "text",
+                text: systemPrompt,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
             tools: TOOLS,
+            tool_choice: { type: "auto" },
             messages: mensajes,
           });
 
