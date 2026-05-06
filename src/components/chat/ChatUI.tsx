@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, Loader2, Trash2 } from "lucide-react";
+import { Send, Plus, MessageSquare, Loader2, Trash2, Mic, MicOff } from "lucide-react";
 
 type ConversacionResumen = {
   id: string;
@@ -24,6 +24,24 @@ type SSEChunk =
   | { type: "tool_end"; toolName: string; result: string }
   | { type: "error"; message: string }
   | { type: "done"; conversacionId: string; mensajeId: string; mensajeUsuarioId: string };
+
+/** Instancia mínima de Web Speech API (tipos globales no siempre presentes en lib.dom). */
+type BrowserSpeechRecognition = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  onresult:
+    | ((
+        event: { results: { [i: number]: { [j: number]: { transcript: string } } } },
+      ) => void)
+    | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+
+type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognition;
 
 const TOOL_LABELS: Record<string, string> = {
   get_metricas_dia: "Consultando métricas del día...",
@@ -61,6 +79,8 @@ export function ChatUI({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const [isListening, setIsListening] = useState(false);
 
   // Auto-scroll al último mensaje
   useEffect(() => {
@@ -74,6 +94,52 @@ export function ChatUI({
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }, [input]);
+
+  const toggleMic = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognitionAPI =
+      (window as unknown as {
+        SpeechRecognition?: BrowserSpeechRecognitionCtor;
+        webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
+      }).SpeechRecognition ??
+      (window as unknown as {
+        SpeechRecognition?: BrowserSpeechRecognitionCtor;
+        webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
+      }).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      alert("Tu navegador no soporta reconocimiento de voz. Usa Chrome en Android o escritorio.");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "es-CO";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => {
+      const transcript = event.results[0][0].transcript;
+      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      setIsListening(false);
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening]);
 
   const nuevaConversacion = useCallback(() => {
     setConversacionId(null);
@@ -469,6 +535,22 @@ export function ChatUI({
               disabled={isLoading}
               className="flex-1 resize-none rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent disabled:opacity-50 transition"
             />
+            <button
+              onClick={toggleMic}
+              disabled={isLoading}
+              title={isListening ? "Detener grabación" : "Hablar"}
+              className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition ${
+                isListening
+                  ? "border-danger bg-danger/10 text-danger animate-pulse"
+                  : "border-border bg-surface text-text-tertiary hover:text-text-primary hover:border-accent"
+              } disabled:opacity-40`}
+            >
+              {isListening ? (
+                <MicOff className="h-4 w-4" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </button>
             <button
               onClick={() => void enviar()}
               disabled={isLoading || !input.trim()}
