@@ -369,6 +369,34 @@ export function ChatUI({
                     Consultó: {m.toolsUsed.map((t) => TOOL_LABELS[t]?.replace("...", "") ?? t).join(", ")}
                   </p>
                 )}
+                {/* Botones de confirmación inline — solo en el último mensaje del asistente */}
+                {m.role === "assistant" &&
+                  !m.isStreaming &&
+                  esperandoConfirmacion &&
+                  !isLoading &&
+                  mensajes[mensajes.length - 1]?.id === m.id && (
+                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/50">
+                      <button
+                        onClick={() => {
+                          setInput("Sí, confirma");
+                          setTimeout(() => void enviar(), 50);
+                        }}
+                        className="flex-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition"
+                      >
+                        ✓ Confirmar
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEsperandoConfirmacion(false);
+                          setInput("Cancela, no registres nada");
+                          setTimeout(() => void enviar(), 50);
+                        }}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:border-danger hover:text-danger transition"
+                      >
+                        ✕ Cancelar
+                      </button>
+                    </div>
+                  )}
               </div>
             </div>
           ))}
@@ -385,31 +413,6 @@ export function ChatUI({
 
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Botones de confirmación */}
-        {esperandoConfirmacion && !isLoading && (
-          <div className="flex gap-2 px-4 py-2 border-t border-border bg-surface">
-            <button
-              onClick={() => {
-                setInput("Sí, confirma");
-                setTimeout(() => void enviar(), 50);
-              }}
-              className="flex-1 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition"
-            >
-              ✓ Confirmar registro
-            </button>
-            <button
-              onClick={() => {
-                setEsperandoConfirmacion(false);
-                setInput("Cancela, no registres nada");
-                setTimeout(() => void enviar(), 50);
-              }}
-              className="rounded-xl border border-border px-4 py-2 text-sm text-text-secondary hover:border-danger hover:text-danger transition"
-            >
-              ✕ Cancelar
-            </button>
-          </div>
-        )}
 
         {/* Input */}
         <div className="border-t border-border bg-surface px-4 py-3">
