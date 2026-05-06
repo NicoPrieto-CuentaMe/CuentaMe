@@ -240,6 +240,8 @@ const TOOLS: Anthropic.Tool[] = [
 async function ejecutarTool(
   toolName: string,
   toolInput: Record<string, unknown>,
+  userId: string,
+  idempotencyKey: string | null,
 ): Promise<string> {
   try {
     switch (toolName) {
@@ -291,6 +293,15 @@ async function ejecutarTool(
       }
 
       case "registrar_venta": {
+        // Verificar idempotencia
+        if (idempotencyKey) {
+          const existing = await prisma.idempotencyRecord.findUnique({
+            where: { userId_key: { userId, key: idempotencyKey } },
+          });
+          if (existing) {
+            return JSON.stringify({ ok: true, message: "Venta ya registrada.", createdId: existing.recordId });
+          }
+        }
         const formData = new FormData();
         formData.set("fecha", toolInput.fecha as string);
         formData.set("hora", toolInput.hora as string);
@@ -299,20 +310,46 @@ async function ejecutarTool(
         formData.set("metodoPago", toolInput.metodoPago as string);
         formData.set("lineas", JSON.stringify(toolInput.lineas));
         const result = await registrarVenta({ ok: false, message: "" }, formData);
+        if (result.ok && result.createdId && idempotencyKey) {
+          await prisma.idempotencyRecord.create({
+            data: { userId, key: idempotencyKey, recordId: result.createdId, entity: "venta" },
+          });
+        }
         return JSON.stringify(result);
       }
 
       case "registrar_compra": {
+        if (idempotencyKey) {
+          const existing = await prisma.idempotencyRecord.findUnique({
+            where: { userId_key: { userId, key: idempotencyKey } },
+          });
+          if (existing) {
+            return JSON.stringify({ ok: true, message: "Compra ya registrada.", createdId: existing.recordId });
+          }
+        }
         const formData = new FormData();
         formData.set("fecha", toolInput.fecha as string);
         formData.set("proveedorId", toolInput.proveedorId as string);
         formData.set("lineas", JSON.stringify(toolInput.lineas));
         if (toolInput.notas) formData.set("notas", toolInput.notas as string);
         const result = await registrarCompra({ ok: false, message: "" }, formData);
+        if (result.ok && result.createdId && idempotencyKey) {
+          await prisma.idempotencyRecord.create({
+            data: { userId, key: idempotencyKey, recordId: result.createdId, entity: "compra" },
+          });
+        }
         return JSON.stringify(result);
       }
 
       case "registrar_gasto": {
+        if (idempotencyKey) {
+          const existing = await prisma.idempotencyRecord.findUnique({
+            where: { userId_key: { userId, key: idempotencyKey } },
+          });
+          if (existing) {
+            return JSON.stringify({ ok: true, message: "Gasto ya registrado.", createdId: existing.recordId });
+          }
+        }
         const formData = new FormData();
         formData.set("fecha", toolInput.fecha as string);
         formData.set("categoria", toolInput.categoria as string);
@@ -321,6 +358,11 @@ async function ejecutarTool(
         formData.set("metodoPago", toolInput.metodoPago as string);
         if (toolInput.notas) formData.set("notas", toolInput.notas as string);
         const result = await addGastoFijo({ ok: false, message: "" }, formData);
+        if (result.ok && result.createdId && idempotencyKey) {
+          await prisma.idempotencyRecord.create({
+            data: { userId, key: idempotencyKey, recordId: result.createdId, entity: "gasto" },
+          });
+        }
         return JSON.stringify(result);
       }
 
@@ -356,8 +398,8 @@ export async function POST(req: NextRequest) {
         }
 
         // 2. Parsear body
-        const body = await req.json() as { conversacionId?: string | null; mensaje?: string };
-        const { conversacionId: convIdInput, mensaje } = body;
+        const body = await req.json() as { conversacionId?: string | null; mensaje?: string; idempotencyKey?: string | null };
+        const { conversacionId: convIdInput, mensaje, idempotencyKey } = body;
 
         if (!mensaje?.trim()) {
           send({ type: "error", message: "Mensaje vacío." });
@@ -455,6 +497,8 @@ export async function POST(req: NextRequest) {
               const toolResult = await ejecutarTool(
                 block.name,
                 block.input as Record<string, unknown>,
+                userId,
+                idempotencyKey ?? null,
               );
 
               toolResultsLog.push({ name: block.name, result: toolResult });

@@ -33,8 +33,9 @@ export type ConversacionActiva = {
 
 /** Payload que recibe el endpoint /api/chat */
 export type ChatRequestPayload = {
-  conversacionId: string | null; // null = crear conversación nueva
+  conversacionId: string | null;
   mensaje: string;
+  idempotencyKey: string | null;
 };
 
 /** Respuesta del endpoint /api/chat */

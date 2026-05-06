@@ -137,8 +137,9 @@ model User {
   nominas       Nomina[]
   gastosFijos   GastoFijo[]
   comboItems    ComboItem[]
-  conversaciones Conversacion[]
-  mensajes       Mensaje[]
+  conversaciones      Conversacion[]
+  mensajes            Mensaje[]
+  idempotencyRecords  IdempotencyRecord[]
 }
 
 model Proveedor {
@@ -438,4 +439,18 @@ model Mensaje {
 
   @@index([conversacionId, createdAt])
   @@index([userId])
+}
+
+model IdempotencyRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  recordId  String
+  entity    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([createdAt])
 }

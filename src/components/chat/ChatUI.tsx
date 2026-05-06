@@ -75,6 +75,7 @@ export function ChatUI({
   const [esperandoConfirmacion, setEsperandoConfirmacion] = useState(false);
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -192,6 +193,20 @@ export function ChatUI({
     setToolActiva(null);
     setEsperandoConfirmacion(false);
 
+    // Generar idempotencyKey nueva solo cuando el usuario confirma un registro
+    const textoLower = texto.toLowerCase();
+    const esConfirmacion =
+      textoLower.includes("sí, confirma") ||
+      textoLower.includes("si, confirma") ||
+      textoLower.includes("confirma") ||
+      textoLower.includes("dale") ||
+      textoLower.includes("correcto") ||
+      textoLower.includes("registra");
+    const keyParaEnviar = esConfirmacion
+      ? crypto.randomUUID()
+      : null;
+    setIdempotencyKey(keyParaEnviar);
+
     const idMensajeUsuario = `user-${Date.now()}`;
     const idMensajeAsistente = `asst-${Date.now()}`;
 
@@ -210,7 +225,7 @@ export function ChatUI({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversacionId, mensaje: texto }),
+        body: JSON.stringify({ conversacionId, mensaje: texto, idempotencyKey: keyParaEnviar }),
         signal: abortRef.current.signal,
       });
 
