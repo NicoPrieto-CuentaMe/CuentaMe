@@ -489,10 +489,23 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // 10. Actualizar updatedAt de la conversación
+        // 10. Actualizar conversación: updatedAt siempre, título solo en el primer mensaje
+        const convActual = await prisma.conversacion.findUnique({
+          where: { id: conversacionId },
+          select: { titulo: true },
+        });
+
+        const tituloNuevo =
+          !convActual?.titulo
+            ? mensaje.trim().slice(0, 50) + (mensaje.trim().length > 50 ? "…" : "")
+            : undefined;
+
         await prisma.conversacion.update({
           where: { id: conversacionId },
-          data: { updatedAt: new Date() },
+          data: {
+            updatedAt: new Date(),
+            ...(tituloNuevo ? { titulo: tituloNuevo } : {}),
+          },
         });
 
         // 11. Señal de fin

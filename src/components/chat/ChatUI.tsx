@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, Loader2, ChevronDown } from "lucide-react";
+import { Send, Plus, MessageSquare, Loader2, Trash2 } from "lucide-react";
 
 type ConversacionResumen = {
   id: string;
@@ -55,6 +55,8 @@ export function ChatUI({
   const [toolActiva, setToolActiva] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [esperandoConfirmacion, setEsperandoConfirmacion] = useState(false);
+  const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -80,6 +82,26 @@ export function ChatUI({
     setToolActiva(null);
     inputRef.current?.focus();
   }, []);
+
+  const eliminarConversacion = useCallback(async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (eliminandoId) return;
+    setEliminandoId(id);
+    try {
+      const res = await fetch(`/api/chat/conversacion?id=${id}`, { method: "DELETE" });
+      if (!res.ok) return;
+      setConversaciones((prev) => prev.filter((c) => c.id !== id));
+      if (conversacionId === id) {
+        setConversacionId(null);
+        setMensajes([]);
+        setEsperandoConfirmacion(false);
+      }
+    } catch {
+      // silencioso
+    } finally {
+      setEliminandoId(null);
+    }
+  }, [eliminandoId, conversacionId]);
 
   const cargarConversacion = useCallback(async (id: string) => {
     setConversacionId(id);
@@ -263,21 +285,41 @@ export function ChatUI({
             <p className="p-4 text-xs text-text-tertiary">No hay conversaciones aún.</p>
           ) : (
             conversaciones.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => void cargarConversacion(c.id)}
-                className={`w-full text-left px-3 py-2.5 border-b border-border/50 hover:bg-surface-elevated transition ${
-                  c.id === conversacionId ? "bg-surface-elevated" : ""
-                }`}
-              >
-                <p className="text-xs text-text-primary truncate">
-                  {c.titulo ?? "Sin título"}
-                </p>
-                <p className="text-xs text-text-tertiary mt-0.5">
-                  {fmtFecha(c.updatedAt)}
-                </p>
-              </button>
-            ))
+                <div
+                  key={c.id}
+                  className={`relative group border-b border-border/50 ${
+                    c.id === conversacionId ? "bg-surface-elevated" : ""
+                  }`}
+                  onMouseEnter={() => setHoveredConvId(c.id)}
+                  onMouseLeave={() => setHoveredConvId(null)}
+                >
+                  <button
+                    onClick={() => void cargarConversacion(c.id)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-surface-elevated transition pr-8"
+                  >
+                    <p className="text-xs text-text-primary truncate">
+                      {c.titulo ?? "Sin título"}
+                    </p>
+                    <p className="text-xs text-text-tertiary mt-0.5">
+                      {fmtFecha(c.updatedAt)}
+                    </p>
+                  </button>
+                  {hoveredConvId === c.id && (
+                    <button
+                      onClick={(e) => void eliminarConversacion(c.id, e)}
+                      disabled={eliminandoId === c.id}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-text-tertiary hover:text-danger hover:bg-danger/10 transition"
+                      title="Eliminar conversación"
+                    >
+                      {eliminandoId === c.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              ))
           )}
         </div>
       </div>
