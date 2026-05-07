@@ -191,21 +191,17 @@ export function ChatUI({
     setInput("");
     setIsLoading(true);
     setToolActiva(null);
-    setEsperandoConfirmacion(false);
 
-    // Generar idempotencyKey nueva solo cuando el usuario confirma un registro
-    const textoLower = texto.toLowerCase();
-    const esConfirmacion =
-      textoLower.includes("sí, confirma") ||
-      textoLower.includes("si, confirma") ||
-      textoLower.includes("confirma") ||
-      textoLower.includes("dale") ||
-      textoLower.includes("correcto") ||
-      textoLower.includes("registra");
-    const keyParaEnviar = esConfirmacion
+    // Generar idempotencyKey cuando el usuario está confirmando un registro.
+    // Usamos el estado esperandoConfirmacion (que el servidor setea cuando Claude
+    // muestra un preview) en lugar de keywords frágiles. Así cubrimos "sí", "dale",
+    // "correcto" y cualquier otra forma natural de confirmar.
+    const keyParaEnviar = esperandoConfirmacion
       ? crypto.randomUUID()
       : null;
     setIdempotencyKey(keyParaEnviar);
+
+    setEsperandoConfirmacion(false);
 
     const idMensajeUsuario = `user-${Date.now()}`;
     const idMensajeAsistente = `asst-${Date.now()}`;
@@ -330,7 +326,7 @@ export function ChatUI({
       setToolActiva(null);
       inputRef.current?.focus();
     }
-  }, [input, isLoading, conversacionId]);
+  }, [input, isLoading, conversacionId, esperandoConfirmacion]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
