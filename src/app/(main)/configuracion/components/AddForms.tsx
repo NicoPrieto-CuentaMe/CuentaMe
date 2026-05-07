@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { useFormState } from "react-dom";
 import type { ActionState } from "../actions";
 import { addDish, addSupplier, addSupply, saveRecipeComplete } from "../actions";
@@ -19,6 +20,19 @@ function Feedback({ state }: { state: ActionState }) {
     <div className="mt-3 rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">
       {state.message}
     </div>
+  );
+}
+
+function SubmitButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending ? "Guardando…" : label}
+    </button>
   );
 }
 
@@ -74,12 +88,7 @@ export function AddSupplierForm() {
       </div>
       <div className="md:col-span-3 flex items-center justify-between gap-3">
         <Feedback state={state} />
-        <button
-          type="submit"
-          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-        >
-          Agregar proveedor
-        </button>
+        <SubmitButton label="Agregar proveedor" />
       </div>
     </form>
   );
@@ -136,12 +145,7 @@ export function AddSupplyForm() {
       </div>
       <div className="md:col-span-3 flex items-center justify-between gap-3">
         <Feedback state={state} />
-        <button
-          type="submit"
-          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-        >
-          Agregar insumo
-        </button>
+        <SubmitButton label="Agregar insumo" />
       </div>
     </form>
   );
@@ -207,12 +211,7 @@ export function AddDishForm() {
       </div>
       <div className="md:col-span-3 flex items-center justify-between gap-3">
         <Feedback state={state} />
-        <button
-          type="submit"
-          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-        >
-          Agregar plato
-        </button>
+        <SubmitButton label="Agregar plato" />
       </div>
     </form>
   );
@@ -450,12 +449,7 @@ export function RecipeBuilderForm({
 
       <div className="flex items-center justify-between gap-3">
         <Feedback state={state} />
-        <button
-          type="submit"
-          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-        >
-          Guardar receta completa
-        </button>
+        <SubmitButton label="Guardar receta" />
       </div>
     </form>
   );
