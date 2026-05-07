@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { chatRatelimit } from "@/lib/ratelimit";
 import { prisma } from "@/lib/prisma";
 import { anthropic, CHAT_MODEL, CHAT_MAX_HISTORIAL } from "@/lib/anthropic";
 import { buildSystemPrompt, buildContextoTemporal } from "@/lib/chat-system-prompt";
@@ -426,6 +427,14 @@ export async function POST(req: NextRequest) {
         const restaurantName = (session?.user as { restaurantName?: string })?.restaurantName ?? "el restaurante";
         if (!userId) {
           send({ type: "error", message: "No autenticado." });
+          controller.close();
+          return;
+        }
+
+        // 1b. Rate limiting por usuario — protege créditos de Anthropic
+        const { success } = await chatRatelimit.limit(userId);
+        if (!success) {
+          send({ type: "error", message: "Estás enviando mensajes muy rápido. Espera un momento antes de continuar." });
           controller.close();
           return;
         }
