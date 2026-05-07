@@ -170,17 +170,28 @@ export function ChatUI({
     }
   }, [eliminandoId, conversacionId]);
 
+  const historialAbortRef = useRef<AbortController | null>(null);
+
   const cargarConversacion = useCallback(async (id: string) => {
+    // Cancelar fetch anterior si el usuario cambia de conversación rápido
+    historialAbortRef.current?.abort();
+    historialAbortRef.current = new AbortController();
+
     setConversacionId(id);
     setMensajes([]);
     setToolActiva(null);
     try {
-      const res = await fetch(`/api/chat/historial?id=${id}`);
+      const res = await fetch(`/api/chat/historial?id=${id}`, {
+        signal: historialAbortRef.current.signal,
+      });
       if (!res.ok) return;
       const data = await res.json() as { mensajes: Mensaje[] };
       setMensajes(data.mensajes ?? []);
-    } catch {
-      // Si falla, la conversación empieza vacía visualmente
+    } catch (e) {
+      // AbortError es esperado al cambiar conversación — ignorar silenciosamente
+      if ((e as Error).name !== "AbortError") {
+        console.error("[cargarConversacion]", e);
+      }
     }
   }, []);
 
