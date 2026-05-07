@@ -429,9 +429,10 @@ export async function POST(req: NextRequest) {
         // 4. Cargar historial (últimos N mensajes)
         const historialDb = await prisma.mensaje.findMany({
           where: { conversacionId },
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: "desc" },
           take: CHAT_MAX_HISTORIAL,
         });
+        historialDb.reverse(); // reordenar cronológicamente para Anthropic (desc → asc)
 
         // 5. Persistir mensaje del usuario
         const mensajeUsuarioDb = await prisma.mensaje.create({
