@@ -150,7 +150,7 @@ const TOOLS: Anthropic.Tool[] = [
         },
         canal: {
           type: "string",
-          enum: ["CLIENTE_DIRECTO", "RAPPI", "IFOOD", "DIDI_FOOD", "DELYFAS", "TU_PEDIDO_CO"],
+          enum: ["RAPPI", "IFOOD", "DIDI_FOOD", "TU_PEDIDO_CO"],
           description: "Requerido solo si tipo es DOMICILIO",
         },
         metodoPago: {
