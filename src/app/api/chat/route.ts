@@ -281,9 +281,8 @@ async function ejecutarTool(
       }
 
       case "get_stock_actual": {
-        const result = await getStockActual(
-          (await auth())?.user?.id ?? "",
-        );
+        // userId ya viene como parámetro de ejecutarTool — no hace falta llamar auth() de nuevo
+        const result = await getStockActual(userId);
         return JSON.stringify(result);
       }
 
@@ -492,7 +491,16 @@ export async function POST(req: NextRequest) {
             messages: mensajes,
           });
 
-          // Procesar bloques de respuesta
+          // Procesar bloques de respuesta.
+          // Los tool_results se acumulan y se agregan al historial UNA SOLA VEZ
+          // después del for, para soportar tool use paralelo (múltiples tool_use
+          // en una misma respuesta de Claude).
+          const toolResultsThisTurn: Array<{
+            type: "tool_result";
+            tool_use_id: string;
+            content: string;
+          }> = [];
+
           for (const block of response.content) {
             if (block.type === "text") {
               respuestaFinal += block.text;
@@ -511,22 +519,24 @@ export async function POST(req: NextRequest) {
               toolResultsLog.push({ name: block.name, result: toolResult });
               send({ type: "tool_end", toolName: block.name, result: toolResult });
 
-              // Agregar respuesta del asistente y resultado de tool al historial
-              mensajes = [
-                ...mensajes,
-                { role: "assistant" as const, content: response.content },
-                {
-                  role: "user" as const,
-                  content: [
-                    {
-                      type: "tool_result" as const,
-                      tool_use_id: block.id,
-                      content: toolResult,
-                    },
-                  ],
-                },
-              ];
+              // Acumular — NO agregar al historial todavía
+              toolResultsThisTurn.push({
+                type: "tool_result" as const,
+                tool_use_id: block.id,
+                content: toolResult,
+              });
             }
+          }
+
+          // Agregar al historial una sola vez, con todos los tool_results juntos.
+          // Esto respeta el contrato de la API de Anthropic: un mensaje assistant
+          // seguido de un mensaje user con TODOS los tool_results de esa respuesta.
+          if (toolResultsThisTurn.length > 0) {
+            mensajes = [
+              ...mensajes,
+              { role: "assistant" as const, content: response.content },
+              { role: "user" as const, content: toolResultsThisTurn },
+            ];
           }
 
           // Si Claude cortó por límite de tokens, avisar al usuario y salir
