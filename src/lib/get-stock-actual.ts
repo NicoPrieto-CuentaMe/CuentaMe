@@ -112,19 +112,10 @@ export async function getStockActual(
     }[] = [];
 
     for (const dv of detalleVentas) {
-      const recetasPlato = recetasPorPlato.get(dv.platoId) ?? [];
-      for (const r of recetasPlato) {
-        ventasConsumo.push({
-          platoId: dv.platoId,
-          ventaFecha: dv.venta.fecha,
-          detalleCantidad: dv.cantidad,
-          insumoId: r.insumoId,
-          recetaCantidad: r.cantidad,
-          recetaUnidad: r.unidad,
-        });
-      }
-
       if (dv.plato.tipo === TipoPlato.COMBO) {
+        // Combo: expandir solo a través de sus componentes.
+        // No contar recetas directas del combo (tieneReceta=false por diseño)
+        // para evitar doble conteo si el invariante se viola accidentalmente.
         const items = itemsPorCombo.get(dv.platoId) ?? [];
         for (const item of items) {
           const recetasComponente = recetasPorPlato.get(item.platoId) ?? [];
@@ -138,6 +129,19 @@ export async function getStockActual(
               recetaUnidad: r.unidad,
             });
           }
+        }
+      } else {
+        // Plato simple: usar sus recetas directas.
+        const recetasPlato = recetasPorPlato.get(dv.platoId) ?? [];
+        for (const r of recetasPlato) {
+          ventasConsumo.push({
+            platoId: dv.platoId,
+            ventaFecha: dv.venta.fecha,
+            detalleCantidad: dv.cantidad,
+            insumoId: r.insumoId,
+            recetaCantidad: r.cantidad,
+            recetaUnidad: r.unidad,
+          });
         }
       }
     }
