@@ -307,12 +307,14 @@ export function ChatUI({
                   : m,
               ),
             );
-            // Detectar si Claude está esperando confirmación
+            // Detectar si Claude está esperando confirmación.
+            // Solo activar cuando el system prompt muestra el preview explícito.
+            // Se eliminó "para registrar" porque es ambiguo — Claude lo usa también
+            // cuando pide datos ("necesito el monto para registrar"), no solo en previews.
             const textoFinal = textoAcumulado.toLowerCase();
             const esPreview =
               textoFinal.includes("confirmas") ||
               textoFinal.includes("¿confirmas") ||
-              textoFinal.includes("para registrar") ||
               textoFinal.includes("resumen para confirmar");
             setEsperandoConfirmacion(esPreview);
           }
