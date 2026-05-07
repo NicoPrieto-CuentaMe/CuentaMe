@@ -14,7 +14,7 @@ import { registrarCompra } from "@/app/actions/compras";
 import { addGastoFijo } from "@/app/actions/gastos";
 import type { AnthropicMessage } from "@/lib/chat-types";
 import type Anthropic from "@anthropic-ai/sdk";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -292,13 +292,24 @@ async function ejecutarTool(
       }
 
       case "registrar_venta": {
-        // Verificar idempotencia
         if (idempotencyKey) {
-          const existing = await prisma.idempotencyRecord.findUnique({
-            where: { userId_key: { userId, key: idempotencyKey } },
-          });
-          if (existing) {
-            return JSON.stringify({ ok: true, message: "Venta ya registrada.", createdId: existing.recordId });
+          // Crear el registro ANTES de ejecutar para bloquear requests paralelos.
+          // Si ya existe (P2002), devolver el resultado anterior sin registrar de nuevo.
+          try {
+            await prisma.idempotencyRecord.create({
+              data: { userId, key: idempotencyKey, recordId: "pending", entity: "venta" },
+            });
+          } catch (err) {
+            if (
+              err instanceof Prisma.PrismaClientKnownRequestError &&
+              err.code === "P2002"
+            ) {
+              const existing = await prisma.idempotencyRecord.findUnique({
+                where: { userId_key_entity: { userId, key: idempotencyKey, entity: "venta" } },
+              });
+              return JSON.stringify({ ok: true, message: "Venta ya registrada.", createdId: existing?.recordId ?? "" });
+            }
+            throw err;
           }
         }
         const formData = new FormData();
@@ -310,8 +321,9 @@ async function ejecutarTool(
         formData.set("lineas", JSON.stringify(toolInput.lineas));
         const result = await registrarVenta({ ok: false, message: "" }, formData);
         if (result.ok && result.createdId && idempotencyKey) {
-          await prisma.idempotencyRecord.create({
-            data: { userId, key: idempotencyKey, recordId: result.createdId, entity: "venta" },
+          await prisma.idempotencyRecord.update({
+            where: { userId_key_entity: { userId, key: idempotencyKey, entity: "venta" } },
+            data: { recordId: result.createdId },
           });
         }
         return JSON.stringify(result);
@@ -319,11 +331,21 @@ async function ejecutarTool(
 
       case "registrar_compra": {
         if (idempotencyKey) {
-          const existing = await prisma.idempotencyRecord.findUnique({
-            where: { userId_key: { userId, key: idempotencyKey } },
-          });
-          if (existing) {
-            return JSON.stringify({ ok: true, message: "Compra ya registrada.", createdId: existing.recordId });
+          try {
+            await prisma.idempotencyRecord.create({
+              data: { userId, key: idempotencyKey, recordId: "pending", entity: "compra" },
+            });
+          } catch (err) {
+            if (
+              err instanceof Prisma.PrismaClientKnownRequestError &&
+              err.code === "P2002"
+            ) {
+              const existing = await prisma.idempotencyRecord.findUnique({
+                where: { userId_key_entity: { userId, key: idempotencyKey, entity: "compra" } },
+              });
+              return JSON.stringify({ ok: true, message: "Compra ya registrada.", createdId: existing?.recordId ?? "" });
+            }
+            throw err;
           }
         }
         const formData = new FormData();
@@ -333,8 +355,9 @@ async function ejecutarTool(
         if (toolInput.notas) formData.set("notas", toolInput.notas as string);
         const result = await registrarCompra({ ok: false, message: "" }, formData);
         if (result.ok && result.createdId && idempotencyKey) {
-          await prisma.idempotencyRecord.create({
-            data: { userId, key: idempotencyKey, recordId: result.createdId, entity: "compra" },
+          await prisma.idempotencyRecord.update({
+            where: { userId_key_entity: { userId, key: idempotencyKey, entity: "compra" } },
+            data: { recordId: result.createdId },
           });
         }
         return JSON.stringify(result);
@@ -342,11 +365,21 @@ async function ejecutarTool(
 
       case "registrar_gasto": {
         if (idempotencyKey) {
-          const existing = await prisma.idempotencyRecord.findUnique({
-            where: { userId_key: { userId, key: idempotencyKey } },
-          });
-          if (existing) {
-            return JSON.stringify({ ok: true, message: "Gasto ya registrado.", createdId: existing.recordId });
+          try {
+            await prisma.idempotencyRecord.create({
+              data: { userId, key: idempotencyKey, recordId: "pending", entity: "gasto" },
+            });
+          } catch (err) {
+            if (
+              err instanceof Prisma.PrismaClientKnownRequestError &&
+              err.code === "P2002"
+            ) {
+              const existing = await prisma.idempotencyRecord.findUnique({
+                where: { userId_key_entity: { userId, key: idempotencyKey, entity: "gasto" } },
+              });
+              return JSON.stringify({ ok: true, message: "Gasto ya registrado.", createdId: existing?.recordId ?? "" });
+            }
+            throw err;
           }
         }
         const formData = new FormData();
@@ -358,8 +391,9 @@ async function ejecutarTool(
         if (toolInput.notas) formData.set("notas", toolInput.notas as string);
         const result = await addGastoFijo({ ok: false, message: "" }, formData);
         if (result.ok && result.createdId && idempotencyKey) {
-          await prisma.idempotencyRecord.create({
-            data: { userId, key: idempotencyKey, recordId: result.createdId, entity: "gasto" },
+          await prisma.idempotencyRecord.update({
+            where: { userId_key_entity: { userId, key: idempotencyKey, entity: "gasto" } },
+            data: { recordId: result.createdId },
           });
         }
         return JSON.stringify(result);

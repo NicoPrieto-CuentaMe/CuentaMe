@@ -451,6 +451,6 @@ model IdempotencyRecord {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, key])
+  @@unique([userId, key, entity])
   @@index([createdAt])
 }
