@@ -407,6 +407,12 @@ export async function POST(req: NextRequest) {
           return;
         }
 
+        if (mensaje.length > 4000) {
+          send({ type: "error", message: "El mensaje es demasiado largo (máximo 4000 caracteres)." });
+          controller.close();
+          return;
+        }
+
         // 3. Crear o cargar conversación
         let conversacionId: string;
         if (!convIdInput) {
