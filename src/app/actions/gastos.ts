@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import {
   CategoriaGasto,
   MetodoPagoGasto,
@@ -160,6 +160,7 @@ export async function addGastoFijo(_: ActionState, formData: FormData): Promise<
     });
 
     revalidatePath("/gastos");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Gasto registrado.", createdId: gasto.id };
   } catch (e) {
     console.error("[addGastoFijo]", e);
@@ -234,6 +235,7 @@ export async function updateGastoFijo(_: ActionState, formData: FormData): Promi
     if (res.count === 0) return { ok: false, message: "Gasto no encontrado.", field: "id" };
 
     revalidatePath("/gastos");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Gasto actualizado." };
   } catch (e) {
     console.error("[updateGastoFijo]", e);
@@ -264,6 +266,7 @@ export async function deleteGastoFijo(_: ActionState, formData: FormData): Promi
     if (res.count === 0) return { ok: false, message: "Gasto no encontrado." };
 
     revalidatePath("/gastos");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Gasto eliminado." };
   } catch (e) {
     console.error("[deleteGastoFijo]", e);

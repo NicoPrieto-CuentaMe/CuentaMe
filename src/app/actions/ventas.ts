@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import type { CanalDomicilio, MetodoPagoVenta, TipoVenta } from "@prisma/client";
 import { auth } from "@/auth";
@@ -193,6 +193,7 @@ export async function registrarVenta(_: ActionState, formData: FormData): Promis
     });
 
     revalidatePath("/ventas");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Venta registrada.", createdId: ventaId };
   } catch (e) {
     console.error("[registrarVenta]", e);
@@ -412,6 +413,7 @@ export async function editarVenta(_: ActionState, formData: FormData): Promise<A
     });
 
     revalidatePath("/ventas");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Venta actualizada." };
   } catch (e) {
     console.error("[editarVenta]", e);
@@ -443,6 +445,7 @@ export async function eliminarVenta(_: ActionState, formData: FormData): Promise
     if (result.count === 0) return { ok: false, message: "Venta no encontrada." };
 
     revalidatePath("/ventas");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Venta eliminada." };
   } catch (e) {
     console.error("[eliminarVenta]", e);

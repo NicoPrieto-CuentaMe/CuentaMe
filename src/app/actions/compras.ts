@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma, Unidad } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -197,6 +197,7 @@ export async function registrarCompra(_: ActionState, formData: FormData): Promi
     });
 
     revalidatePath("/compras");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Compra registrada.", createdId: compraId };
   } catch (e) {
     console.error("[registrarCompra]", e);
@@ -465,6 +466,7 @@ export async function editarCompra(_: ActionState, formData: FormData): Promise<
     });
 
     revalidatePath("/compras");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Compra actualizada." };
   } catch (e) {
     console.error("[editarCompra]", e);
@@ -496,6 +498,7 @@ export async function eliminarCompra(_: ActionState, formData: FormData): Promis
     if (result.count === 0) return { ok: false, message: "Compra no encontrada." };
 
     revalidatePath("/compras");
+    revalidateTag("metricas-dia");
     return { ok: true, message: "Compra eliminada." };
   } catch (e) {
     console.error("[eliminarCompra]", e);
