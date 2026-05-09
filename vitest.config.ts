@@ -6,10 +6,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    globalSetup: ["./src/tests/global-setup.ts"],
     setupFiles: ["./src/tests/setup.ts"],
     include: ["./src/tests/**/*.test.ts"],
     testTimeout: 30000,
-    hookTimeout: 30000,
+    hookTimeout: 60000,
     fileParallelism: false,
     coverage: {
       provider: "v8",
