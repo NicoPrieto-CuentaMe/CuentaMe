@@ -1,0 +1,18 @@
+
+ RUN  v4.1.5 c:/Users/usuario/Documents/Cuenta/Cuenta
+
+◇ injected env (9) from .env // tip: ⌘ enable debugging { debug: true }
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-restless-star-aqtco8em.c-8.us-east-1.aws.neon.tech"
+
+10 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+ ❯ src/tests/conversacion-mensaje.test.ts (0 test)
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  19:06:03
+   Duration  42.51s (transform 136ms, setup 108ms, import 0ms, tests 0ms, environment 0ms)
+
