@@ -14,7 +14,7 @@ export function ShellLayout({
 }: {
   children:       ReactNode;
   restaurantName: string;
-  metricas:       MetricasDia;
+  metricas:       MetricasDia | null;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
