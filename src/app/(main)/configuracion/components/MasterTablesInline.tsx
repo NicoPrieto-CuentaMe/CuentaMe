@@ -656,7 +656,7 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
 
   return (
     <div className="space-y-2">
-      {error ? (
+      {error && !editingId ? (
         <div className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">{error}</div>
       ) : null}
       {renderPopover()}
@@ -753,36 +753,30 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
                       )}
                     </td>
                     <td className="border-b border-border px-3 py-2 align-middle">
-                      {isEdit ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button type="button" className={btnSave} disabled={pending} onClick={() => void save()}>
-                            Guardar
-                          </button>
-                          <button type="button" className={btnCancel} disabled={pending} onClick={cancel}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button type="button" className={btnEdit} onClick={() => beginEdit(s)}>
-                            Editar
-                          </button>
-                          <form
-                            action={async (fd) => {
-                              await deleteSupplier(fd);
+                      <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
+                        <button type="button" onClick={() => beginEdit(s)}
+                          style={{ display:"inline-flex", alignItems:"center", gap:5, height:28, padding:"0 10px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:6, color:"#d0d6e0", font:"510 12px/1 Inter,sans-serif", cursor:"pointer" }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Editar
+                        </button>
+                        <form
+                          action={async (fd) => {
+                            await deleteSupplier(fd);
+                          }}
+                          className="inline"
+                        >
+                          <input type="hidden" name="id" value={s.id} />
+                          <button
+                            type="submit"
+                            onClick={(e) => {
+                              if (!confirm("¿Eliminar este proveedor? Esta acción no se puede deshacer.")) e.preventDefault();
                             }}
-                            className="inline"
+                            style={{ display:"inline-flex", alignItems:"center", gap:5, height:28, padding:"0 10px", background:"rgba(224,82,82,0.14)", border:"1px solid rgba(224,82,82,0.30)", borderRadius:6, color:"#ff8585", font:"510 12px/1 Inter,sans-serif", cursor:"pointer" }}
                           >
-                            <input type="hidden" name="id" value={s.id} />
-                            <ConfirmSubmitButton
-                              confirmMessage="¿Eliminar este proveedor? Esta acción no se puede deshacer."
-                              className="text-danger hover:text-danger border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium hover:bg-danger/20"
-                            >
-                              Eliminar
-                            </ConfirmSubmitButton>
-                          </form>
-                        </div>
-                      )}
+                            Eliminar
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -791,6 +785,112 @@ export function ProveedoresTable({ rows }: { rows: ProveedorRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {typeof window !== "undefined" && editingId && draft && createPortal(
+        <div style={{ position:"fixed", inset:0, zIndex:500 }}>
+          <div onClick={cancel} style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.65)" }} />
+          <div style={{
+            position:"absolute", top:0, right:0, bottom:0,
+            width:"min(480px, 100vw)",
+            background:"#0c0d0e",
+            borderLeft:"1px solid rgba(255,255,255,0.08)",
+            display:"flex", flexDirection:"column",
+            boxShadow:"-24px 0 60px rgba(0,0,0,0.6)",
+          }}>
+            {/* Header */}
+            <div style={{ padding:"20px 22px 16px", borderBottom:"1px solid rgba(255,255,255,0.06)", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, flexShrink:0 }}>
+              <div>
+                <p style={{ font:"590 10px/1 Inter,sans-serif", color:"#7170ff", letterSpacing:"1.2px", textTransform:"uppercase", margin:0 }}>EDITANDO PROVEEDOR</p>
+                <h2 style={{ font:"590 20px/1.2 Inter,sans-serif", color:"#f7f8f8", letterSpacing:"-0.3px", margin:"6px 0 0" }}>{draft.nombre || "Proveedor"}</h2>
+              </div>
+              <button onClick={cancel} style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 12px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, color:"#d0d6e0", font:"510 12px/1 Inter,sans-serif", cursor:"pointer", flexShrink:0 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                Cerrar
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex:1, overflowY:"auto", padding:"18px 22px", display:"flex", flexDirection:"column", gap:16 }}>
+
+              {/* Nombre */}
+              <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
+                <span style={{ font:"590 14px/1.2 Inter,sans-serif", color:"#f7f8f8" }}>Nombre</span>
+                <input
+                  value={draft.nombre}
+                  onChange={e => setDraft(d => d ? {...d, nombre: e.target.value} : d)}
+                  style={{ width:"100%", height:38, padding:"0 12px", background:"rgba(0,0,0,0.30)", border:"1px solid rgba(255,255,255,0.10)", borderRadius:8, color:"#f7f8f8", font:"510 14px/1 Inter,sans-serif", outline:"none" }}
+                />
+              </div>
+
+              {/* Teléfono */}
+              <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
+                <span style={{ font:"590 14px/1.2 Inter,sans-serif", color:"#f7f8f8" }}>Teléfono <span style={{ font:"400 12px/1 Inter,sans-serif", color:"#62666d" }}>opcional</span></span>
+                <input
+                  value={draft.telefono}
+                  onChange={e => setDraft(d => d ? {...d, telefono: e.target.value.replace(/[^0-9+\-\s()]/g, "")} : d)}
+                  placeholder="3001234567"
+                  inputMode="tel"
+                  style={{ width:"100%", height:38, padding:"0 12px", background:"rgba(0,0,0,0.30)", border:"1px solid rgba(255,255,255,0.10)", borderRadius:8, color:"#f7f8f8", font:"510 14px/1 Inter,sans-serif", outline:"none", fontVariantNumeric:"tabular-nums" }}
+                />
+              </div>
+
+              {/* Categorías */}
+              <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+                <span style={{ font:"590 14px/1.2 Inter,sans-serif", color:"#f7f8f8" }}>Categorías</span>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {proveedorCategoriaOptions.map(c => {
+                    const on = draft.categorias.includes(c.value as CategoriaProveedor);
+                    return (
+                      <button key={c.value} type="button"
+                        onClick={() => setDraft(d => {
+                          if (!d) return d;
+                          const cats = on
+                            ? d.categorias.filter(x => x !== c.value)
+                            : [...d.categorias, c.value as CategoriaProveedor];
+                          return {...d, categorias: cats};
+                        })}
+                        style={{
+                          display:"inline-flex", alignItems:"center", gap:6,
+                          height:32, padding:"0 13px",
+                          background: on ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                          border:"1px solid",
+                          borderColor: on ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                          borderRadius:999, color: on ? "#fff" : "#d0d6e0",
+                          font:"510 13px/1 Inter,sans-serif", cursor:"pointer",
+                          transition:"all 150ms cubic-bezier(0.16,1,0.3,1)",
+                        }}>
+                        {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div style={{ padding:"10px 14px", background:"rgba(224,82,82,0.10)", border:"1px solid rgba(224,82,82,0.25)", borderRadius:8 }}>
+                  <span style={{ font:"510 13px/1.4 Inter,sans-serif", color:"#f87171" }}>{error}</span>
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding:"14px 22px 18px", borderTop:"1px solid rgba(255,255,255,0.06)", display:"flex", gap:8, flexShrink:0 }}>
+              <button type="button" onClick={cancel}
+                style={{ flex:1, height:42, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#d0d6e0", font:"510 13px/1 Inter,sans-serif", cursor:"pointer" }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={() => void save()} disabled={pending}
+                style={{ flex:2, height:42, background:"linear-gradient(180deg,#6b78de,#5e6ad2)", border:"1px solid rgba(113,112,255,0.5)", borderRadius:10, color:"#fff", font:"590 13px/1 Inter,sans-serif", cursor:"pointer", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 14px rgba(94,106,210,0.3)", opacity: pending ? 0.7 : 1 }}>
+                {pending ? "Guardando…" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -836,62 +936,129 @@ function buildInsumoMenuSections(
   return sections;
 }
 
-/** Pestaña Insumos: formulario y listado en dos tarjetas independientes (mismo patrón que Carta). */
 export function InsumosTabPanel({ rows }: { rows: InsumoRow[] }) {
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-text-primary">Agregar insumo</h3>
-        <p className="mt-1 text-sm text-text-tertiary">
-          Define tus insumos con unidad base para cálculos posteriores.
-        </p>
-        <div className="mt-4">
-          <AddSupplyForm />
-        </div>
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      {/* Hero composer */}
+      <section style={{
+        position:"relative",
+        background:"linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.015) 100%)",
+        border:"1px solid rgba(255,255,255,0.07)",
+        borderRadius:18, padding:"28px 32px 22px",
+        display:"flex", flexDirection:"column",
+        boxShadow:"0 24px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}>
+        <AddSupplyForm />
       </section>
 
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-text-primary">Mis insumos</h3>
-        <div className="mt-4 overflow-x-auto">
-          <InsumosTable rows={rows} />
+      {/* Mis insumos */}
+      <section style={{
+        background:"rgba(255,255,255,0.02)",
+        border:"1px solid rgba(255,255,255,0.06)",
+        borderRadius:14, padding:"20px 22px 24px",
+      }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18 }}>
+          <h2 style={{ font:"510 16px/1.2 Inter,sans-serif", color:"#f7f8f8", letterSpacing:"-0.2px", margin:0 }}>Mis insumos</h2>
+          <span style={{ font:"510 11px/1 Inter,sans-serif", color:"#8a8f98", background:"rgba(255,255,255,0.04)", padding:"4px 8px", borderRadius:999 }}>{rows.length}</span>
         </div>
+        {rows.length === 0 ? (
+          <div style={{ padding:"32px 16px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, textAlign:"center" }}>
+            <div style={{ width:44, height:44, borderRadius:12, background:"rgba(94,106,210,0.10)", border:"1px solid rgba(113,112,255,0.18)", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:6 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5e6ad2" strokeWidth="1.6" strokeLinecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+            </div>
+            <p style={{ font:"510 14px/1.4 Inter,sans-serif", color:"#d0d6e0", margin:0 }}>Aún no hay insumos</p>
+            <p style={{ font:"400 13px/1.4 Inter,sans-serif", color:"#62666d", margin:0 }}>Agrega uno arriba para empezar</p>
+          </div>
+        ) : (
+          <InsumosTable rows={rows} />
+        )}
       </section>
     </div>
   );
 }
 
-/** Pestaña Proveedores: dos tarjetas (mismo patrón que InsumosTabPanel). */
 export function ProveedoresTabPanel({ rows }: { rows: ProveedorRow[] }) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const n = rows.length;
-  return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-text-primary">Agregar proveedor</h3>
-        <p className="mt-1 text-sm text-text-tertiary">Crea tus proveedores una sola vez.</p>
-        <div className="mt-4">
-          <AddSupplierForm />
-        </div>
-      </section>
 
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <h4 className="text-sm font-medium text-text-secondary">Mis proveedores</h4>
-          <span
-            className="inline-flex min-h-[1.25rem] items-center rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-xs tabular-nums text-text-tertiary"
-            aria-label={`${n} proveedores`}
-          >
+  return (
+    <>
+      {/* Botón Mis proveedores */}
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:6 }}>
+        <button type="button" onClick={() => setDrawerOpen(o => !o)}
+          style={{
+            display:"inline-flex", alignItems:"center", gap:8,
+            height:32, padding:"0 12px",
+            background: drawerOpen ? "rgba(94,106,210,0.18)" : "rgba(255,255,255,0.03)",
+            border:"1px solid",
+            borderColor: drawerOpen ? "rgba(113,112,255,0.30)" : "rgba(255,255,255,0.08)",
+            borderRadius:8, color: drawerOpen ? "#a4adff" : "#d0d6e0",
+            font:"510 12px/1 Inter,sans-serif", cursor:"pointer",
+            transition:"all 150ms cubic-bezier(0.16,1,0.3,1)",
+          }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          <span>Mis proveedores</span>
+          <span style={{ font:"510 11px/1 Inter,sans-serif", color: drawerOpen ? "#a4adff" : "#8a8f98", background: drawerOpen ? "rgba(113,112,255,0.20)" : "rgba(255,255,255,0.05)", padding:"3px 7px", borderRadius:999, minWidth:20, textAlign:"center" }}>
             {n}
           </span>
+        </button>
+      </div>
+
+      {/* Hero composer */}
+      <section style={{
+        position:"relative",
+        background:"linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.015) 100%)",
+        border:"1px solid rgba(255,255,255,0.07)",
+        borderRadius:18, padding:"28px 32px 22px",
+        display:"flex", flexDirection:"column", gap:22,
+        boxShadow:"0 24px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}>
+        <div style={{ font:"590 10px/1 Inter,sans-serif", color:"#62666d", letterSpacing:"1.6px", textTransform:"uppercase" }}>
+          NUEVO PROVEEDOR
         </div>
-        <div className="overflow-x-auto">
+        <AddSupplierForm />
+      </section>
+
+      {/* Drawer inferior */}
+      <div style={{
+        position:"fixed", bottom:0, left:0, right:0,
+        zIndex:80,
+        transform: drawerOpen ? "translateY(0)" : "translateY(100%)",
+        transition:"transform 300ms cubic-bezier(0.16,1,0.3,1)",
+        display:"flex", flexDirection:"column",
+        maxHeight:"55vh",
+        background:"#0c0d0e",
+        borderTop:"1px solid rgba(255,255,255,0.08)",
+        boxShadow:"0 -24px 60px rgba(0,0,0,0.5)",
+      }}>
+        {/* Header del drawer */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px 12px", borderBottom:"1px solid rgba(255,255,255,0.06)", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ font:"590 15px/1.2 Inter,sans-serif", color:"#f7f8f8", letterSpacing:"-0.2px" }}>Mis proveedores</span>
+            <span style={{ font:"510 11px/1 Inter,sans-serif", color:"#8a8f98", background:"rgba(255,255,255,0.04)", padding:"3px 8px", borderRadius:999 }}>{n}</span>
+          </div>
+          <button type="button" onClick={() => setDrawerOpen(false)}
+            style={{ width:28, height:28, borderRadius:7, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"#8a8f98", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
+            aria-label="Cerrar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {/* Contenido */}
+        <div style={{ flex:1, overflowY:"auto" }}>
           {n === 0 ? (
-            <p className="text-sm text-text-tertiary">Aún no tienes proveedores. Agrega el primero arriba.</p>
+            <div style={{ padding:"32px 16px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, textAlign:"center" }}>
+              <div style={{ width:44, height:44, borderRadius:12, background:"rgba(94,106,210,0.10)", border:"1px solid rgba(113,112,255,0.18)", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:6 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5e6ad2" strokeWidth="1.6" strokeLinecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+              </div>
+              <p style={{ font:"510 14px/1.4 Inter,sans-serif", color:"#d0d6e0", margin:0 }}>Aún no hay proveedores</p>
+              <p style={{ font:"400 13px/1.4 Inter,sans-serif", color:"#62666d", margin:0 }}>Agrega uno arriba para empezar</p>
+            </div>
           ) : (
             <ProveedoresTable rows={rows} />
           )}
         </div>
-      </section>
-    </div>
+      </div>
+    </>
   );
 }
 

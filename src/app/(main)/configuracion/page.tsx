@@ -94,53 +94,55 @@ export default async function ConfiguracionPage({
   ]);
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">Configuración</h2>
-            <p className="mt-1 text-sm text-text-tertiary">
-              Tablas maestras que alimentan el resto del sistema.
-            </p>
-          </div>
-          <div className="flex w-full flex-wrap gap-2 md:w-auto">
-            {tabs.map((t) => {
-              const active = t.key === tab;
-              return (
-                <Link
-                  key={t.key}
-                  href={`/configuracion?tab=${t.key}`}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-accent-light text-accent"
-                      : "border border-border bg-surface-elevated text-text-secondary hover:bg-border hover:text-text-primary"
-                  }`}
-                >
-                  {t.label}
-                </Link>
-              );
-            })}
-          </div>
+    <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", background:"#08090a", backgroundImage:"radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize:"24px 24px", minHeight:"100vh" }}>
+      {/* Título */}
+      <div style={{ padding:"20px 24px 14px", flexShrink:0 }}>
+        <h1 style={{ font:"590 22px/1.15 Inter,sans-serif", color:"#f7f8f8", letterSpacing:"-0.5px", margin:0 }}>Configuración</h1>
+        <p style={{ font:"400 13px/1.45 Inter,sans-serif", color:"#62666d", margin:"5px 0 0", letterSpacing:"-0.1px" }}>
+          Tablas maestras del sistema: proveedores, insumos, carta y personal.
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ padding:"0 24px 12px", borderBottom:"1px solid rgba(255,255,255,0.05)", flexShrink:0 }}>
+        <div style={{ display:"flex", gap:4, overflowX:"auto" }}>
+          {tabs.map((t) => {
+            const active = t.key === tab;
+            const disabled = t.key === "personal";
+            return disabled ? (
+              <span key={t.key} style={{ display:"inline-flex", alignItems:"center", gap:8, height:36, padding:"0 14px", borderRadius:8, font:"510 13px/1 Inter,sans-serif", color:"#4a4d54", cursor:"not-allowed", border:"1px solid transparent", flexShrink:0 }}>
+                {t.label}
+                <span style={{ font:"510 10px/1 Inter,sans-serif", color:"#4a4d54", background:"rgba(255,255,255,0.03)", padding:"3px 6px", borderRadius:999, letterSpacing:"0.3px", textTransform:"uppercase" }}>Pronto</span>
+              </span>
+            ) : (
+              <Link key={t.key} href={`/configuracion?tab=${t.key}`} style={{
+                display:"inline-flex", alignItems:"center", height:36, padding:"0 14px",
+                borderRadius:8, font:"510 13px/1 Inter,sans-serif", flexShrink:0,
+                letterSpacing:"-0.1px", textDecoration:"none",
+                background: active ? "rgba(94,106,210,0.14)" : "transparent",
+                border: "1px solid",
+                borderColor: active ? "rgba(113,112,255,0.22)" : "transparent",
+                color: active ? "#a4adff" : "#8a8f98",
+                transition:"all 150ms cubic-bezier(0.16,1,0.3,1)",
+              }}>
+                {t.label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      {tab === "proveedores" ? <ProveedoresTabPanel rows={proveedores} /> : null}
-
-      {tab === "insumos" ? <InsumosTabPanel rows={insumos} /> : null}
-
-      {tab === "carta" ? (
-        <CartaTab
-          platos={platos}
-          categorias={categorias}
-          insumos={insumos}
-          combos={combos}
-          initialDishId={searchParams?.dishId}
-        />
-      ) : null}
-
-      {tab === "personal" ? (
-        <EmpleadosNominaTab empleadosInicial={empleadosActivos} nominasInicial={todasNominas} />
-      ) : null}
+      {/* Contenido */}
+      <div style={{ padding:"20px 24px 32px", display:"flex", flexDirection:"column", gap:16, flex:1 }}>
+        {tab === "proveedores" ? <ProveedoresTabPanel rows={proveedores} /> : null}
+        {tab === "insumos" ? <InsumosTabPanel rows={insumos} /> : null}
+        {tab === "carta" ? (
+          <CartaTab platos={platos} categorias={categorias} insumos={insumos} combos={combos} initialDishId={searchParams?.dishId} />
+        ) : null}
+        {tab === "personal" ? (
+          <EmpleadosNominaTab empleadosInicial={empleadosActivos} nominasInicial={todasNominas} />
+        ) : null}
+      </div>
     </div>
   );
 }
