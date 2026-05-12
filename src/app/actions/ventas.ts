@@ -218,7 +218,12 @@ export async function getPlatosCatalogoVenta() {
     const userId = await requireUserId();
     const platos = await prisma.plato.findMany({
       where: { userId, ...notDeleted, active: true },
-      select: { id: true, nombre: true, precioVenta: true },
+      select: {
+        id: true,
+        nombre: true,
+        precioVenta: true,
+        categoria: { select: { id: true, nombre: true } },
+      },
       orderBy: { nombre: "asc" },
     });
     return {
@@ -227,11 +232,15 @@ export async function getPlatosCatalogoVenta() {
         id: p.id,
         nombre: p.nombre,
         precioVenta: p.precioVenta.toString(),
+        categoria: p.categoria ?? null,
       })),
     };
   } catch (e) {
     console.error("[getPlatosCatalogoVenta]", e);
-    return { ok: false as const, platos: [] as { id: string; nombre: string; precioVenta: string }[] };
+    return {
+      ok: false as const,
+      platos: [] as { id: string; nombre: string; precioVenta: string; categoria: { id: string; nombre: string } | null }[],
+    };
   }
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
+import { useState as useLocalState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { CanalDomicilio, MetodoPagoVenta, Prisma, TipoVenta } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { editarVenta, eliminarVenta, getPlatosCatalogoVenta } from "@/app/actions/ventas";
@@ -12,7 +14,6 @@ import {
   METODOS_PAGO_VENTA,
   TIPO_VENTA_LABELS,
 } from "@/lib/ventas-constants";
-import { ColumnHeader } from "@/components/ui/ColumnHeader";
 
 type Row = Prisma.VentaGetPayload<{
   include: {
@@ -24,7 +25,14 @@ type Row = Prisma.VentaGetPayload<{
   };
 }>;
 
-type PlatoCat = { id: string; nombre: string; precioVenta: string };
+export type VentaHistorialRow = Row;
+
+type PlatoCat = {
+  id: string;
+  nombre: string;
+  precioVenta: string;
+  categoria: { id: string; nombre: string } | null;
+};
 
 function fechaToInput(d: Date): string {
   const y = d.getUTCFullYear();
@@ -61,19 +69,6 @@ function tipoRowLabel(v: Row): string {
   return base;
 }
 
-/** Misma tabla Proveedores (Configuración) */
-const btnEditRow =
-  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
-const btnDeleteRow =
-  "rounded border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium text-danger hover:bg-danger/20 hover:text-danger";
-const btnSaveRow =
-  "rounded bg-accent px-2 py-1 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60";
-const btnCancelRow =
-  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
-
-const loadMoreClass =
-  "w-full border border-border border-t-0 bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated";
-
 const idle: ActionState = { ok: true };
 
 export function VentasHistorial({ rows }: { rows: Row[] }) {
@@ -95,6 +90,20 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [addPlatoSearch, setAddPlatoSearch] = useLocalState("");
+  const [addCategoria, setAddCategoria] = useState<string | null>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+
+  const cols = [
+    { id: "fecha", label: "Fecha", flex: "0 0 96px", align: "left" as const },
+    { id: "hora", label: "Hora", flex: "0 0 68px", align: "left" as const },
+    { id: "tipo", label: "Tipo", flex: "0 0 148px", align: "left" as const },
+    { id: "items", label: "Items", flex: "1 1 0", align: "left" as const, noSort: true },
+    { id: "total", label: "Total", flex: "0 0 108px", align: "right" as const },
+    { id: "metodoPago", label: "Método pago", flex: "0 0 130px", align: "left" as const },
+    { id: "acciones", label: "Acciones", flex: "0 0 156px", align: "right" as const, noSort: true },
+  ];
 
   useEffect(() => {
     getPlatosCatalogoVenta().then((r) => {
@@ -102,10 +111,30 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
     });
   }, []);
 
+  useEffect(() => {
+    if (openMenu === null) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (headerRef.current?.contains(t)) return;
+      setOpenMenu(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [openMenu]);
+
   const precioByPlato = useMemo(() => {
     const m = new Map<string, number>();
     for (const p of catalog) m.set(p.id, Number(p.precioVenta));
     return m;
+  }, [catalog]);
+
+  const categoriasUnicas = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of catalog) {
+      if (p.categoria) seen.set(p.categoria.id, p.categoria.nombre);
+    }
+    return Array.from(seen.entries()).map(([id, nombre]) => ({ id, nombre }));
   }, [catalog]);
 
   const startEdit = useCallback((v: Row) => {
@@ -125,6 +154,8 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
   const cancelEdit = useCallback(() => {
     setEditingId(null);
     setDraft(null);
+    setAddPlatoSearch("");
+    setAddCategoria(null);
   }, []);
 
   const saveEdit = useCallback(() => {
@@ -144,6 +175,8 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
       if (res.ok) {
         setEditingId(null);
         setDraft(null);
+        setAddPlatoSearch("");
+        setAddCategoria(null);
         router.refresh();
       }
     });
@@ -232,408 +265,1163 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
   }, []);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-text-tertiary">Aún no hay ventas registradas.</p>;
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "20px",
+          color: "#62666d",
+          font: "400 13px/1 Inter,sans-serif",
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#28282c",
+            display: "inline-block",
+          }}
+        />
+        Aún no hay ventas registradas
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[780px] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-text-secondary">
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Fecha"
-                columnKey="fecha"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.fecha ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "fecha") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("fecha", "");
+    <>
+    <div style={{ minWidth: 900, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div
+        ref={headerRef}
+        data-ventas-historial-header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "10px 20px",
+          background: "rgba(255,255,255,0.015)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          position: "sticky",
+          top: 0,
+          zIndex: 2,
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        {cols.map((c) => (
+          <div
+            key={c.id}
+            style={{
+              flex: c.flex,
+              display: "flex",
+              justifyContent: c.align === "right" ? "flex-end" : "flex-start",
+              position: "relative",
+            }}
+          >
+            {c.noSort ? (
+              <span
+                style={{
+                  font: "510 11px/1 Inter,sans-serif",
+                  color: "#8a8f98",
+                  letterSpacing: "0.5px",
+                  textTransform: "uppercase",
                 }}
-              />
-            </th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Hora"
-                columnKey="hora"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.hora ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "hora") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("hora", "");
+              >
+                {c.label}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenu(openMenu === c.id ? null : c.id);
                 }}
-              />
-            </th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Tipo"
-                columnKey="tipo"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.tipo ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "tipo") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("tipo", "");
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  height: 26,
+                  padding: "0 8px",
+                  background: sortColumn === c.id ? "rgba(113,112,255,0.10)" : "transparent",
+                  border: "1px solid",
+                  borderColor: sortColumn === c.id ? "rgba(113,112,255,0.20)" : "transparent",
+                  borderRadius: 6,
+                  color: sortColumn === c.id ? "#a4adff" : "#8a8f98",
+                  font: "510 11px/1 Inter,sans-serif",
+                  letterSpacing: "0.5px",
+                  textTransform: "uppercase",
+                  cursor: "pointer",
                 }}
-              />
-            </th>
-            <th className="pb-2 pr-3 pl-1 font-semibold">Items</th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Total"
-                columnKey="total"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.total ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "total") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("total", "");
+              >
+                <span>{c.label}</span>
+                {sortColumn === c.id ? (
+                  sortDirection === "asc" ? (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <path d="M12 19V5M5 12l7-7 7 7" />
+                    </svg>
+                  ) : (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <path d="M12 5v14M5 12l7 7 7-7" />
+                    </svg>
+                  )
+                ) : null}
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ opacity: 0.5 }}>
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            )}
+            {openMenu === c.id ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  left: 0,
+                  minWidth: 180,
+                  background: "#191a1b",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 8,
+                  padding: 4,
+                  boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                  zIndex: 50,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
                 }}
-              />
-            </th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Método pago"
-                columnKey="metodoPago"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.metodoPago ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "metodoPago") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("metodoPago", "");
-                }}
-              />
-            </th>
-            <th className="pb-2 pr-2 pl-1 font-semibold">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border text-text-primary">
-          {filtradasPorColumna.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="px-3 py-6 text-center text-sm text-text-tertiary">
-                No hay ventas que coincidan con la búsqueda de columnas.
-              </td>
-            </tr>
-          ) : (
-            aMostrar.map((v) => {
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    height: 32,
+                    padding: "0 10px",
+                    background: "transparent",
+                    border: "none",
+                    borderRadius: 6,
+                    color: "#d0d6e0",
+                    font: "510 13px/1 Inter,sans-serif",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    onSort(c.id, "asc");
+                    setOpenMenu(null);
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                  Ordenar A → Z
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    height: 32,
+                    padding: "0 10px",
+                    background: "transparent",
+                    border: "none",
+                    borderRadius: 6,
+                    color: "#d0d6e0",
+                    font: "510 13px/1 Inter,sans-serif",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    onSort(c.id, "desc");
+                    setOpenMenu(null);
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12l7 7 7-7" />
+                  </svg>
+                  Ordenar Z → A
+                </button>
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
+                <div style={{ padding: "4px 6px" }}>
+                  <input
+                    type="text"
+                    placeholder="Filtrar..."
+                    value={columnSearch[c.id] ?? ""}
+                    onChange={(e) => {
+                      setColumnSearch((prev) => ({ ...prev, [c.id]: e.target.value }));
+                      setVisibleCount(10);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: "100%",
+                      height: 28,
+                      padding: "0 10px",
+                      background: "rgba(0,0,0,0.30)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 6,
+                      color: "#f7f8f8",
+                      font: "400 12px/1 Inter,sans-serif",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {filtradasPorColumna.length === 0 ? (
+          <div style={{ padding: "24px 20px", color: "#62666d", font: "400 13px/1 Inter,sans-serif", textAlign: "center" }}>
+            No hay ventas que coincidan con la búsqueda de columnas.
+          </div>
+        ) : (
+          aMostrar.map((v) => {
+            const isConfirm = deleteId === v.id;
             const nItems = v.detalles.reduce((s, d) => s + d.cantidad, 0);
-            const isEditing = editingId === v.id && draft;
-            const todayMax = new Date().toISOString().slice(0, 10);
+            const tipoColor = v.tipo === "MESA" ? "#7170ff" : v.tipo === "PARA_LLEVAR" ? "#10b981" : "#d97706";
 
             return (
-              <Fragment key={v.id}>
-                <tr className="align-top">
-                  <td className="py-2 pr-3 align-middle">
-                    {isEditing ? (
-                      <input
-                        type="date"
-                        max={todayMax}
-                        value={draft!.fecha}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, fecha: e.target.value } : d))}
-                        className="w-full min-w-[8rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
-                      />
-                    ) : (
-                      <span className="whitespace-nowrap">{formatFecha(v.fecha)}</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3 align-middle">
-                    {isEditing ? (
-                      <input
-                        type="time"
-                        value={draft!.hora}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, hora: e.target.value } : d))}
-                        className="w-full min-w-[6rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
-                      />
-                    ) : (
-                      <span className="whitespace-nowrap">{v.hora}</span>
-                    )}
-                  </td>
-                  <td className="max-w-[200px] py-2 pr-3 align-middle text-text-secondary">
-                    {isEditing ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setDraft((d) => (d ? { ...d, kind: "mesa" } : d))}
-                            className={`rounded-full border px-2 py-0.5 text-xs ${draft!.kind === "mesa" ? "border-accent bg-accent-light text-accent" : "border-border"}`}
-                          >
-                            Mesa
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDraft((d) => (d ? { ...d, kind: "llevar" } : d))}
-                            className={`rounded-full border px-2 py-0.5 text-xs ${draft!.kind === "llevar" ? "border-accent bg-accent-light text-accent" : "border-border"}`}
-                          >
-                            Para llevar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDraft((d) => (d ? { ...d, kind: "domicilio" } : d))}
-                            className={`rounded-full border px-2 py-0.5 text-xs ${draft!.kind === "domicilio" ? "border-accent bg-accent-light text-accent" : "border-border"}`}
-                          >
-                            Domicilio
-                          </button>
-                        </div>
-                        {draft!.kind === "domicilio" ? (
-                          <select
-                            value={draft!.canal}
-                            onChange={(e) =>
-                              setDraft((d) =>
-                                d ? { ...d, canal: e.target.value as CanalDomicilio } : d,
-                              )
-                            }
-                            className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-xs"
-                          >
-                            {CANALES_DOMICILIO.map((c) => (
-                              <option key={c} value={c}>
-                                {CANAL_DOMICILIO_LABELS[c]}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="break-words">
-                        {TIPO_VENTA_LABELS[v.tipo]}
-                        {v.tipo === "DOMICILIO" && v.canal
-                          ? ` · ${CANAL_DOMICILIO_LABELS[v.canal]}`
-                          : ""}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3 align-middle tabular-nums">
-                    {isEditing ? `${draft!.lines.length} ítems` : `${nItems} items`}
-                  </td>
-                  <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
-                    {isEditing ? formatCop(draftTotal) : formatCop(v.total)}
-                  </td>
-                  <td className="max-w-[160px] py-2 align-middle text-text-secondary">
-                    {isEditing ? (
-                      <select
-                        value={draft!.metodoPago}
-                        onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, metodoPago: e.target.value as MetodoPagoVenta } : d,
-                          )
-                        }
-                        className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-xs"
+              <div
+                key={v.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  padding: "12px 20px",
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  background: isConfirm ? "rgba(224,82,82,0.06)" : "transparent",
+                  transition: "background 150ms cubic-bezier(0.16,1,0.3,1)",
+                }}
+              >
+                <div style={{ flex: cols[0]!.flex }}>
+                  <span
+                    style={{
+                      font: "510 13px/1 Inter,sans-serif",
+                      color: "#f7f8f8",
+                      letterSpacing: "-0.15px",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {formatFecha(v.fecha)}
+                  </span>
+                </div>
+                <div style={{ flex: cols[1]!.flex }}>
+                  <span style={{ font: "510 13px/1 Inter,sans-serif", color: "#f7f8f8", fontVariantNumeric: "tabular-nums" }}>
+                    {v.hora.trim()}
+                  </span>
+                </div>
+                <div style={{ flex: cols[2]!.flex }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      height: 24,
+                      padding: "0 10px 0 8px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: 999,
+                      font: "510 12px/1 Inter,sans-serif",
+                      color: "#d0d6e0",
+                    }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: tipoColor, flexShrink: 0 }} />
+                    {tipoRowLabel(v)}
+                  </span>
+                </div>
+                <div style={{ flex: cols[3]!.flex }}>
+                  <span style={{ font: "400 13px/1 Inter,sans-serif", color: "#8a8f98" }}>
+                    {nItems} {nItems === 1 ? "item" : "items"}
+                  </span>
+                </div>
+                <div style={{ flex: cols[4]!.flex, display: "flex", justifyContent: "flex-end" }}>
+                  <span
+                    style={{
+                      font: "510 14px/1 Inter,sans-serif",
+                      color: "#f7f8f8",
+                      letterSpacing: "-0.2px",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {formatCop(v.total)}
+                  </span>
+                </div>
+                <div style={{ flex: cols[5]!.flex }}>
+                  <span style={{ font: "400 13px/1 Inter,sans-serif", color: "#8a8f98" }}>
+                    {METODO_PAGO_VENTA_LABELS[v.metodoPago]}
+                  </span>
+                </div>
+                <div style={{ flex: cols[6]!.flex, display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                  {isConfirm ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteId(null)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 6,
+                          color: "#d0d6e0",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
                       >
-                        {METODOS_PAGO_VENTA.map((m) => (
-                          <option key={m} value={m}>
-                            {METODO_PAGO_VENTA_LABELS[m]}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="break-words">
-                        {METODO_PAGO_VENTA_LABELS[v.metodoPago]}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-2 align-top">
-                    {deleteId === v.id ? (
-                      <div className="flex max-w-[min(100%,18rem)] flex-col gap-2">
-                        <p className="text-xs leading-snug text-danger">
-                          ¿Eliminar este registro? Esta acción no se puede deshacer.
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => confirmDelete(v.id)}
-                            disabled={pending}
-                            className={btnDeleteRow}
-                          >
-                            Confirmar eliminación
-                          </button>
-                          <button type="button" onClick={() => setDeleteId(null)} disabled={pending} className={btnCancelRow}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : isEditing ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        <button type="button" onClick={saveEdit} disabled={pending} className={btnSaveRow}>
-                          Guardar
-                        </button>
-                        <button type="button" onClick={cancelEdit} disabled={pending} className={btnCancelRow}>
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        <button type="button" onClick={() => startEdit(v)} className={btnEditRow}>
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteId(v.id);
-                            setEditingId(null);
-                            setDraft(null);
-                          }}
-                          className={btnDeleteRow}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-                {isEditing && draft ? (
-                  <tr className="bg-surface-elevated/40">
-                    <td className="pb-3 pt-0 pr-3" colSpan={7}>
-                      <div className="rounded-lg border border-border/80 p-3">
-                        <div className="space-y-3">
-                            <table className="w-full min-w-[480px] text-sm">
-                              <thead>
-                                <tr className="border-b border-border text-xs text-text-secondary">
-                                  <th className="pb-2 pr-2 text-left font-medium">Plato</th>
-                                  <th className="pb-2 pr-2 text-left font-medium">Cantidad</th>
-                                  <th className="pb-2 pr-2 text-left font-medium">Precio unit.</th>
-                                  <th className="pb-2 text-left font-medium">Subtotal</th>
-                                  <th className="w-8 pb-2" />
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {draft.lines.map((line, idx) => {
-                                  const pu = precioByPlato.get(line.platoId) ?? 0;
-                                  const sub = pu * line.cantidad;
-                                  return (
-                                    <tr key={`${line.platoId}-${idx}`} className="border-b border-border/60">
-                                      <td className="py-2 pr-2">
-                                        <select
-                                          value={line.platoId}
-                                          onChange={(e) => {
-                                            const platoId = e.target.value;
-                                            setDraft((d) => {
-                                              if (!d) return d;
-                                              const next = [...d.lines];
-                                              next[idx] = { ...next[idx]!, platoId };
-                                              return { ...d, lines: next };
-                                            });
-                                          }}
-                                          className="w-full max-w-[220px] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
-                                        >
-                                          {catalog.map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                              {p.nombre}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        <input
-                                          type="number"
-                                          min={1}
-                                          max={99}
-                                          value={line.cantidad}
-                                          onChange={(e) => {
-                                            const q = Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1));
-                                            setDraft((d) => {
-                                              if (!d) return d;
-                                              const next = [...d.lines];
-                                              next[idx] = { ...next[idx]!, cantidad: q };
-                                              return { ...d, lines: next };
-                                            });
-                                          }}
-                                          className="w-20 rounded border border-border bg-surface-elevated px-2 py-1 tabular-nums"
-                                        />
-                                      </td>
-                                      <td className="py-2 pr-2 whitespace-nowrap">{formatCop(pu)}</td>
-                                      <td className="py-2 font-medium whitespace-nowrap">{formatCop(sub)}</td>
-                                      <td className="py-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (!draft || draft.lines.length <= 1) {
-                                              cancelEdit();
-                                              return;
-                                            }
-                                            setDraft((d) => {
-                                              if (!d) return d;
-                                              const next = d.lines.filter((_, i) => i !== idx);
-                                              return { ...d, lines: next };
-                                            });
-                                          }}
-                                          className="text-danger hover:underline"
-                                          aria-label="Quitar línea"
-                                        >
-                                          ×
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                            <button
-                              type="button"
-                              disabled={draft.lines.length >= 30 || catalog.length === 0}
-                              onClick={() =>
-                                setDraft((d) => {
-                                  if (!d || catalog.length === 0) return d;
-                                  const first = catalog[0]!.id;
-                                  return { ...d, lines: [...d.lines, { platoId: first, cantidad: 1 }] };
-                                })
-                              }
-                              className="text-sm font-medium text-accent hover:underline disabled:opacity-40"
-                            >
-                              + Agregar plato
-                            </button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-              </Fragment>
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => confirmDelete(v.id)}
+                        disabled={pending}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(224,82,82,0.22)",
+                          border: "1px solid rgba(224,82,82,0.4)",
+                          borderRadius: 6,
+                          color: "#ff8585",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Confirmar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(v)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 6,
+                          color: "#d0d6e0",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteId(v.id);
+                          setEditingId(null);
+                          setDraft(null);
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(224,82,82,0.14)",
+                          border: "1px solid rgba(224,82,82,0.30)",
+                          borderRadius: 6,
+                          color: "#ff8585",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                        </svg>
+                        Eliminar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             );
           })
-          )}
-        </tbody>
-      </table>
-        {filtradasPorColumna.length > 0 && ordenadas.length > visibleCount ? (
-          <button
-            type="button"
-            onClick={() => setVisibleCount((v) => v + 10)}
-            className={loadMoreClass}
-          >
-            Ver {Math.min(10, ordenadas.length - visibleCount)} más
-          </button>
-        ) : null}
+        )}
       </div>
+
+      {filtradasPorColumna.length > 0 && ordenadas.length > visibleCount ? (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((x) => x + 10)}
+          style={{
+            width: "100%",
+            padding: "10px",
+            textAlign: "center",
+            font: "510 12px/1 Inter,sans-serif",
+            color: "#62666d",
+            background: "rgba(255,255,255,0.02)",
+            border: "none",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            cursor: "pointer",
+          }}
+        >
+          Ver {Math.min(10, ordenadas.length - visibleCount)} más
+        </button>
+      ) : null}
+
       {filtradasPorColumna.length > 0 ? (
-        <p className="text-center text-xs text-text-tertiary">
+        <p style={{ margin: 0, padding: "8px 12px 12px", textAlign: "center", font: "400 11px/1.3 Inter,sans-serif", color: "#62666d" }}>
           Mostrando {aMostrar.length} de {ordenadas.length} ventas
         </p>
       ) : null}
     </div>
+
+    {typeof window !== "undefined" &&
+      editingId &&
+      createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 500 }}>
+          <div
+            role="presentation"
+            onClick={cancelEdit}
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.65)" }}
+          />
+
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: "min(520px, 100vw)",
+              background: "#0c0d0e",
+              borderLeft: "1px solid rgba(255,255,255,0.08)",
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              boxShadow: "-24px 0 60px rgba(0,0,0,0.6)",
+            }}
+          >
+            <div
+              style={{
+                padding: "20px 22px 16px",
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+                flexShrink: 0,
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    font: "590 10px/1 Inter,sans-serif",
+                    color: "#7170ff",
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    margin: 0,
+                  }}
+                >
+                  EDITANDO VENTA
+                </p>
+                <h2
+                  style={{
+                    font: "590 20px/1.2 Inter,sans-serif",
+                    color: "#f7f8f8",
+                    letterSpacing: "-0.3px",
+                    margin: "6px 0 0",
+                  }}
+                >
+                  {draft ? formatFecha(new Date(`${draft.fecha}T12:00:00Z`)) : ""}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 32,
+                  padding: "0 12px",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 8,
+                  color: "#d0d6e0",
+                  font: "510 12px/1 Inter,sans-serif",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+                Cerrar
+              </button>
+            </div>
+
+            <div
+              style={{
+                margin: "14px 22px 0",
+                padding: "10px 14px",
+                background: "rgba(217,119,6,0.10)",
+                border: "1px solid rgba(217,119,6,0.25)",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexShrink: 0,
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+              <span style={{ font: "510 12px/1.4 Inter,sans-serif", color: "#f4b35e" }}>
+                Editando · cambios reemplazarán la venta
+              </span>
+            </div>
+
+            {draft ? (
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: "auto",
+                  padding: "18px 22px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                }}
+              >
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 12,
+                    padding: "16px 16px 18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ font: "590 14px/1.2 Inter,sans-serif", color: "#f7f8f8" }}>Fecha y hora</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98" }}>Fecha</label>
+                      <input
+                        type="date"
+                        value={draft.fecha}
+                        onChange={(e) => setDraft((d) => (d ? { ...d, fecha: e.target.value } : d))}
+                        style={{
+                          width: "100%",
+                          height: 34,
+                          padding: "0 10px",
+                          background: "rgba(0,0,0,0.30)",
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          borderRadius: 7,
+                          color: "#f7f8f8",
+                          font: "510 13px/1 Inter,sans-serif",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98" }}>Hora</label>
+                      <input
+                        type="time"
+                        value={draft.hora}
+                        onChange={(e) => setDraft((d) => (d ? { ...d, hora: e.target.value } : d))}
+                        style={{
+                          width: "100%",
+                          height: 34,
+                          padding: "0 10px",
+                          background: "rgba(0,0,0,0.30)",
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          borderRadius: 7,
+                          color: "#f7f8f8",
+                          font: "510 13px/1 Inter,sans-serif",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 12,
+                    padding: "16px 16px 18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ font: "590 14px/1.2 Inter,sans-serif", color: "#f7f8f8" }}>Tipo de venta</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {(["mesa", "llevar", "domicilio"] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setDraft((d) => (d ? { ...d, kind: k } : d))}
+                        style={{
+                          flex: 1,
+                          height: 36,
+                          borderRadius: 8,
+                          border: "1px solid",
+                          font: "510 13px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                          background: draft.kind === k ? "rgba(94,106,210,0.18)" : "transparent",
+                          borderColor: draft.kind === k ? "rgba(113,112,255,0.4)" : "rgba(255,255,255,0.08)",
+                          color: draft.kind === k ? "#a4adff" : "#8a8f98",
+                        }}
+                      >
+                        {k === "mesa" ? "Mesa" : k === "llevar" ? "Para llevar" : "Domicilio"}
+                      </button>
+                    ))}
+                  </div>
+                  {draft.kind === "domicilio" ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98" }}>Canal</label>
+                      <select
+                        value={draft.canal}
+                        onChange={(e) =>
+                          setDraft((d) => (d ? { ...d, canal: e.target.value as CanalDomicilio } : d))
+                        }
+                        style={{
+                          width: "100%",
+                          height: 34,
+                          padding: "0 10px",
+                          background: "rgba(0,0,0,0.30)",
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          borderRadius: 7,
+                          color: "#f7f8f8",
+                          font: "510 13px/1 Inter,sans-serif",
+                          outline: "none",
+                        }}
+                      >
+                        {CANALES_DOMICILIO.map((ch) => (
+                          <option key={ch} value={ch}>
+                            {CANAL_DOMICILIO_LABELS[ch]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 12,
+                    padding: "16px 16px 18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ font: "590 14px/1.2 Inter,sans-serif", color: "#f7f8f8" }}>Método de pago</span>
+                  <select
+                    value={draft.metodoPago}
+                    onChange={(e) =>
+                      setDraft((d) => (d ? { ...d, metodoPago: e.target.value as MetodoPagoVenta } : d))
+                    }
+                    style={{
+                      width: "100%",
+                      height: 34,
+                      padding: "0 10px",
+                      background: "rgba(0,0,0,0.30)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 7,
+                      color: "#f7f8f8",
+                      font: "510 13px/1 Inter,sans-serif",
+                      outline: "none",
+                    }}
+                  >
+                    {METODOS_PAGO_VENTA.map((m) => (
+                      <option key={m} value={m}>
+                        {METODO_PAGO_VENTA_LABELS[m]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 12,
+                    padding: "16px 16px 18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ font: "590 14px/1.2 Inter,sans-serif", color: "#f7f8f8" }}>Platos</span>
+                    <span
+                      style={{
+                        font: "510 11px/1 Inter,sans-serif",
+                        color: "#62666d",
+                        letterSpacing: "0.5px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {draft.lines.length} {draft.lines.length === 1 ? "plato" : "platos"}
+                    </span>
+                  </div>
+
+                  {draft.lines.map((line, i) => {
+                    const pu = precioByPlato.get(line.platoId) ?? 0;
+                    const nombrePlato = catalog.find((pc) => pc.id === line.platoId)?.nombre ?? line.platoId;
+                    return (
+                      <div
+                        key={line.platoId}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "8px 10px",
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <span
+                          style={{
+                            flex: 1,
+                            font: "510 13px/1.3 Inter,sans-serif",
+                            color: "#f7f8f8",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {nombrePlato}
+                        </span>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 7,
+                            padding: 2,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft((d) => {
+                                if (!d) return d;
+                                if (line.cantidad <= 1) {
+                                  return { ...d, lines: d.lines.filter((_, j) => j !== i) };
+                                }
+                                return {
+                                  ...d,
+                                  lines: d.lines.map((l, j) =>
+                                    j === i ? { ...l, cantidad: l.cantidad - 1 } : l,
+                                  ),
+                                };
+                              })
+                            }
+                            style={{
+                              width: 28,
+                              height: 28,
+                              border: "none",
+                              background: "transparent",
+                              color: "#d0d6e0",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 5,
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                              <path d="M5 12h14" />
+                            </svg>
+                          </button>
+                          <span
+                            style={{
+                              minWidth: 22,
+                              textAlign: "center",
+                              font: "590 13px/1 Inter,sans-serif",
+                              color: "#f7f8f8",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {line.cantidad}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft((d) =>
+                                d
+                                  ? {
+                                      ...d,
+                                      lines: d.lines.map((l, j) =>
+                                        j === i ? { ...l, cantidad: l.cantidad + 1 } : l,
+                                      ),
+                                    }
+                                  : d,
+                              )
+                            }
+                            style={{
+                              width: 28,
+                              height: 28,
+                              border: "none",
+                              background: "transparent",
+                              color: "#d0d6e0",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 5,
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </button>
+                        </div>
+                        <span
+                          style={{
+                            font: "510 12px/1 Inter,sans-serif",
+                            color: "#7170ff",
+                            fontVariantNumeric: "tabular-nums",
+                            flexShrink: 0,
+                            minWidth: 64,
+                            textAlign: "right",
+                          }}
+                        >
+                          {formatCop(pu * line.cantidad)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraft((d) => (d ? { ...d, lines: d.lines.filter((_, j) => j !== i) } : d))
+                          }
+                          style={{
+                            width: 24,
+                            height: 24,
+                            border: "none",
+                            background: "rgba(224,82,82,0.14)",
+                            borderRadius: 6,
+                            color: "#ff8585",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98" }}>Agregar plato</label>
+
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => setAddCategoria(null)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          height: 28,
+                          padding: "0 10px",
+                          background: addCategoria === null ? "rgba(94,106,210,0.14)" : "rgba(255,255,255,0.03)",
+                          border: "1px solid",
+                          borderColor: addCategoria === null ? "rgba(113,112,255,0.30)" : "rgba(255,255,255,0.06)",
+                          borderRadius: 999,
+                          color: addCategoria === null ? "#a4adff" : "#8a8f98",
+                          font: "510 11px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Todos
+                      </button>
+                      {categoriasUnicas.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setAddCategoria(c.id)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            height: 28,
+                            padding: "0 10px",
+                            background: addCategoria === c.id ? "rgba(94,106,210,0.14)" : "rgba(255,255,255,0.03)",
+                            border: "1px solid",
+                            borderColor: addCategoria === c.id ? "rgba(113,112,255,0.30)" : "rgba(255,255,255,0.06)",
+                            borderRadius: 999,
+                            color: addCategoria === c.id ? "#a4adff" : "#8a8f98",
+                            font: "510 11px/1 Inter,sans-serif",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {c.nombre}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        height: 36,
+                        padding: "0 10px",
+                        background: "rgba(0,0,0,0.20)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#62666d" strokeWidth="1.8" strokeLinecap="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="M21 21l-4.35-4.35" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Buscar plato..."
+                        value={addPlatoSearch}
+                        onChange={(e) => setAddPlatoSearch(e.target.value)}
+                        style={{
+                          flex: 1,
+                          background: "transparent",
+                          border: "none",
+                          color: "#f7f8f8",
+                          font: "400 13px/1 Inter,sans-serif",
+                          outline: "none",
+                        }}
+                      />
+                      {addPlatoSearch ? (
+                        <button
+                          type="button"
+                          onClick={() => setAddPlatoSearch("")}
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: "50%",
+                            background: "rgba(255,255,255,0.06)",
+                            border: "none",
+                            color: "#8a8f98",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div
+                      style={{
+                        background: "#191a1b",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: 8,
+                        padding: 4,
+                        maxHeight: 200,
+                        overflowY: "auto",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                      }}
+                    >
+                      {catalog
+                        .filter((p) => {
+                          const matchCat = addCategoria === null || p.categoria?.id === addCategoria;
+                          const matchSearch =
+                            !addPlatoSearch.trim() || p.nombre.toLowerCase().includes(addPlatoSearch.toLowerCase());
+                          return matchCat && matchSearch;
+                        })
+                        .map((p) => {
+                          const yaEnLineas = draft.lines.some((l) => l.platoId === p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setDraft((d) => {
+                                  if (!d) return d;
+                                  if (yaEnLineas) {
+                                    return {
+                                      ...d,
+                                      lines: d.lines.map((l) =>
+                                        l.platoId === p.id ? { ...l, cantidad: l.cantidad + 1 } : l,
+                                      ),
+                                    };
+                                  }
+                                  return { ...d, lines: [...d.lines, { platoId: p.id, cantidad: 1 }] };
+                                });
+                                setAddPlatoSearch("");
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                height: 34,
+                                padding: "0 10px",
+                                background: "transparent",
+                                border: "none",
+                                borderRadius: 6,
+                                color: yaEnLineas ? "#a4adff" : "#d0d6e0",
+                                font: "510 13px/1 Inter,sans-serif",
+                                cursor: "pointer",
+                                textAlign: "left",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "rgba(113,112,255,0.08)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "transparent";
+                              }}
+                            >
+                              <span
+                                style={{
+                                  overflow: "hidden",
+                                  whiteSpace: "nowrap",
+                                  textOverflow: "ellipsis",
+                                  flex: 1,
+                                }}
+                              >
+                                {p.nombre}
+                                {yaEnLineas ? (
+                                  <span style={{ color: "#62666d", fontSize: 11, marginLeft: 6 }}>· en pedido</span>
+                                ) : null}
+                              </span>
+                              <span
+                                style={{
+                                  font: "510 12px/1 Inter,sans-serif",
+                                  color: "#8a8f98",
+                                  fontVariantNumeric: "tabular-nums",
+                                  flexShrink: 0,
+                                  marginLeft: 8,
+                                }}
+                              >
+                                {formatCop(Number(p.precioVenta))}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      {catalog.filter((p) => {
+                        const matchCat = addCategoria === null || p.categoria?.id === addCategoria;
+                        const matchSearch =
+                          !addPlatoSearch.trim() || p.nombre.toLowerCase().includes(addPlatoSearch.toLowerCase());
+                        return matchCat && matchSearch;
+                      }).length === 0 ? (
+                        <p
+                          style={{
+                            padding: "10px 12px",
+                            font: "400 13px/1 Inter,sans-serif",
+                            color: "#62666d",
+                            margin: 0,
+                          }}
+                        >
+                          Sin resultados
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingTop: 10,
+                      borderTop: "1px solid rgba(255,255,255,0.05)",
+                      marginTop: 4,
+                    }}
+                  >
+                    <span style={{ font: "510 13px/1 Inter,sans-serif", color: "#8a8f98" }}>Total</span>
+                    <span
+                      style={{
+                        font: "590 20px/1 Inter,sans-serif",
+                        color: "#f7f8f8",
+                        letterSpacing: "-0.4px",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {formatCop(draftTotal)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div
+              style={{
+                padding: "14px 22px 18px",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                display: "flex",
+                gap: 8,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                onClick={cancelEdit}
+                style={{
+                  flex: 1,
+                  height: 42,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 10,
+                  color: "#d0d6e0",
+                  font: "510 13px/1 Inter,sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={pending}
+                style={{
+                  flex: 2,
+                  height: 42,
+                  background: "linear-gradient(180deg,#6b78de,#5e6ad2)",
+                  border: "1px solid rgba(113,112,255,0.5)",
+                  borderRadius: 10,
+                  color: "#fff",
+                  font: "590 13px/1 Inter,sans-serif",
+                  cursor: "pointer",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 14px rgba(94,106,210,0.3)",
+                  opacity: pending ? 0.7 : 1,
+                }}
+              >
+                {pending ? "Guardando…" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
