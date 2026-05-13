@@ -108,7 +108,7 @@ export default async function ConfiguracionPage({
         <div style={{ display:"flex", gap:4, overflowX:"auto" }}>
           {tabs.map((t) => {
             const active = t.key === tab;
-            const disabled = t.key === "personal";
+            const disabled = false;
             return disabled ? (
               <span key={t.key} style={{ display:"inline-flex", alignItems:"center", gap:8, height:36, padding:"0 14px", borderRadius:8, font:"510 13px/1 Inter,sans-serif", color:"#4a4d54", cursor:"not-allowed", border:"1px solid transparent", flexShrink:0 }}>
                 {t.label}

@@ -1077,6 +1077,17 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
 
   const [deleteModal, setDeleteModal] = useState<DeleteInsumoModalState | null>(null);
 
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+
+  const toggleCat = (key: string) => {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const menuSections = useMemo(() => buildInsumoMenuSections(rows), [rows]);
 
   const collapseCard = useCallback(() => {
@@ -1193,130 +1204,247 @@ export function InsumosTable({ rows }: { rows: InsumoRow[] }) {
       ) : menuSections.length === 0 ? (
         <p className="text-sm text-text-tertiary">No hay insumos para mostrar por categoría.</p>
       ) : (
-        <div className="space-y-10">
-          {menuSections.map((sec) => (
-            <div key={sec.key}>
-              <InsumoGroupHeading title={sec.label} count={sec.count} />
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {sec.items.map((ins) => {
-                    const expanded = expandedId === ins.id;
-                    return (
-                      <div
-                        key={ins.id}
-                        id={`insumo-card-${ins.id}`}
-                        role={expanded ? undefined : "button"}
-                        tabIndex={expanded ? -1 : 0}
-                        onClick={() => {
-                          if (!expanded) handleCardActivate(ins);
-                        }}
-                        onKeyDown={(e) => {
-                          if (expanded) return;
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            handleCardActivate(ins);
-                          }
-                        }}
-                        className={`relative rounded-xl border border-border bg-surface p-4 text-left shadow-sm transition-shadow ${
-                          expanded
-                            ? "cursor-default ring-2 ring-accent/30"
-                            : "cursor-pointer hover:shadow-md"
-                        }`}
-                      >
-                        {!expanded || !draft ? (
-                          <>
-                            <div className="text-sm font-semibold text-text-primary">{ins.nombre}</div>
-                            <div className="mt-1 text-sm text-text-secondary">
-                              {unitLabel.get(ins.unidadBase) ?? ins.unidadBase}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                            <div>
-                              <label className="text-xs font-medium text-text-secondary">Nombre</label>
-                              <input
-                                className={`${inlineField} mt-1 w-full`}
-                                value={draft.nombre}
-                                onChange={(e) => setDraft((d) => (d ? { ...d, nombre: e.target.value } : d))}
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-text-secondary">Unidad base</label>
-                              <select
-                                className={`${inlineField} mt-1 w-full`}
-                                value={draft.baseUnit}
-                                onChange={(e) => setDraft((d) => (d ? { ...d, baseUnit: e.target.value } : d))}
-                              >
-                                <option value="" disabled>
-                                  Selecciona...
-                                </option>
-                                {UNIT_OPTIONS.map((u) => (
-                                  <option key={u.value} value={u.value}>
-                                    {u.label}
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+            {menuSections.map((section) => {
+              const isOpen = expandedCats.has(section.key);
+              return (
+                <button
+                  key={section.key}
+                  type="button"
+                  onClick={() => toggleCat(section.key)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 13px",
+                    background: isOpen ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                    border: "1px solid",
+                    borderColor: isOpen ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                    borderRadius: 999,
+                    color: isOpen ? "#fff" : "#d0d6e0",
+                    font: "510 13px/1 Inter,sans-serif",
+                    cursor: "pointer",
+                    transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                    boxShadow: isOpen ? "inset 0 1px 0 rgba(255,255,255,0.08)" : "none",
+                  }}
+                >
+                  {isOpen && (
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.6"
+                      strokeLinecap="round"
+                    >
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  )}
+                  <span>{section.label}</span>
+                  <span
+                    style={{
+                      font: "510 11px/1 Inter,sans-serif",
+                      color: isOpen ? "rgba(255,255,255,0.7)" : "#62666d",
+                      background: isOpen ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      minWidth: 18,
+                      textAlign: "center",
+                    }}
+                  >
+                    {section.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {menuSections.map((section) => {
+              const isOpen = expandedCats.has(section.key);
+              if (!isOpen) return null;
+              return (
+                <div key={section.key}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <span
+                      style={{
+                        font: "510 13px/1.2 Inter,sans-serif",
+                        color: "#d0d6e0",
+                        letterSpacing: "-0.1px",
+                      }}
+                    >
+                      {section.label}
+                    </span>
+                    <span
+                      style={{
+                        font: "510 11px/1 Inter,sans-serif",
+                        color: "#8a8f98",
+                        background: "rgba(255,255,255,0.04)",
+                        padding: "3px 7px",
+                        borderRadius: 999,
+                      }}
+                    >
+                      {section.count}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                      gap: 10,
+                    }}
+                  >
+                    {section.items.map((r) => {
+                      const isExpanded = expandedId === r.id;
+                      if (isExpanded && draft) {
+                        return (
+                          <div
+                            key={r.id}
+                            style={{
+                              gridColumn: "span 1",
+                              padding: 14,
+                              background: "rgba(94,106,210,0.06)",
+                              border: "1px solid rgba(113,112,255,0.40)",
+                              borderRadius: 10,
+                              boxShadow:
+                                "0 0 0 3px rgba(113,112,255,0.10), 0 12px 32px rgba(0,0,0,0.30)",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 12,
+                            }}
+                          >
+                            <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                              <div>
+                                <label className="text-xs font-medium text-text-secondary">Nombre</label>
+                                <input
+                                  className={`${inlineField} mt-1 w-full`}
+                                  value={draft.nombre}
+                                  onChange={(e) => setDraft((d) => (d ? { ...d, nombre: e.target.value } : d))}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-text-secondary">Unidad base</label>
+                                <select
+                                  className={`${inlineField} mt-1 w-full`}
+                                  value={draft.baseUnit}
+                                  onChange={(e) => setDraft((d) => (d ? { ...d, baseUnit: e.target.value } : d))}
+                                >
+                                  <option value="" disabled>
+                                    Selecciona...
                                   </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-text-secondary">Categoría</label>
-                              <select
-                                className={`${inlineField} mt-1 w-full`}
-                                value={draft.categoria}
-                                onChange={(e) =>
-                                  setDraft((d) => (d ? { ...d, categoria: e.target.value } : d))
-                                }
-                              >
-                                <option value="">Sin categoría</option>
-                                {proveedorCategoriaOptions.map((c) => (
-                                  <option key={c.value} value={c.value}>
-                                    {c.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              <button
-                                type="button"
-                                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
-                                disabled={pending}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void save();
-                                }}
-                              >
-                                {pending ? "Guardando…" : "Guardar"}
-                              </button>
-                              <button
-                                type="button"
-                                className={btnCancel}
-                                disabled={pending}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  collapseCard();
-                                }}
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded border border-danger/30 bg-danger-light px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/20 disabled:opacity-60"
-                                disabled={!!deleteModal || pending}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  beginDeleteInsumo(ins.id, ins.nombre);
-                                }}
-                              >
-                                Eliminar
-                              </button>
+                                  {UNIT_OPTIONS.map((u) => (
+                                    <option key={u.value} value={u.value}>
+                                      {u.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-text-secondary">Categoría</label>
+                                <select
+                                  className={`${inlineField} mt-1 w-full`}
+                                  value={draft.categoria}
+                                  onChange={(e) =>
+                                    setDraft((d) => (d ? { ...d, categoria: e.target.value } : d))
+                                  }
+                                >
+                                  <option value="">Sin categoría</option>
+                                  {proveedorCategoriaOptions.map((c) => (
+                                    <option key={c.value} value={c.value}>
+                                      {c.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                  disabled={pending}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void save();
+                                  }}
+                                >
+                                  {pending ? "Guardando…" : "Guardar"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={btnCancel}
+                                  disabled={pending}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    collapseCard();
+                                  }}
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded border border-danger/30 bg-danger-light px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/20 disabled:opacity-60"
+                                  disabled={!!deleteModal || pending}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    beginDeleteInsumo(r.id, r.nombre);
+                                  }}
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          ))}
-        </div>
+                        );
+                      }
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => handleCardActivate(r)}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            padding: "12px 14px",
+                            background: "rgba(255,255,255,0.025)",
+                            border: "1px solid rgba(255,255,255,0.07)",
+                            borderRadius: 10,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "rgba(255,255,255,0.045)";
+                            e.currentTarget.style.borderColor = "rgba(113,112,255,0.25)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+                          }}
+                        >
+                          <span
+                            style={{
+                              font: "590 13px/1.3 Inter,sans-serif",
+                              color: "#f7f8f8",
+                              letterSpacing: "-0.1px",
+                            }}
+                          >
+                            {r.nombre}
+                          </span>
+                          <span style={{ font: "400 12px/1.3 Inter,sans-serif", color: "#8a8f98" }}>
+                            {unitLabel.get(r.unidadBase) ?? r.unidadBase}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

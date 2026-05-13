@@ -56,12 +56,6 @@ function cardStatus(p: CartaPlatoRow): CardStatus {
   return "needsRecipe";
 }
 
-const statusDot: Record<CardStatus, string> = {
-  complete: "bg-success",
-  needsRecipe: "bg-warning",
-  noRecipe: "bg-text-tertiary",
-};
-
 function Feedback({ state }: { state: ActionState }) {
   if (!("ok" in state) || state.ok) return null;
   if (!state.message?.trim()) return null;
@@ -74,11 +68,18 @@ function Feedback({ state }: { state: ActionState }) {
 
 function CartaGroupHeading({ title, count }: { title: string; count: number }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <h4 className="text-sm font-medium text-text-secondary">{title}</h4>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <span style={{ font: "510 13px/1.2 Inter,sans-serif", color: "#d0d6e0", letterSpacing: "-0.1px" }}>
+        {title}
+      </span>
       <span
-        className="inline-flex min-h-[1.25rem] items-center rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-xs tabular-nums text-text-tertiary"
-        aria-label={`${count} platos`}
+        style={{
+          font: "510 11px/1 Inter,sans-serif",
+          color: "#8a8f98",
+          background: "rgba(255,255,255,0.04)",
+          padding: "3px 7px",
+          borderRadius: 999,
+        }}
       >
         {count}
       </span>
@@ -125,227 +126,6 @@ function buildMenuSections(platos: CartaPlatoRow[], combos: ComboConComponentesR
   return sections;
 }
 
-function CategoriaChips({
-  categorias,
-  onDeleted,
-}: {
-  categorias: CartaCategoriaRow[];
-  onDeleted: () => void;
-}) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [renamePending, startRenameTransition] = useTransition();
-  const [inlineOpen, setInlineOpen] = useState(false);
-  const [state, formAction] = useFormState(createCategoria, formIdleState);
-  const [deleteTarget, setDeleteTarget] = useState<CartaCategoriaRow | null>(null);
-  const [renameId, setRenameId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (state.ok && state.message) {
-      router.refresh();
-      setInlineOpen(false);
-    }
-  }, [state.ok, state.message, router]);
-
-  const confirmDelete = useCallback(() => {
-    if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("id", id);
-      const res = await deleteCategoria(formIdleState, fd);
-      if (res.ok) {
-        setDeleteTarget(null);
-        router.refresh();
-        onDeleted();
-      }
-    });
-  }, [deleteTarget, onDeleted, router]);
-
-  const cancelRename = useCallback(() => {
-    setRenameId(null);
-    setRenameDraft("");
-    setRenameError(null);
-  }, []);
-
-  const commitRename = useCallback(
-    (c: CartaCategoriaRow) => {
-      if (renameId !== c.id) return;
-      const next = renameDraft.trim();
-      if (!next) {
-        cancelRename();
-        return;
-      }
-      if (next === c.nombre) {
-        cancelRename();
-        return;
-      }
-      startRenameTransition(async () => {
-        const res = await updateCategoria(c.id, next);
-        if (!res.ok) {
-          setRenameError(res.message);
-          return;
-        }
-        cancelRename();
-        router.refresh();
-      });
-    },
-    [renameDraft, renameId, cancelRename, router],
-  );
-
-  return (
-    <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-      <h4 className="text-sm font-semibold text-text-primary">Categorías del menú</h4>
-      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden />
-          Receta completa
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden />
-          Receta pendiente
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-text-tertiary" aria-hidden />
-          No requiere receta
-        </span>
-      </div>
-      <p className="mt-2 text-xs text-text-tertiary">
-        Crea y ordena bloques para tu carta. Los platos pueden quedar sin categoría.
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {categorias.map((c) => (
-          <div key={c.id} className="inline-flex max-w-full flex-col gap-0.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-secondary">
-              {renameId === c.id ? (
-                <input
-                  autoFocus
-                  disabled={renamePending}
-                  value={renameDraft}
-                  onChange={(e) => {
-                    setRenameDraft(e.target.value);
-                    setRenameError(null);
-                  }}
-                  onBlur={() => commitRename(c)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      (e.currentTarget as HTMLInputElement).blur();
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      setRenameDraft(c.nombre);
-                      cancelRename();
-                    }
-                  }}
-                  className="min-h-[1.875rem] min-w-[80px] max-w-[200px] rounded-full border border-accent bg-surface-elevated px-2 py-1 text-sm text-text-primary outline-none focus:ring-2 focus:ring-accent/30"
-                />
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="max-w-[200px] truncate text-left font-medium text-text-primary no-underline decoration-none hover:no-underline"
-                    style={{ textDecoration: "none" }}
-                    onClick={() => {
-                      setRenameId(c.id);
-                      setRenameDraft(c.nombre);
-                      setRenameError(null);
-                    }}
-                  >
-                    {c.nombre}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded px-1 text-base leading-none text-text-tertiary hover:bg-border hover:text-danger"
-                    aria-label={`Eliminar categoría ${c.nombre}`}
-                    onClick={() => setDeleteTarget(c)}
-                  >
-                    ×
-                  </button>
-                </>
-              )}
-            </span>
-            {renameError && renameId === c.id ? (
-              <p className="max-w-[220px] pl-1 text-xs text-danger">{renameError}</p>
-            ) : null}
-          </div>
-        ))}
-
-        {!inlineOpen ? (
-          <button
-            type="button"
-            onClick={() => setInlineOpen(true)}
-            className="inline-flex items-center rounded-full border border-dashed border-accent/50 bg-surface px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent-light"
-          >
-            ＋ Nueva categoría
-          </button>
-        ) : (
-          <form action={formAction} className="flex flex-wrap items-center gap-2">
-            <input
-              name="nombre"
-              required
-              autoFocus
-              placeholder="Nombre"
-              className="w-40 rounded-lg border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
-            />
-            <button
-              type="submit"
-              className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover"
-            >
-              Agregar
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-primary hover:bg-border"
-              onClick={() => setInlineOpen(false)}
-            >
-              Cancelar
-            </button>
-            <Feedback state={state} />
-          </form>
-        )}
-      </div>
-
-      {deleteTarget ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
-          <button type="button" className="absolute inset-0 cursor-default" aria-label="Cerrar" onClick={() => setDeleteTarget(null)} />
-          <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-lg">
-            <h3 className="text-lg font-semibold text-text-primary">Eliminar categoría</h3>
-            {deleteTarget._count.platos > 0 ? (
-              <p className="mt-2 text-sm text-text-secondary">
-                Esta categoría tiene {deleteTarget._count.platos}{" "}
-                {deleteTarget._count.platos === 1 ? "plato" : "platos"}. Al eliminarla, dejará de mostrarse en la
-                carta; los platos conservan el vínculo para informes e historial.
-              </p>
-            ) : (
-              <p className="mt-2 text-sm text-text-secondary">¿Eliminar la categoría «{deleteTarget.nombre}»?</p>
-            )}
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm text-text-primary hover:bg-border"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={confirmDelete}
-                className="rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-50"
-              >
-                {pending ? "Eliminando…" : "Eliminar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function CreatePlatoModal({
   open,
   onClose,
@@ -373,7 +153,7 @@ function CreatePlatoModal({
     Array<{ platoId: string; nombre: string; cantidad: number }>
   >([]);
   const [addPlatoId, setAddPlatoId] = useState("");
-  const [addCant, setAddCant] = useState(1);
+  const [addPlatoOpen, setAddPlatoOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -385,7 +165,7 @@ function CreatePlatoModal({
     setComboActiveNew(true);
     setComponentesLocal([]);
     setAddPlatoId("");
-    setAddCant(1);
+    setAddPlatoOpen(false);
   }, [open]);
 
   useEffect(() => {
@@ -405,6 +185,7 @@ function CreatePlatoModal({
       onClose();
       setPrecioComboDisplay("");
       setComponentesLocal([]);
+      setAddPlatoOpen(false);
     }
   }, [stateCombo.ok, stateCombo.message, onClose, router]);
 
@@ -415,10 +196,13 @@ function CreatePlatoModal({
     () =>
       platos
         .filter((p) => p.tipo === TipoPlato.PLATO)
-        .filter((p) => !componentesLocal.some((c) => c.platoId === p.id))
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
-    [platos, componentesLocal],
+    [platos],
   );
+
+  useEffect(() => {
+    if (tipoCrear === "PLATO") setAddPlatoOpen(false);
+  }, [tipoCrear]);
 
   if (!open) return null;
 
@@ -595,137 +379,289 @@ function CreatePlatoModal({
               Activo
             </label>
 
-            {componentesLocal.map((c, i) => (
-              <div key={c.platoId} className="hidden">
-                <input type="hidden" name={`componentePlatoId_${i}`} value={c.platoId} />
-                <input type="hidden" name={`componenteCantidad_${i}`} value={c.cantidad} />
-              </div>
-            ))}
-
             <div className="space-y-3 border-t border-border pt-4">
               <h4 className="text-sm font-semibold text-text-primary">Platos del combo</h4>
-              {componentesLocal.length > 0 ? (
-                <ul className="space-y-2">
-                  {componentesLocal.map((c) => (
-                    <li
-                      key={c.platoId}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm"
-                    >
-                      <span className="text-text-primary">
-                        {c.nombre} <span className="text-text-tertiary">× {c.cantidad}</span>
-                      </span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {c.cantidad > 1 ? (
+              {componentesLocal.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {componentesLocal.map((c, i) => (
+                    <div key={c.platoId}>
+                      <input type="hidden" name={`componentePlatoId_${i}`} value={c.platoId} />
+                      <input type="hidden" name={`componenteCantidad_${i}`} value={c.cantidad} />
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "8px 10px",
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <span
+                          style={{
+                            flex: 1,
+                            font: "510 13px/1.3 Inter,sans-serif",
+                            color: "#f7f8f8",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {c.nombre}
+                        </span>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 7,
+                            padding: 2,
+                          }}
+                        >
                           <button
                             type="button"
-                            className="rounded-md border border-border bg-transparent px-2 py-1 text-sm text-text-primary hover:bg-border"
-                            aria-label="Reducir cantidad"
-                            onClick={() => {
+                            onClick={() =>
                               setComponentesLocal((prev) =>
                                 prev.map((x) =>
-                                  x.platoId === c.platoId
-                                    ? { ...x, cantidad: Math.max(1, x.cantidad - 1) }
-                                    : x,
+                                  x.platoId === c.platoId ? { ...x, cantidad: Math.max(1, x.cantidad - 1) } : x,
                                 ),
-                              );
+                              )
+                            }
+                            style={{
+                              width: 28,
+                              height: 28,
+                              border: "none",
+                              background: "transparent",
+                              color: "#d0d6e0",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 5,
                             }}
                           >
-                            −
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                              <path d="M5 12h14" />
+                            </svg>
                           </button>
-                        ) : null}
+                          <span
+                            style={{
+                              minWidth: 22,
+                              textAlign: "center",
+                              font: "590 13px/1 Inter,sans-serif",
+                              color: "#f7f8f8",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {c.cantidad}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={c.cantidad >= 20}
+                            onClick={() =>
+                              setComponentesLocal((prev) =>
+                                prev.map((x) =>
+                                  x.platoId === c.platoId ? { ...x, cantidad: Math.min(20, x.cantidad + 1) } : x,
+                                ),
+                              )
+                            }
+                            style={{
+                              width: 28,
+                              height: 28,
+                              border: "none",
+                              background: "transparent",
+                              color: c.cantidad >= 20 ? "#4a4d54" : "#d0d6e0",
+                              cursor: c.cantidad >= 20 ? "not-allowed" : "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 5,
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                          </button>
+                        </div>
                         <button
                           type="button"
-                          className="rounded-md border border-border bg-transparent px-2 py-1 text-sm text-text-primary hover:bg-border disabled:opacity-50"
-                          aria-label="Aumentar cantidad"
-                          disabled={c.cantidad >= 20}
-                          onClick={() => {
-                            setComponentesLocal((prev) =>
-                              prev.map((x) =>
-                                x.platoId === c.platoId
-                                  ? { ...x, cantidad: Math.min(20, x.cantidad + 1) }
-                                  : x,
-                              ),
-                            );
+                          onClick={() => setComponentesLocal((prev) => prev.filter((x) => x.platoId !== c.platoId))}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            border: "none",
+                            background: "rgba(224,82,82,0.14)",
+                            borderRadius: 6,
+                            color: "#ff8585",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
                           }}
                         >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-md border border-danger bg-danger-light px-2 py-1 text-sm text-danger hover:opacity-90"
-                          aria-label={`Quitar ${c.nombre}`}
-                          onClick={() => {
-                            setComponentesLocal((prev) => prev.filter((x) => x.platoId !== c.platoId));
-                          }}
-                        >
-                          ×
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
                         </button>
                       </div>
-                    </li>
+                    </div>
                   ))}
-                </ul>
-              ) : null}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="text-sm font-medium text-text-secondary" htmlFor="combo-add-plato">
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <label
+                    style={{
+                      font: "510 12px/1 Inter,sans-serif",
+                      color: "#8a8f98",
+                      display: "block",
+                      marginBottom: 6,
+                    }}
+                  >
                     Agregar plato
                   </label>
-                  <select
-                    id="combo-add-plato"
-                    value={addPlatoId}
-                    onChange={(e) => setAddPlatoId(e.target.value)}
-                    className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                  >
-                    <option value="">Selecciona…</option>
-                    {platosParaCombo.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-text-secondary" htmlFor="combo-add-cant">
-                    Cantidad
-                  </label>
-                  <input
-                    id="combo-add-cant"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={addCant}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === "") {
-                        setAddCant(1);
-                        return;
-                      }
-                      const n = Number(v);
-                      if (!Number.isFinite(n)) return;
-                      setAddCant(Math.min(20, Math.max(1, Math.round(n))));
-                    }}
-                    className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="flex items-end sm:col-span-2">
                   <button
                     type="button"
-                    className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-text-primary hover:bg-border"
-                    onClick={() => {
-                      if (!addPlatoId) return;
-                      const p = platos.find((x) => x.id === addPlatoId);
-                      if (!p) return;
-                      setComponentesLocal((prev) => [
-                        ...prev,
-                        { platoId: p.id, nombre: p.nombre, cantidad: addCant },
-                      ]);
-                      setAddPlatoId("");
-                      setAddCant(1);
+                    onClick={() => setAddPlatoOpen((o) => !o)}
+                    style={{
+                      width: "100%",
+                      height: 38,
+                      padding: "0 10px",
+                      background: "rgba(0,0,0,0.30)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 8,
+                      color: addPlatoId ? "#f7f8f8" : "#62666d",
+                      font: "510 13px/1 Inter,sans-serif",
+                      outline: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      cursor: "pointer",
                     }}
                   >
-                    Agregar
+                    <span>
+                      {addPlatoId
+                        ? (platosParaCombo.find((p) => p.id === addPlatoId)?.nombre ?? "Selecciona un plato…")
+                        : "Selecciona un plato…"}
+                    </span>
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      style={{ flexShrink: 0, color: "#8a8f98" }}
+                      aria-hidden
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
                   </button>
+                  {addPlatoOpen && (
+                    <>
+                      <div onClick={() => setAddPlatoOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          right: 0,
+                          zIndex: 50,
+                          background: "#191a1b",
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          borderRadius: 8,
+                          padding: 4,
+                          maxHeight: 220,
+                          overflowY: "auto",
+                          boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 2,
+                        }}
+                      >
+                        {platosParaCombo.map((p) => {
+                          const yaAgregado = componentesLocal.some((c) => c.platoId === p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setAddPlatoId(p.id);
+                                setAddPlatoOpen(false);
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                height: 34,
+                                padding: "0 10px",
+                                background: addPlatoId === p.id ? "rgba(113,112,255,0.12)" : "transparent",
+                                border: "none",
+                                borderRadius: 6,
+                                color: addPlatoId === p.id ? "#a4adff" : "#d0d6e0",
+                                font: "510 13px/1 Inter,sans-serif",
+                                cursor: "pointer",
+                                textAlign: "left",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (addPlatoId !== p.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                              }}
+                              onMouseLeave={(e) => {
+                                if (addPlatoId !== p.id) e.currentTarget.style.background = "transparent";
+                              }}
+                            >
+                              <span>{p.nombre}</span>
+                              {yaAgregado && (
+                                <span style={{ font: "510 10px/1 Inter,sans-serif", color: "#62666d", letterSpacing: "0.3px" }}>
+                                  en combo
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
+                <button
+                  type="button"
+                  disabled={!addPlatoId}
+                  onClick={() => {
+                    if (!addPlatoId) return;
+                    const p = platos.find((x) => x.id === addPlatoId);
+                    if (!p) return;
+                    setComponentesLocal((prev) => {
+                      const existing = prev.find((x) => x.platoId === p.id);
+                      if (existing) {
+                        return prev.map((x) =>
+                          x.platoId === p.id ? { ...x, cantidad: Math.min(20, x.cantidad + 1) } : x,
+                        );
+                      }
+                      return [...prev, { platoId: p.id, nombre: p.nombre, cantidad: 1 }];
+                    });
+                    setAddPlatoId("");
+                  }}
+                  style={{
+                    height: 38,
+                    padding: "0 16px",
+                    background: addPlatoId ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.04)",
+                    border: "1px solid",
+                    borderColor: addPlatoId ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                    borderRadius: 8,
+                    color: addPlatoId ? "#a4adff" : "#62666d",
+                    font: "510 13px/1 Inter,sans-serif",
+                    cursor: addPlatoId ? "pointer" : "not-allowed",
+                    whiteSpace: "nowrap",
+                    transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                    flexShrink: 0,
+                  }}
+                >
+                  + Agregar
+                </button>
               </div>
               <p className="text-xs text-text-tertiary">
                 Puedes agregar los platos ahora o después desde la carta.
@@ -1409,6 +1345,25 @@ export function CartaTab({
   const [recipePlatoId, setRecipePlatoId] = useState<string | null>(null);
   const [comboEditId, setComboEditId] = useState<string | null>(null);
 
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const toggleCat = (key: string) => {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const [pendingCatDelete, startCatDeleteTransition] = useTransition();
+  const [renamePending, startRenameTransition] = useTransition();
+  const [inlineOpen, setInlineOpen] = useState(false);
+  const [stateCategoria, formActionCategoria] = useFormState(createCategoria, formIdleState);
+  const [deleteTarget, setDeleteTarget] = useState<CartaCategoriaRow | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+
   const menuSections = useMemo(() => buildMenuSections(platos, combos, categorias), [platos, combos, categorias]);
 
   /** Platos marcados con receta obligatoria pero sin filas de receta aún. */
@@ -1491,89 +1446,448 @@ export function CartaTab({
     });
   }, [deletePlato, recipePlatoId, router]);
 
-  return (
-    <div className="space-y-6">
-      <CategoriaChips categorias={categorias} onDeleted={() => router.refresh()} />
+  useEffect(() => {
+    if (stateCategoria.ok && stateCategoria.message) {
+      router.refresh();
+      setInlineOpen(false);
+    }
+  }, [stateCategoria.ok, stateCategoria.message, router]);
 
-      {platosNecesitanReceta.length > 0 ? (
+  const cancelRename = useCallback(() => {
+    setRenameId(null);
+    setRenameDraft("");
+    setRenameError(null);
+  }, []);
+
+  const commitRename = useCallback(
+    (c: CartaCategoriaRow) => {
+      if (renameId !== c.id) return;
+      const next = renameDraft.trim();
+      if (!next) {
+        cancelRename();
+        return;
+      }
+      if (next === c.nombre) {
+        cancelRename();
+        return;
+      }
+      startRenameTransition(async () => {
+        const res = await updateCategoria(c.id, next);
+        if (!res.ok) {
+          setRenameError(res.message);
+          return;
+        }
+        cancelRename();
+        router.refresh();
+      });
+    },
+    [renameDraft, renameId, cancelRename, router],
+  );
+
+  const startRename = useCallback((c: CartaCategoriaRow) => {
+    setRenameId(c.id);
+    setRenameDraft(c.nombre);
+    setRenameError(null);
+  }, []);
+
+  const handleDeleteCategoria = useCallback((id: string) => {
+    const c = categorias.find((x) => x.id === id);
+    if (c) setDeleteTarget(c);
+  }, [categorias]);
+
+  const handleAddCategoria = useCallback(() => setInlineOpen(true), []);
+
+  const confirmDeleteCategoria = useCallback(() => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    startCatDeleteTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", id);
+      const res = await deleteCategoria(formIdleState, fd);
+      if (res.ok) {
+        setDeleteTarget(null);
+        router.refresh();
+      }
+    });
+  }, [deleteTarget, router]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {platosNecesitanReceta.length > 0 && (
         <div
-          className="flex gap-3 rounded-lg border-l-4 border-warning bg-warning-light px-4 py-3 text-sm text-text-primary shadow-sm"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            padding: "12px 16px",
+            background: "rgba(217,119,6,0.10)",
+            border: "1px solid rgba(217,119,6,0.25)",
+            borderRadius: 10,
+          }}
           role="status"
         >
-          <span className="shrink-0 select-none text-lg leading-snug text-warning" aria-hidden>
-            ⚠
-          </span>
-          <p className="min-w-0 leading-relaxed">
-            <span className="font-medium">
-              {platosNecesitanReceta.length === 1
-                ? "1 plato necesita receta"
-                : `${platosNecesitanReceta.length} platos necesitan receta`}
-            </span>
-            {": "}
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#d97706"
+            strokeWidth="2"
+            strokeLinecap="round"
+            style={{ flexShrink: 0, marginTop: 1 }}
+            aria-hidden
+          >
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <p style={{ font: "400 13px/1.5 Inter,sans-serif", color: "#f4b35e", margin: 0 }}>
+            {platosNecesitanReceta.length === 1 ? "1 plato necesita receta: " : `${platosNecesitanReceta.length} platos necesitan receta: `}
             {platosNecesitanReceta.slice(0, 3).map((p, i) => (
               <span key={p.id}>
                 {i > 0 ? ", " : ""}
                 <button
                   type="button"
-                  className="font-medium text-warning underline decoration-warning/80 underline-offset-2 transition hover:text-warning hover:decoration-warning"
+                  style={{
+                    fontWeight: 600,
+                    color: "#f87171",
+                    textDecoration: "underline",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    font: "inherit",
+                  }}
                   onClick={() => handleAlertPlatoClick(p)}
                 >
                   {p.nombre}
+                  {p.categoria?.nombre ? ` · ${p.categoria.nombre}` : ""}
                 </button>
               </span>
             ))}
-            {platosNecesitanReceta.length > 3 ? (
-              <span className="text-text-secondary">
-                {" "}
-                +{platosNecesitanReceta.length - 3} más
-              </span>
-            ) : null}
+            {platosNecesitanReceta.length > 3 && (
+              <span style={{ color: "#8a8f98" }}> +{platosNecesitanReceta.length - 3} más</span>
+            )}
           </p>
         </div>
-      ) : null}
+      )}
 
-      {platosConInconsistenciaUnidades.length > 0 ? (
+      {platosConInconsistenciaUnidades.length > 0 && (
         <div
-          className="flex gap-3 rounded-lg border-l-4 border-danger bg-danger-light px-4 py-3 text-sm text-text-primary shadow-sm"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            padding: "12px 16px",
+            background: "rgba(224,82,82,0.10)",
+            border: "1px solid rgba(224,82,82,0.25)",
+            borderRadius: 10,
+          }}
           role="status"
         >
-          <span className="shrink-0 select-none text-lg leading-snug text-danger" aria-hidden>
-            ✕
-          </span>
-          <p className="min-w-0 leading-relaxed">
-            <span className="font-medium">
-              {platosConInconsistenciaUnidades.length === 1
-                ? "1 plato tiene inconsistencias de unidades"
-                : `${platosConInconsistenciaUnidades.length} platos tienen inconsistencias de unidades`}
-            </span>
-            {": "}
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#e05252"
+            strokeWidth="2"
+            strokeLinecap="round"
+            style={{ flexShrink: 0, marginTop: 1 }}
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <p style={{ font: "400 13px/1.5 Inter,sans-serif", color: "#fca5a5", margin: 0 }}>
+            {platosConInconsistenciaUnidades.length === 1
+              ? "1 plato tiene inconsistencias de unidades: "
+              : `${platosConInconsistenciaUnidades.length} platos tienen inconsistencias de unidades: `}
             {platosConInconsistenciaUnidades.slice(0, 3).map((p, i) => (
               <span key={p.id}>
                 {i > 0 ? ", " : ""}
                 <button
                   type="button"
-                  className="font-medium text-danger underline decoration-danger/80 underline-offset-2 transition hover:text-danger hover:decoration-danger"
+                  style={{
+                    fontWeight: 600,
+                    color: "#f87171",
+                    textDecoration: "underline",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    font: "inherit",
+                  }}
                   onClick={() => handleAlertPlatoClick(p)}
                 >
                   {p.nombre}
                 </button>
               </span>
             ))}
-            {platosConInconsistenciaUnidades.length > 3 ? (
-              <span className="text-text-secondary">
-                {" "}
-                +{platosConInconsistenciaUnidades.length - 3} más
-              </span>
-            ) : null}
+            {platosConInconsistenciaUnidades.length > 3 && (
+              <span style={{ color: "#8a8f98" }}> +{platosConInconsistenciaUnidades.length - 3} más</span>
+            )}
           </p>
+        </div>
+      )}
+
+      <section
+        style={{
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 14,
+          padding: "18px 22px 20px",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          <h2 style={{ font: "510 16px/1.2 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.2px", margin: 0 }}>
+            Categorías del menú
+          </h2>
+          <div
+            style={{
+              display: "flex",
+              gap: 14,
+              flexWrap: "wrap",
+              padding: "6px 10px",
+              background: "rgba(255,255,255,0.025)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              borderRadius: 999,
+              alignSelf: "flex-start",
+            }}
+          >
+            {[
+              { color: "#7170ff", label: "Receta completa" },
+              { color: "#e0a062", label: "Receta pendiente" },
+              { color: "rgba(255,255,255,0.18)", label: "No requiere receta" },
+            ].map((l) => (
+              <span
+                key={l.label}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "400 11px/1 Inter,sans-serif", color: "#8a8f98" }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+          <p style={{ font: "400 12px/1.4 Inter,sans-serif", color: "#62666d", margin: 0 }}>
+            Crea y ordena bloques para tu carta. Los platos pueden quedar sin categoría.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          {categorias.map((c) => (
+            <div key={c.id} style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 0 }}>
+                {renameId === c.id ? (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      height: 32,
+                      padding: "0 8px",
+                      background: "rgba(94,106,210,0.12)",
+                      border: "1px solid rgba(113,112,255,0.4)",
+                      borderRadius: 999,
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      disabled={renamePending}
+                      value={renameDraft}
+                      onChange={(e) => {
+                        setRenameDraft(e.target.value);
+                        setRenameError(null);
+                      }}
+                      onBlur={() => commitRename(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void commitRename(c);
+                        }
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setRenameDraft(c.nombre);
+                          cancelRename();
+                        }
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        outline: "none",
+                        color: "#f7f8f8",
+                        font: "510 13px/1 Inter,sans-serif",
+                        width: 120,
+                        padding: "0 4px",
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      height: 32,
+                      padding: "0 6px 0 14px",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: 999,
+                      cursor: "pointer",
+                    }}
+                    onClick={() => startRename(c)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        startRename(c);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <span style={{ font: "510 13px/1 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.1px" }}>{c.nombre}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCategoria(c.id);
+                      }}
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: "50%",
+                        background: "rgba(255,255,255,0.06)",
+                        border: "none",
+                        color: "#8a8f98",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      aria-label="Eliminar"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              {renameError && renameId === c.id ? (
+                <p style={{ maxWidth: 220, paddingLeft: 4, fontSize: 12, color: "#f87171", margin: 0 }}>{renameError}</p>
+              ) : null}
+            </div>
+          ))}
+          {!inlineOpen ? (
+            <button
+              type="button"
+              onClick={handleAddCategoria}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                height: 32,
+                padding: "0 14px",
+                background: "transparent",
+                border: "1px dashed rgba(113,112,255,0.32)",
+                borderRadius: 999,
+                color: "#a4adff",
+                font: "510 13px/1 Inter,sans-serif",
+                cursor: "pointer",
+                transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Nueva categoría
+            </button>
+          ) : (
+            <form action={formActionCategoria} className="flex flex-wrap items-center gap-2">
+              <input
+                name="nombre"
+                required
+                autoFocus
+                placeholder="Nombre"
+                className="w-40 rounded-lg border border-border bg-surface-elevated px-2 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover"
+              >
+                Agregar
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-text-primary hover:bg-border"
+                onClick={() => setInlineOpen(false)}
+              >
+                Cancelar
+              </button>
+              <Feedback state={stateCategoria} />
+            </form>
+          )}
+        </div>
+      </section>
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
+          <button type="button" className="absolute inset-0 cursor-default" aria-label="Cerrar" onClick={() => setDeleteTarget(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-text-primary">Eliminar categoría</h3>
+            {deleteTarget._count.platos > 0 ? (
+              <p className="mt-2 text-sm text-text-secondary">
+                Esta categoría tiene {deleteTarget._count.platos}{" "}
+                {deleteTarget._count.platos === 1 ? "plato" : "platos"}. Al eliminarla, dejará de mostrarse en la carta;
+                los platos conservan el vínculo para informes e historial.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-text-secondary">¿Eliminar la categoría «{deleteTarget.nombre}»?</p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm text-text-primary hover:bg-border"
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={pendingCatDelete}
+                onClick={confirmDeleteCategoria}
+                className="rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-50"
+              >
+                {pendingCatDelete ? "Eliminando…" : "Eliminar"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
-      <section className="relative rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <section
+        style={{
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 14,
+          padding: "18px 22px 22px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            marginBottom: 18,
+            flexWrap: "wrap",
+          }}
+        >
           <div>
-            <h3 className="text-base font-semibold text-text-primary">Menú</h3>
-            <p className="mt-1 text-sm text-text-tertiary">Platos y combos agrupados por categoría.</p>
+            <h2 style={{ font: "510 16px/1.2 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.2px", margin: 0 }}>Menú</h2>
+            <p style={{ font: "400 12px/1.4 Inter,sans-serif", color: "#62666d", margin: "4px 0 0" }}>
+              Platos y combos agrupados por categoría.
+            </p>
           </div>
           <button
             type="button"
@@ -1581,149 +1895,350 @@ export function CartaTab({
               setCreateModalKey((k) => k + 1);
               setCreateOpen(true);
             }}
-            className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-hover"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              height: 38,
+              padding: "0 16px",
+              background: "linear-gradient(180deg,#6b78de,#5e6ad2)",
+              border: "1px solid rgba(113,112,255,0.5)",
+              borderRadius: 10,
+              color: "#fff",
+              font: "590 13px/1 Inter,sans-serif",
+              cursor: "pointer",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), 0 4px 14px rgba(94,106,210,0.32)",
+              flexShrink: 0,
+            }}
           >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
             Crear plato o combo
           </button>
         </div>
 
-        {platos.length === 0 ? (
-          <p className="text-sm text-text-tertiary">Aún no tienes platos en tu carta. Crea el primero.</p>
-        ) : menuSections.length === 0 ? (
-          <p className="text-sm text-text-tertiary">No hay platos para mostrar en las categorías.</p>
-        ) : (
-          <div className="space-y-10">
-            {menuSections.map((sec) => (
-              <div key={sec.key}>
-                <CartaGroupHeading title={sec.titulo} count={sec.count} />
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {sec.items.map((entry) => {
-                    const isPlato = entry.tipoItem === "PLATO";
-                    const isCombo = entry.tipoItem === "COMBO";
-                    const dotClass =
-                      entry.tipoItem === "PLATO" ? statusDot[cardStatus(entry.item)] : "bg-text-tertiary";
-                    const clickablePlato = entry.tipoItem === "PLATO" && entry.item.tieneReceta;
-                    const cardClickable = isCombo || clickablePlato;
-                    return (
-                      <div
-                        key={entry.item.id}
-                        id={isPlato ? `carta-plato-${entry.item.id}` : undefined}
-                        role={cardClickable ? "button" : undefined}
-                        tabIndex={cardClickable ? 0 : undefined}
-                        title={
-                          isCombo
-                            ? "Ver componentes del combo"
-                            : !clickablePlato && isPlato
-                              ? "Este plato no requiere receta"
-                              : undefined
-                        }
-                        onClick={() => {
-                          if (isCombo) setComboEditId(entry.item.id);
-                          else if (entry.tipoItem === "PLATO") handleCardClick(entry.item);
-                        }}
-                        onKeyDown={(e) => {
-                          if (isCombo && (e.key === "Enter" || e.key === " ")) {
-                            e.preventDefault();
-                            setComboEditId(entry.item.id);
-                            return;
-                          }
-                          if (!clickablePlato) return;
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            if (entry.tipoItem === "PLATO") handleCardClick(entry.item);
-                          }
-                        }}
-                        className={`relative rounded-xl border border-border bg-surface p-4 pt-10 shadow-sm transition-shadow ${
-                          cardClickable ? "cursor-pointer hover:shadow-md" : "cursor-default hover:shadow-sm"
-                        }`}
-                      >
-                        <span
-                          className={`absolute left-3 top-3 h-2.5 w-2.5 rounded-full ${dotClass}`}
-                          title={
-                            entry.tipoItem === "PLATO"
-                              ? cardStatus(entry.item) === "complete"
-                                ? "Receta completa"
-                                : cardStatus(entry.item) === "needsRecipe"
-                                  ? "Falta completar la receta"
-                                  : "Sin receta"
-                              : undefined
-                          }
-                        />
-                        <div className="absolute right-2 top-2 flex items-start gap-1">
-                          <span
-                            className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                              entry.item.active ? "bg-accent-light text-accent" : "bg-surface-elevated text-text-tertiary"
-                            }`}
-                          >
-                            {entry.item.active ? "Activo" : "Inactivo"}
-                          </span>
-                          {entry.tipoItem === "COMBO" ? (
-                            <span className="mt-0.5 rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-accent">
-                              Combo
-                            </span>
-                          ) : null}
+        {menuSections.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+            {menuSections.map((sec) => {
+              const isOpen = expandedCats.has(sec.key);
+              return (
+                <button
+                  key={sec.key}
+                  type="button"
+                  onClick={() => toggleCat(sec.key)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 13px",
+                    background: isOpen ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                    border: "1px solid",
+                    borderColor: isOpen ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                    borderRadius: 999,
+                    color: isOpen ? "#fff" : "#d0d6e0",
+                    font: "510 13px/1 Inter,sans-serif",
+                    cursor: "pointer",
+                    transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                    boxShadow: isOpen ? "inset 0 1px 0 rgba(255,255,255,0.08)" : "none",
+                  }}
+                >
+                  {isOpen && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  )}
+                  <span>{sec.titulo}</span>
+                  <span
+                    style={{
+                      font: "510 11px/1 Inter,sans-serif",
+                      color: isOpen ? "rgba(255,255,255,0.7)" : "#62666d",
+                      background: isOpen ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      minWidth: 18,
+                      textAlign: "center",
+                    }}
+                  >
+                    {sec.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-                          {isPlato ? (
-                            <>
-                              <button
-                                type="button"
-                                className="rounded-md px-2 py-1 text-lg leading-none text-text-secondary hover:bg-surface-elevated"
-                                aria-label="Más opciones"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (entry.tipoItem === "PLATO") setMenuId((prev) => (prev === entry.item.id ? null : entry.item.id));
+        {platos.length === 0 ? (
+          <p style={{ font: "400 13px/1.4 Inter,sans-serif", color: "#62666d" }}>Aún no tienes platos en tu carta. Crea el primero.</p>
+        ) : menuSections.length === 0 ? (
+          <p style={{ font: "400 13px/1.4 Inter,sans-serif", color: "#62666d" }}>No hay platos para mostrar en las categorías.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {menuSections.map((sec) => {
+              const isOpen = expandedCats.has(sec.key);
+              if (!isOpen) return null;
+              return (
+                <div key={sec.key}>
+                  <CartaGroupHeading title={sec.titulo} count={sec.count} />
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                    {sec.items.map((entry) => {
+                      const isCombo = entry.tipoItem === "COMBO";
+                      const isPlato = entry.tipoItem === "PLATO";
+                      const dotColor = isCombo
+                        ? "rgba(255,255,255,0.18)"
+                        : cardStatus(entry.item) === "complete"
+                          ? "#7170ff"
+                          : cardStatus(entry.item) === "needsRecipe"
+                            ? "#e0a062"
+                            : "rgba(255,255,255,0.18)";
+                      const cardClickable = isCombo || (isPlato && entry.item.tieneReceta);
+
+                      return (
+                        <div
+                          key={entry.item.id}
+                          id={isPlato ? `carta-plato-${entry.item.id}` : undefined}
+                          role={cardClickable ? "button" : undefined}
+                          tabIndex={cardClickable ? 0 : undefined}
+                          title={
+                            isCombo
+                              ? "Ver componentes del combo"
+                              : isPlato && !entry.item.tieneReceta
+                                ? "Este plato no requiere receta"
+                                : undefined
+                          }
+                          onClick={() => {
+                            if (isCombo) setComboEditId(entry.item.id);
+                            else if (isPlato) handleCardClick(entry.item);
+                          }}
+                          onKeyDown={(e) => {
+                            if (!cardClickable) return;
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              if (isCombo) setComboEditId(entry.item.id);
+                              else if (isPlato) handleCardClick(entry.item);
+                            }
+                          }}
+                          style={{
+                            position: "relative",
+                            display: "flex",
+                            flexDirection: "column",
+                            minHeight: 88,
+                            padding: "12px 14px",
+                            background: "rgba(255,255,255,0.025)",
+                            border: "1px solid rgba(255,255,255,0.07)",
+                            borderRadius: 10,
+                            cursor: cardClickable ? "pointer" : "default",
+                            transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (cardClickable) {
+                              e.currentTarget.style.background = "rgba(255,255,255,0.045)";
+                              e.currentTarget.style.borderColor = "rgba(113,112,255,0.25)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                background: dotColor,
+                                flexShrink: 0,
+                                boxShadow: "0 0 0 3px rgba(0,0,0,0.18)",
+                              }}
+                              title={
+                                isPlato
+                                  ? cardStatus(entry.item) === "complete"
+                                    ? "Receta completa"
+                                    : cardStatus(entry.item) === "needsRecipe"
+                                      ? "Falta completar la receta"
+                                      : "Sin receta"
+                                  : undefined
+                              }
+                            />
+                            <div style={{ flex: 1 }} />
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                height: 20,
+                                padding: "0 8px",
+                                background: entry.item.active ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.05)",
+                                border: `1px solid ${entry.item.active ? "rgba(113,112,255,0.30)" : "rgba(255,255,255,0.08)"}`,
+                                borderRadius: 999,
+                                font: "590 9px/1 Inter,sans-serif",
+                                letterSpacing: "0.6px",
+                                textTransform: "uppercase",
+                                color: entry.item.active ? "#a4adff" : "#62666d",
+                              }}
+                            >
+                              {entry.item.active ? "Activo" : "Inactivo"}
+                            </span>
+                            {isCombo && (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  height: 20,
+                                  padding: "0 8px",
+                                  background: "rgba(224,160,98,0.14)",
+                                  border: "1px solid rgba(224,160,98,0.30)",
+                                  borderRadius: 999,
+                                  font: "590 9px/1 Inter,sans-serif",
+                                  letterSpacing: "0.6px",
+                                  textTransform: "uppercase",
+                                  color: "#e0a062",
                                 }}
                               >
-                                ⋯
-                              </button>
-                              {entry.tipoItem === "PLATO" && menuId === entry.item.id ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="fixed inset-0 z-10 cursor-default"
-                                    aria-label="Cerrar menú"
-                                    onClick={() => setMenuId(null)}
-                                  />
-                                  <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-lg border border-border bg-surface py-1 shadow-lg">
-                                    <button
-                                      type="button"
-                                      className="block w-full px-3 py-2 text-left text-sm hover:bg-border"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setMenuId(null);
-                                        setEditModalKey((k) => k + 1);
-                                        setEditPlato(entry.item);
+                                Combo
+                              </span>
+                            )}
+                            {isPlato && (
+                              <div style={{ position: "relative" }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuId(menuId === entry.item.id ? null : entry.item.id);
+                                  }}
+                                  style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: 5,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "#62666d",
+                                    cursor: "pointer",
+                                  }}
+                                  aria-label="Más opciones"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                    <circle cx="12" cy="5" r="1" />
+                                    <circle cx="12" cy="12" r="1" />
+                                    <circle cx="12" cy="19" r="1" />
+                                  </svg>
+                                </button>
+                                {menuId === entry.item.id && (
+                                  <>
+                                    <div onClick={() => setMenuId(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: "calc(100% + 4px)",
+                                        right: 0,
+                                        zIndex: 50,
+                                        minWidth: 160,
+                                        background: "#191a1b",
+                                        border: "1px solid rgba(255,255,255,0.10)",
+                                        borderRadius: 8,
+                                        padding: 4,
+                                        boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 2,
                                       }}
                                     >
-                                      Editar plato
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger-light"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setMenuId(null);
-                                        setDeletePlato(entry.item);
-                                      }}
-                                    >
-                                      Eliminar plato
-                                    </button>
-                                  </div>
-                                </>
-                              ) : null}
-                            </>
-                          ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditPlato(entry.item as CartaPlatoRow);
+                                          setEditModalKey((k) => k + 1);
+                                          setMenuId(null);
+                                        }}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 8,
+                                          height: 32,
+                                          padding: "0 10px",
+                                          background: "transparent",
+                                          border: "none",
+                                          borderRadius: 6,
+                                          color: "#d0d6e0",
+                                          font: "510 13px/1 Inter,sans-serif",
+                                          cursor: "pointer",
+                                          textAlign: "left",
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.background = "transparent";
+                                        }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                        Editar plato
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeletePlato(entry.item as CartaPlatoRow);
+                                          setMenuId(null);
+                                        }}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 8,
+                                          height: 32,
+                                          padding: "0 10px",
+                                          background: "transparent",
+                                          border: "none",
+                                          borderRadius: 6,
+                                          color: "#ff8585",
+                                          font: "510 13px/1 Inter,sans-serif",
+                                          cursor: "pointer",
+                                          textAlign: "left",
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.background = "rgba(224,82,82,0.08)";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.background = "transparent";
+                                        }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                                          <polyline points="3 6 5 6 21 6" />
+                                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                                          <path d="M10 11v6M14 11v6" />
+                                        </svg>
+                                        Eliminar plato
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 14, textAlign: "left" }}>
+                            <span style={{ font: "590 14px/1.3 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.15px" }}>
+                              {entry.item.nombre}
+                            </span>
+                            <span style={{ font: "510 13px/1.3 Inter,sans-serif", color: "#8a8f98", fontVariantNumeric: "tabular-nums" }}>
+                              {formatPrecioCOP(entry.item.precioVenta)}
+                            </span>
+                          </div>
                         </div>
-                        <div className="pr-14">
-                          <div className="text-sm font-semibold text-text-primary">{entry.item.nombre}</div>
-                          <div className="mt-1 text-sm text-text-secondary">{formatPrecioCOP(entry.item.precioVenta)}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
