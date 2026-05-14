@@ -710,6 +710,20 @@ export function EmpleadosNominaTab({
         </form>
       </section>
 
+      {empDrawerOpen && (
+        <div
+          onClick={() => setEmpDrawerOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 79,
+            background: "rgba(8,9,10,0.6)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            transition: "opacity 300ms cubic-bezier(0.16,1,0.3,1)",
+          }}
+        />
+      )}
       <div
         style={{
           position: "fixed",
@@ -1487,6 +1501,20 @@ export function EmpleadosNominaTab({
         </form>
       </section>
 
+      {nomDrawerOpen && (
+        <div
+          onClick={() => setNomDrawerOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 79,
+            background: "rgba(8,9,10,0.6)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            transition: "opacity 300ms cubic-bezier(0.16,1,0.3,1)",
+          }}
+        />
+      )}
       <div
         style={{
           position: "fixed",

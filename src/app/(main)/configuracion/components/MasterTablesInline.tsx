@@ -1020,6 +1020,20 @@ export function ProveedoresTabPanel({ rows }: { rows: ProveedorRow[] }) {
       </section>
 
       {/* Drawer inferior */}
+      {drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 79,
+            background: "rgba(8,9,10,0.6)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            transition: "opacity 300ms cubic-bezier(0.16,1,0.3,1)",
+          }}
+        />
+      )}
       <div style={{
         position:"fixed", bottom:0, left:0, right:0,
         zIndex:80,
