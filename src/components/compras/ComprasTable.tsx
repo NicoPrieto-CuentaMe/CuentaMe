@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import type { CategoriaProveedor, Prisma, Unidad } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { editarCompra, eliminarCompra, getComprasCatalogoEdit } from "@/app/actions/compras";
@@ -8,8 +9,6 @@ import type { ActionState } from "@/app/(main)/configuracion/actions";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "@/app/(main)/configuracion/cop-price";
 import { UNIT_OPTIONS } from "@/app/(main)/configuracion/units";
 import { getFamiliaUnidad, getUnidadesCompatibles } from "@/lib/unidades.config";
-import { ColumnHeader } from "@/components/ui/ColumnHeader";
-
 type Row = Prisma.CompraGetPayload<{
   include: {
     proveedor: { select: { nombre: true } };
@@ -78,22 +77,7 @@ function emptyLine(): LineDraft {
   return { insumoId: "", unidad: "", cantidad: "", totalPagadoDigits: "" };
 }
 
-function notasCompraText(c: Row): string {
-  return c.notas?.trim() ? c.notas : "—";
-}
-
-/** Misma tabla Proveedores (Configuración) */
-const btnEditRow =
-  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
-const btnDeleteRow =
-  "rounded border border-danger/30 bg-danger-light px-2 py-1 text-xs font-medium text-danger hover:bg-danger/20 hover:text-danger";
-const btnSaveRow =
-  "rounded bg-accent px-2 py-1 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-60";
-const btnCancelRow =
-  "rounded border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-border";
-
-const loadMoreClass =
-  "w-full border border-border border-t-0 bg-surface-elevated/50 py-2 text-center text-xs text-text-tertiary transition hover:bg-surface-elevated";
+/** Misma tabla Proveedores (Configuración) — usada en CompraLineEditor */
 
 const idle: ActionState = { ok: true };
 
@@ -127,7 +111,6 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
   const [visibleCount, setVisibleCount] = useState(10);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
 
   useEffect(() => {
     getComprasCatalogoEdit().then((r) => {
@@ -217,19 +200,7 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
 
   const filtradas = useMemo(() => rows, [rows]);
 
-  const filtradasPorColumna = useMemo(() => {
-    return filtradas.filter((c) => {
-      const qF = (columnSearch.fecha ?? "").trim().toLowerCase();
-      if (qF && !formatFecha(c.fecha).toLowerCase().includes(qF)) return false;
-      const qP = (columnSearch.proveedor ?? "").trim().toLowerCase();
-      if (qP && !c.proveedor.nombre.toLowerCase().includes(qP)) return false;
-      const qT = (columnSearch.total ?? "").trim().toLowerCase();
-      if (qT && !formatCop(c.total).toLowerCase().includes(qT)) return false;
-      const qN = (columnSearch.notas ?? "").trim().toLowerCase();
-      if (qN && !notasCompraText(c).toLowerCase().includes(qN)) return false;
-      return true;
-    });
-  }, [filtradas, columnSearch]);
+  const filtradasPorColumna = useMemo(() => filtradas, [filtradas]);
 
   const ordenadas = useMemo(() => {
     if (!sortColumn) return filtradasPorColumna;
@@ -266,259 +237,582 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
     setVisibleCount(10);
   }, []);
 
-  const onSearch = useCallback((key: string, value: string) => {
-    setColumnSearch((prev) => ({ ...prev, [key]: value }));
-    setVisibleCount(10);
-  }, []);
-
   if (rows.length === 0) {
-    return <p className="text-sm text-text-tertiary">Aún no hay compras registradas.</p>;
+    return (
+      <p style={{ padding: "24px 20px", font: "400 13px/1.4 Inter,sans-serif", color: "#62666d" }}>Aún no hay compras registradas.</p>
+    );
   }
 
-  return (
-    <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[740px] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-text-secondary">
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Fecha"
-                columnKey="fecha"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.fecha ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "fecha") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("fecha", "");
-                }}
-              />
-            </th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Proveedor"
-                columnKey="proveedor"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.proveedor ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "proveedor") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("proveedor", "");
-                }}
-              />
-            </th>
-            <th className="pb-2 pr-3 pl-1 font-semibold">Items</th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Total"
-                columnKey="total"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.total ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "total") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("total", "");
-                }}
-              />
-            </th>
-            <th className="relative pb-2 pr-3 pl-1 font-semibold">
-              <ColumnHeader
-                label="Notas"
-                columnKey="notas"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                searchValue={columnSearch.notas ?? ""}
-                onSearch={onSearch}
-                onClear={() => {
-                  if (sortColumn === "notas") {
-                    setSortColumn(null);
-                    setSortDirection("asc");
-                  }
-                  onSearch("notas", "");
-                }}
-              />
-            </th>
-            <th className="pb-2 pr-2 pl-1 font-semibold">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border text-text-primary">
-          {filtradasPorColumna.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="px-3 py-6 text-center text-sm text-text-tertiary">
-                No hay compras que coincidan con la búsqueda de columnas.
-              </td>
-            </tr>
-          ) : (
-            aMostrar.map((c) => {
-            const nItems = c.detalles.length;
-            const isEditing = editingId === c.id && draft;
-            const todayMax = todayLocalISO();
+  const sortHeaderCols = [
+    { label: "Fecha", key: "fecha", flex: "0 0 110px", noSort: false },
+    { label: "Proveedor", key: "proveedor", flex: "1 1 0", noSort: false },
+    { label: "Ítems", key: "items", flex: "0 0 60px", noSort: true },
+    { label: "Total", key: "total", flex: "0 0 120px", noSort: false },
+    { label: "Notas", key: "notas", flex: "0 0 200px", noSort: false },
+    { label: "Acciones", key: "acciones", flex: "0 0 160px", noSort: true },
+  ] as const;
 
+  return (
+    <>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <div
+          style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 20px",
+              background: "rgba(255,255,255,0.015)",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              position: "sticky",
+              top: 0,
+              zIndex: 2,
+              backdropFilter: "blur(8px)",
+              flexShrink: 0,
+            }}
+        >
+          {sortHeaderCols.map((col) => (
+              <div
+                key={col.key}
+                style={{
+                  flex: col.flex,
+                  display: "flex",
+                  justifyContent: col.key === "acciones" ? "flex-end" : "flex-start",
+                }}
+              >
+                {col.noSort ? (
+                  <span style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                    {col.label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextDir = sortColumn === col.key ? (sortDirection === "asc" ? "desc" : "asc") : "asc";
+                      onSort(col.key, nextDir);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      height: 26,
+                      padding: "0 8px",
+                      background: sortColumn === col.key ? "rgba(113,112,255,0.10)" : "transparent",
+                      border: "1px solid",
+                      borderColor: sortColumn === col.key ? "rgba(113,112,255,0.20)" : "transparent",
+                      borderRadius: 6,
+                      color: sortColumn === col.key ? "#a4adff" : "#8a8f98",
+                      font: "510 11px/1 Inter,sans-serif",
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {col.label}
+                    {sortColumn === col.key && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        {sortDirection === "asc" ? <path d="M12 19V5M5 12l7-7 7 7" /> : <path d="M12 5v14M5 12l7 7 7-7" />}
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
+            ))}
+        </div>
+
+        {aMostrar.map((c) => {
+            const isDel = deleteId === c.id;
             return (
-              <Fragment key={c.id}>
-                <tr className="align-top">
-                  <td className="py-2 pr-3 align-middle">
-                    {isEditing ? (
-                      <input
-                        type="date"
-                        max={todayMax}
-                        value={draft!.fecha}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, fecha: e.target.value } : d))}
-                        className="w-full min-w-[8rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
-                      />
-                    ) : (
-                      <span className="whitespace-nowrap">{formatFecha(c.fecha)}</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3 align-middle">
-                    {isEditing ? (
-                      <select
-                        value={draft!.proveedorId}
-                        onChange={(e) => {
-                          const pid = e.target.value;
-                          setDraft((d) =>
-                            d
-                              ? {
-                                  ...d,
-                                  proveedorId: pid,
-                                  lines: [emptyLine()],
-                                }
-                              : d,
-                          );
+              <div
+                key={c.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 20px",
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  background: isDel ? "rgba(224,82,82,0.06)" : "transparent",
+                  transition: "background 150ms",
+                }}
+              >
+                <div style={{ flex: "0 0 110px" }}>
+                  <span style={{ font: "400 13px/1 Inter,sans-serif", color: "#d0d6e0", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                    {formatFecha(c.fecha)}
+                  </span>
+                </div>
+                <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                  <span style={{ font: "510 13px/1 Inter,sans-serif", color: "#f7f8f8" }}>{c.proveedor.nombre}</span>
+                </div>
+                <div style={{ flex: "0 0 60px" }}>
+                  <span style={{ font: "400 13px/1 Inter,sans-serif", color: "#d0d6e0", fontVariantNumeric: "tabular-nums" }}>{c.detalles.length}</span>
+                </div>
+                <div style={{ flex: "0 0 120px" }}>
+                  <span style={{ font: "510 13px/1 Inter,sans-serif", color: "#f7f8f8", fontVariantNumeric: "tabular-nums" }}>{formatCop(c.total)}</span>
+                </div>
+                <div style={{ flex: "0 0 200px", minWidth: 0 }}>
+                  <span
+                    style={{
+                      font: "400 12px/1.3 Inter,sans-serif",
+                      color: "#8a8f98",
+                      overflow: "hidden",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                  >
+                    {c.notas?.trim() || "—"}
+                  </span>
+                </div>
+                <div style={{ flex: "0 0 160px", display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                  {isDel ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteId(null)}
+                        disabled={pending}
+                        style={{
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 6,
+                          color: "#d0d6e0",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: pending ? "not-allowed" : "pointer",
+                          opacity: pending ? 0.6 : 1,
                         }}
-                        className="w-full min-w-[10rem] rounded border border-border bg-surface-elevated px-2 py-1 text-sm"
                       >
-                        {proveedores.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span>{c.proveedor.nombre}</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3 align-middle tabular-nums">
-                    {isEditing ? `${draft!.lines.length} ítems` : nItems}
-                  </td>
-                  <td className="py-2 pr-3 align-middle font-medium whitespace-nowrap">
-                    {isEditing ? formatCop(draftTotal) : formatCop(c.total)}
-                  </td>
-                  <td className="max-w-[220px] py-2 align-middle text-text-secondary">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        maxLength={500}
-                        value={draft!.notas}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, notas: e.target.value } : d))}
-                        className="w-full rounded border border-border bg-surface-elevated px-2 py-1 text-sm text-text-primary"
-                        placeholder="Opcional"
-                      />
-                    ) : (
-                      <span className="break-words text-text-secondary">{c.notas?.trim() ? c.notas : "—"}</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-2 align-top">
-                    {deleteId === c.id ? (
-                      <div className="flex max-w-[min(100%,18rem)] flex-col gap-2">
-                        <p className="text-xs leading-snug text-danger">
-                          ¿Eliminar este registro? Esta acción no se puede deshacer.
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => confirmDelete(c.id)}
-                            disabled={pending}
-                            className={btnDeleteRow}
-                          >
-                            Confirmar eliminación
-                          </button>
-                          <button type="button" onClick={() => setDeleteId(null)} disabled={pending} className={btnCancelRow}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : isEditing ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        <button type="button" onClick={saveEdit} disabled={pending} className={btnSaveRow}>
-                          Guardar
-                        </button>
-                        <button type="button" onClick={cancelEdit} disabled={pending} className={btnCancelRow}>
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        <button type="button" onClick={() => startEdit(c)} className={btnEditRow}>
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteId(c.id);
-                            setEditingId(null);
-                            setDraft(null);
-                          }}
-                          className={btnDeleteRow}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-                {isEditing && draft ? (
-                  <tr className="bg-surface-elevated/40">
-                    <td className="pb-3 pt-0 pr-3" colSpan={6}>
-                      <div className="rounded-lg border border-border/80 p-3">
-                        <CompraLineEditor
-                          draft={draft}
-                          setDraft={setDraft}
-                          insumosCat={insumosCat}
-                          disponiblesBase={disponiblesEdit}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-              </Fragment>
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => confirmDelete(c.id)}
+                        style={{
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(224,82,82,0.22)",
+                          border: "1px solid rgba(224,82,82,0.4)",
+                          borderRadius: 6,
+                          color: "#ff8585",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: pending ? "not-allowed" : "pointer",
+                          opacity: pending ? 0.6 : 1,
+                        }}
+                      >
+                        Confirmar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 6,
+                          color: "#d0d6e0",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteId(c.id);
+                          setEditingId(null);
+                          setDraft(null);
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          height: 28,
+                          padding: "0 10px",
+                          background: "rgba(224,82,82,0.14)",
+                          border: "1px solid rgba(224,82,82,0.30)",
+                          borderRadius: 6,
+                          color: "#ff8585",
+                          font: "510 12px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                        </svg>
+                        Eliminar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             );
-          })
-          )}
-        </tbody>
-      </table>
+        })}
+
         {filtradasPorColumna.length > 0 && ordenadas.length > visibleCount ? (
-          <button
-            type="button"
-            onClick={() => setVisibleCount((v) => v + 10)}
-            className={loadMoreClass}
-          >
-            Ver {Math.min(10, ordenadas.length - visibleCount)} más
-          </button>
+            <button
+              type="button"
+              onClick={() => setVisibleCount((v) => v + 10)}
+              style={{
+                width: "100%",
+                padding: "10px 0",
+                background: "transparent",
+                border: "none",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                color: "#8a8f98",
+                font: "510 12px/1 Inter,sans-serif",
+                cursor: "pointer",
+              }}
+            >
+              Ver {Math.min(10, ordenadas.length - visibleCount)} más
+            </button>
         ) : null}
       </div>
-      {filtradasPorColumna.length > 0 ? (
-        <p className="text-center text-xs text-text-tertiary">
+
+      {ordenadas.length > 0 ? (
+        <p style={{ margin: "8px 20px 0", textAlign: "center", font: "400 11px/1 Inter,sans-serif", color: "#62666d" }}>
           Mostrando {aMostrar.length} de {ordenadas.length} compras
         </p>
       ) : null}
-    </div>
+
+      {typeof window !== "undefined" &&
+        editingId &&
+        draft &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 500 }}>
+            <div onClick={cancelEdit} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.65)" }} />
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: "min(600px,100vw)",
+                background: "#0c0d0e",
+                borderLeft: "1px solid rgba(255,255,255,0.08)",
+                display: "flex",
+                flexDirection: "column",
+                boxShadow: "-24px 0 60px rgba(0,0,0,0.6)",
+              }}
+            >
+              <div
+                style={{
+                  padding: "20px 22px 16px",
+                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexShrink: 0,
+                }}
+              >
+                <div>
+                  <p style={{ font: "590 10px/1 Inter,sans-serif", color: "#7170ff", letterSpacing: "1.2px", textTransform: "uppercase", margin: 0 }}>
+                    EDITANDO COMPRA
+                  </p>
+                  <h2 style={{ font: "590 18px/1.2 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.3px", margin: "6px 0 0" }}>
+                    {proveedores.find((p) => p.id === draft.proveedorId)?.nombre ?? "Compra"}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 12px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 8,
+                    color: "#d0d6e0",
+                    font: "510 12px/1 Inter,sans-serif",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                  Cerrar
+                </button>
+              </div>
+
+              <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 6 }}>Fecha</label>
+                    <input
+                      type="date"
+                      max={todayLocalISO()}
+                      value={draft.fecha}
+                      onChange={(e) => setDraft((d) => (d ? { ...d, fecha: e.target.value } : d))}
+                      style={{
+                        width: "100%",
+                        height: 36,
+                        padding: "0 10px",
+                        background: "rgba(0,0,0,0.30)",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        borderRadius: 8,
+                        color: "#f7f8f8",
+                        font: "510 13px/1 Inter,sans-serif",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 6 }}>Proveedor</label>
+                    <select
+                      value={draft.proveedorId}
+                      onChange={(e) =>
+                        setDraft((d) => (d ? { ...d, proveedorId: e.target.value, lines: [emptyLine()] } : d))
+                      }
+                      style={{
+                        width: "100%",
+                        height: 36,
+                        padding: "0 10px",
+                        background: "rgba(0,0,0,0.30)",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        borderRadius: 8,
+                        color: "#f7f8f8",
+                        font: "510 13px/1 Inter,sans-serif",
+                        outline: "none",
+                      }}
+                    >
+                      {proveedores.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 6 }}>Notas</label>
+                    <input
+                      type="text"
+                      maxLength={500}
+                      value={draft.notas}
+                      onChange={(e) => setDraft((d) => (d ? { ...d, notas: e.target.value } : d))}
+                      placeholder="Opcional"
+                      style={{
+                        width: "100%",
+                        height: 36,
+                        padding: "0 10px",
+                        background: "rgba(0,0,0,0.30)",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        borderRadius: 8,
+                        color: "#f7f8f8",
+                        font: "510 13px/1 Inter,sans-serif",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", letterSpacing: "0.5px", textTransform: "uppercase" }}>Insumos</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraft((d) => (d && d.lines.length < 20 ? { ...d, lines: [...d.lines, emptyLine()] } : d))
+                      }
+                      disabled={draft.lines.length >= 20}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        height: 28,
+                        padding: "0 10px",
+                        background: draft.lines.length >= 20 ? "rgba(255,255,255,0.04)" : "rgba(113,112,255,0.10)",
+                        border: "1px solid rgba(113,112,255,0.25)",
+                        borderRadius: 7,
+                        color: draft.lines.length >= 20 ? "#62666d" : "#a4adff",
+                        font: "510 12px/1 Inter,sans-serif",
+                        cursor: draft.lines.length >= 20 ? "not-allowed" : "pointer",
+                        opacity: draft.lines.length >= 20 ? 0.5 : 1,
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                      Agregar
+                    </button>
+                  </div>
+                  <CompraLineEditor draft={draft} setDraft={setDraft} insumosCat={insumosCat} disponiblesBase={disponiblesEdit} />
+                </div>
+
+                <div style={{ padding: "12px 14px", background: "rgba(94,106,210,0.06)", border: "1px solid rgba(113,112,255,0.20)", borderRadius: 10 }}>
+                  <span style={{ font: "510 10px/1 Inter,sans-serif", color: "#8a8f98", letterSpacing: "0.8px", textTransform: "uppercase" }}>Total</span>
+                  <p style={{ font: "590 20px/1.2 Inter,sans-serif", color: "#f7f8f8", margin: "4px 0 0", fontVariantNumeric: "tabular-nums" }}>{formatCop(draftTotal)}</p>
+                </div>
+              </div>
+
+              <div style={{ padding: "14px 22px 18px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  disabled={pending}
+                  style={{
+                    flex: 1,
+                    height: 42,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 10,
+                    color: "#d0d6e0",
+                    font: "510 13px/1 Inter,sans-serif",
+                    cursor: pending ? "not-allowed" : "pointer",
+                    opacity: pending ? 0.7 : 1,
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEdit}
+                  disabled={pending}
+                  style={{
+                    flex: 2,
+                    height: 42,
+                    background: "linear-gradient(180deg,#6b78de,#5e6ad2)",
+                    border: "1px solid rgba(113,112,255,0.5)",
+                    borderRadius: 10,
+                    color: "#fff",
+                    font: "590 13px/1 Inter,sans-serif",
+                    cursor: pending ? "not-allowed" : "pointer",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 14px rgba(94,106,210,0.3)",
+                    opacity: pending ? 0.7 : 1,
+                  }}
+                >
+                  {pending ? "Guardando…" : "Guardar cambios"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+export function ComprasTableWrapper({ rows }: { rows: Row[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            height: 32,
+            padding: "0 12px",
+            background: open ? "rgba(94,106,210,0.18)" : "rgba(255,255,255,0.03)",
+            border: "1px solid",
+            borderColor: open ? "rgba(113,112,255,0.30)" : "rgba(255,255,255,0.08)",
+            borderRadius: 8,
+            color: open ? "#a4adff" : "#d0d6e0",
+            font: "510 12px/1 Inter,sans-serif",
+            cursor: "pointer",
+            transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+          Últimas compras
+          <span
+            style={{
+              font: "510 11px/1 Inter,sans-serif",
+              color: open ? "#a4adff" : "#8a8f98",
+              background: open ? "rgba(113,112,255,0.20)" : "rgba(255,255,255,0.05)",
+              padding: "3px 7px",
+              borderRadius: 999,
+              minWidth: 20,
+              textAlign: "center",
+            }}
+          >
+            {rows.length}
+          </span>
+        </button>
+      </div>
+
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 80,
+          transform: open ? "translateY(0)" : "translateY(100%)",
+          transition: "transform 300ms cubic-bezier(0.16,1,0.3,1)",
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "65vh",
+          background: "#0c0d0e",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 -24px 60px rgba(0,0,0,0.5)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 20px 12px",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ font: "590 15px/1.2 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.2px" }}>Últimas compras</span>
+            <span style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", background: "rgba(255,255,255,0.04)", padding: "3px 8px", borderRadius: 999 }}>
+              {rows.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 7,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#8a8f98",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <ComprasTable rows={rows} />
+        </div>
+      </div>
+    </>
   );
 }
 

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ComprasForm } from "@/components/compras/ComprasForm";
-import { ComprasTable } from "@/components/compras/ComprasTable";
+import { ComprasTableWrapper } from "@/components/compras/ComprasTable";
 
 const notDeleted = { deletedAt: null } as const;
 
@@ -37,21 +37,33 @@ export default async function ComprasPage() {
   ]);
 
   return (
-    <div className="space-y-8">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "0 0 40px" }}>
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-text-primary">Compras</h1>
-        <p className="mt-1 text-sm text-text-tertiary">Registra compras a proveedores y consulta el historial reciente.</p>
+        <h1 style={{ font: "590 22px/1.15 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.5px", margin: 0 }}>Compras</h1>
+        <p style={{ font: "400 13px/1.45 Inter,sans-serif", color: "#62666d", margin: "5px 0 0" }}>Registra compras a proveedores y consulta el historial reciente.</p>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-text-primary">Nueva compra</h2>
+      <section
+        style={{
+          position: "relative",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.015) 100%)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 18,
+          padding: "32px 36px 28px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
+          boxShadow: "0 24px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
+        }}
+      >
+        <div style={{ font: "590 10px/1 Inter,sans-serif", color: "#62666d", letterSpacing: "1.6px", textTransform: "uppercase" }}>NUEVA COMPRA</div>
+        <h1 style={{ font: "590 32px/1.15 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-1px", margin: "12px 0 0" }}>
+          Nueva compra
+        </h1>
         <ComprasForm proveedores={proveedores} insumos={insumos} />
-      </div>
+      </section>
 
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-text-primary">Últimas compras</h2>
-        <ComprasTable rows={compras} />
-      </div>
+      <ComprasTableWrapper rows={compras} />
     </div>
   );
 }
