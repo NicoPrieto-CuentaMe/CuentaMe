@@ -113,6 +113,8 @@ export function ComprasForm({
   const [proveedorId, setProveedorId] = useState("");
   const [notas, setNotas] = useState("");
   const [lines, setLines] = useState<LineState[]>(() => [emptyLine()]);
+  const [openInsumoIdx, setOpenInsumoIdx] = useState<number | null>(null);
+  const [lineCategoria, setLineCategoria] = useState<Record<number, string>>({});
 
   const disponibles = useMemo(
     () => insumosFiltrados(proveedorId, proveedores, insumos),
@@ -165,6 +167,11 @@ export function ComprasForm({
   }
 
   function removeLine(i: number) {
+    setLineCategoria((prev) => {
+      const next = { ...prev };
+      delete next[i];
+      return next;
+    });
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, j) => j !== i)));
   }
 
@@ -343,42 +350,188 @@ export function ComprasForm({
                   borderRadius: 10,
                 }}
               >
+                {(() => {
+                  const cats = Array.from(new Set(disponibles.map((x) => x.categoria).filter(Boolean))) as string[];
+                  const catLabels: Record<string, string> = {
+                    CARNES: "Carnes",
+                    LACTEOS: "Lácteos",
+                    VERDURAS_FRUTAS: "Verduras y frutas",
+                    GRANOS_SECOS: "Granos y secos",
+                    BEBIDAS: "Bebidas",
+                    LIMPIEZA: "Limpieza y desechables",
+                    OTROS: "Otro",
+                  };
+                  if (cats.length === 0) return null;
+                  const catSel = lineCategoria[i] ?? "";
+                  return (
+                    <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 4 }}>
+                      {cats.map((c) => {
+                        const on = catSel === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => {
+                              setLineCategoria((prev) => ({ ...prev, [i]: on ? "" : c }));
+                              if (!on && line.insumoId) {
+                                const ins = disponibles.find((x) => x.id === line.insumoId);
+                                if (ins && ins.categoria !== c) setLine(i, { insumoId: "", unidad: "", cantidad: "", totalPagadoDigits: "" });
+                              }
+                            }}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              height: 26,
+                              padding: "0 10px",
+                              background: on ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                              border: "1px solid",
+                              borderColor: on ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                              borderRadius: 999,
+                              color: on ? "#fff" : "#d0d6e0",
+                              font: "510 11px/1 Inter,sans-serif",
+                              cursor: "pointer",
+                              transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                            }}
+                          >
+                            {on && (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                            )}
+                            {catLabels[c] ?? c}
+                          </button>
+                        );
+                      })}
+                      {catSel && (
+                        <button
+                          type="button"
+                          onClick={() => setLineCategoria((prev) => ({ ...prev, [i]: "" }))}
+                          style={{
+                            height: 26,
+                            padding: "0 8px",
+                            background: "transparent",
+                            border: "none",
+                            color: "#62666d",
+                            font: "510 11px/1 Inter,sans-serif",
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                          }}
+                        >
+                          Ver todos
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div>
                   <label style={{ font: "510 10px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 5 }}>Insumo *</label>
-                  <select
-                    value={line.insumoId}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const sel = disponibles.find((x) => x.id === v);
-                      setLine(i, {
-                        insumoId: v,
-                        unidad: sel ? sel.unidadBase : "",
-                        cantidad: "",
-                        totalPagadoDigits: "",
-                      });
-                    }}
-                    required
-                    disabled={!proveedorId}
-                    style={{
-                      width: "100%",
-                      height: 34,
-                      padding: "0 10px",
-                      background: "rgba(0,0,0,0.30)",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      borderRadius: 7,
-                      color: line.insumoId ? "#f7f8f8" : "#62666d",
-                      font: "510 12px/1 Inter,sans-serif",
-                      outline: "none",
-                      opacity: !proveedorId ? 0.6 : 1,
-                    }}
-                  >
-                    <option value="">{proveedorId ? "Selecciona…" : "Elige proveedor primero"}</option>
-                    {disponibles.map((insumo) => (
-                      <option key={insumo.id} value={insumo.id}>
-                        {insumo.nombre}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenInsumoIdx(openInsumoIdx === i ? null : i)}
+                      style={{
+                        width: "100%",
+                        height: 34,
+                        padding: "0 10px",
+                        background: "rgba(0,0,0,0.30)",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        borderRadius: 7,
+                        color: line.insumoId ? "#f7f8f8" : "#62666d",
+                        font: "510 12px/1 Inter,sans-serif",
+                        outline: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        cursor: !proveedorId ? "not-allowed" : "pointer",
+                        opacity: !proveedorId ? 0.4 : 1,
+                      }}
+                    >
+                      <span style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                        {line.insumoId
+                          ? (disponibles.find((x) => x.id === line.insumoId)?.nombre ?? "Selecciona…")
+                          : proveedorId
+                            ? "Selecciona…"
+                            : "Elige proveedor primero"}
+                      </span>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        style={{ flexShrink: 0, color: "#8a8f98" }}
+                      >
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    {openInsumoIdx === i && proveedorId && (
+                      <>
+                        <div onClick={() => setOpenInsumoIdx(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 4px)",
+                            left: 0,
+                            right: 0,
+                            zIndex: 50,
+                            background: "#191a1b",
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            borderRadius: 8,
+                            padding: 4,
+                            maxHeight: 220,
+                            overflowY: "auto",
+                            boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 2,
+                          }}
+                        >
+                          {(() => {
+                            const catSel = lineCategoria[i] ?? "";
+                            const filtrados = catSel ? disponibles.filter((x) => x.categoria === catSel) : disponibles;
+                            return filtrados.length === 0 ? (
+                              <p style={{ padding: "10px 12px", font: "400 12px/1 Inter,sans-serif", color: "#62666d" }}>Sin insumos para esta categoría</p>
+                            ) : (
+                              filtrados.map((ins) => (
+                                <button
+                                  key={ins.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setLine(i, { insumoId: ins.id, unidad: ins.unidadBase, cantidad: "", totalPagadoDigits: "" });
+                                    setOpenInsumoIdx(null);
+                                  }}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    height: 34,
+                                    padding: "0 10px",
+                                    background: line.insumoId === ins.id ? "rgba(113,112,255,0.12)" : "transparent",
+                                    border: "none",
+                                    borderRadius: 6,
+                                    color: line.insumoId === ins.id ? "#a4adff" : "#d0d6e0",
+                                    font: "510 13px/1 Inter,sans-serif",
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (line.insumoId !== ins.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (line.insumoId !== ins.id) e.currentTarget.style.background = "transparent";
+                                  }}
+                                >
+                                  {ins.nombre}
+                                </button>
+                              ))
+                            );
+                          })()}
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <FieldError state={state} field={`linea-${i}`} />
                 </div>
                 <div>

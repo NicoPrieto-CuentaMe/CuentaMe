@@ -56,8 +56,7 @@ export default async function ComprasPage() {
           boxShadow: "0 24px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
-        <div style={{ font: "590 10px/1 Inter,sans-serif", color: "#62666d", letterSpacing: "1.6px", textTransform: "uppercase" }}>NUEVA COMPRA</div>
-        <h1 style={{ font: "590 32px/1.15 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-1px", margin: "12px 0 0" }}>
+        <h1 style={{ font: "590 32px/1.15 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-1px", margin: 0 }}>
           Nueva compra
         </h1>
         <ComprasForm proveedores={proveedores} insumos={insumos} />

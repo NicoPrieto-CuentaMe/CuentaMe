@@ -8,7 +8,7 @@ import { editarCompra, eliminarCompra, getComprasCatalogoEdit } from "@/app/acti
 import type { ActionState } from "@/app/(main)/configuracion/actions";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "@/app/(main)/configuracion/cop-price";
 import { UNIT_OPTIONS } from "@/app/(main)/configuracion/units";
-import { getFamiliaUnidad, getUnidadesCompatibles } from "@/lib/unidades.config";
+import { getUnidadesCompatibles } from "@/lib/unidades.config";
 type Row = Prisma.CompraGetPayload<{
   include: {
     proveedor: { select: { nombre: true } };
@@ -77,22 +77,7 @@ function emptyLine(): LineDraft {
   return { insumoId: "", unidad: "", cantidad: "", totalPagadoDigits: "" };
 }
 
-/** Misma tabla Proveedores (Configuración) — usada en CompraLineEditor */
-
 const idle: ActionState = { ok: true };
-
-function UnitHints({ unidadBase }: { unidadBase: Unidad }) {
-  const familia = getFamiliaUnidad(unidadBase as string);
-  if (!familia) return null;
-  const list = getUnidadesCompatibles(unidadBase as string)
-    .map((code) => UNIT_OPTIONS.find((u) => u.value === code)?.label ?? code)
-    .join(", ");
-  return (
-    <p className="mt-1 text-[10px] leading-tight text-text-tertiary sm:text-xs">
-      Unidades compatibles: {list}
-    </p>
-  );
-}
 
 export function ComprasTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
@@ -500,7 +485,7 @@ export function ComprasTable({ rows }: { rows: Row[] }) {
                 top: 0,
                 right: 0,
                 bottom: 0,
-                width: "min(600px,100vw)",
+                width: "min(560px,100vw)",
                 background: "#0c0d0e",
                 borderLeft: "1px solid rgba(255,255,255,0.08)",
                 display: "flex",
@@ -829,6 +814,10 @@ function CompraLineEditor({
   insumosCat: CatalogInsumo[];
   disponiblesBase: CatalogInsumo[];
 }) {
+  const [openInsumoIdx, setOpenInsumoIdx] = useState<number | null>(null);
+  const [openUnidadIdx, setOpenUnidadIdx] = useState<number | null>(null);
+  const [lineCategoria, setLineCategoria] = useState<Record<number, string>>({});
+
   function setLine(i: number, patch: Partial<LineDraft>) {
     setDraft((d) => {
       if (!d) return d;
@@ -837,159 +826,381 @@ function CompraLineEditor({
     });
   }
 
-  function addLine() {
-    setDraft((d) => (d && d.lines.length < 20 ? { ...d, lines: [...d.lines, emptyLine()] } : d));
-  }
-
   function removeLine(i: number) {
     setDraft((d) => (d && d.lines.length > 1 ? { ...d, lines: d.lines.filter((_, j) => j !== i) } : d));
   }
 
-  const totalGeneralFmt = useMemo(() => {
-    let sum = 0;
-    for (const l of draft.lines) {
-      const t = Number(digitsToSalePriceString(l.totalPagadoDigits));
-      if (Number.isFinite(t) && t > 0) sum += t;
-    }
-    if (sum <= 0) return "—";
-    return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(sum);
-  }, [draft.lines]);
-
   return (
-    <div className="space-y-4">
-      <div className="space-y-4 overflow-x-auto pb-1">
-        {draft.lines.map((line, i) => {
-          const disponibles = mergeDisponibles(disponiblesBase, line.insumoId, insumosCat);
-          const insumoSel = disponibles.find((x) => x.id === line.insumoId);
-          const unitOpts = insumoSel
-            ? UNIT_OPTIONS.filter((u) => getUnidadesCompatibles(insumoSel.unidadBase as string).includes(u.value))
-            : [];
-          const totalFmt = formatCopFromDigits(line.totalPagadoDigits);
-          const qty = Number(String(line.cantidad).replace(",", "."));
-          const totalN = Number(digitsToSalePriceString(line.totalPagadoDigits));
-          const unidadLbl = line.unidad ? UNIT_OPTIONS.find((u) => u.value === line.unidad)?.label ?? line.unidad : "";
-          const precioUnitarioHint =
-            Number.isFinite(qty) && qty > 0 && Number.isFinite(totalN) && totalN > 0 && line.unidad
-              ? (() => {
-                  const pu = totalN / qty;
-                  const cop = new Intl.NumberFormat("es-CO", {
-                    style: "currency",
-                    currency: "COP",
-                    maximumFractionDigits: 0,
-                  }).format(pu);
-                  return `≈ ${cop} / ${unidadLbl}`;
-                })()
-              : null;
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {draft.lines.map((line, i) => {
+        const disponibles = mergeDisponibles(disponiblesBase, line.insumoId, insumosCat);
+        const insumoSel = disponibles.find((x) => x.id === line.insumoId) ?? null;
+        const unitOpts = insumoSel
+          ? getUnidadesCompatibles(insumoSel.unidadBase as string)
+              .map((u) => UNIT_OPTIONS.find((x) => x.value === u))
+              .filter(Boolean)
+          : [];
 
-          return (
-            <div
-              key={i}
-              className="min-w-[min(100%,720px)] rounded-lg border border-border bg-surface-elevated/50 p-3"
-            >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-text-tertiary">Línea {i + 1}</span>
+        return (
+          <div
+            key={i}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 110px 90px 130px 28px",
+              gap: 8,
+              alignItems: "end",
+              padding: "12px 14px",
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 10,
+            }}
+          >
+            {(() => {
+              const cats = Array.from(new Set(disponibles.map((x) => x.categoria).filter(Boolean))) as string[];
+              const catLabels: Record<string, string> = {
+                CARNES: "Carnes",
+                LACTEOS: "Lácteos",
+                VERDURAS_FRUTAS: "Verduras y frutas",
+                GRANOS_SECOS: "Granos y secos",
+                BEBIDAS: "Bebidas",
+                LIMPIEZA: "Limpieza y desechables",
+                OTROS: "Otro",
+              };
+              if (cats.length === 0) return null;
+              const catSel = lineCategoria[i] ?? "";
+              return (
+                <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 4 }}>
+                  {cats.map((c) => {
+                    const on = catSel === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setLineCategoria((prev) => ({ ...prev, [i]: on ? "" : c }));
+                          if (!on && line.insumoId) {
+                            const ins = disponibles.find((x) => x.id === line.insumoId);
+                            if (ins && ins.categoria !== c) setLine(i, { insumoId: "", unidad: "" });
+                          }
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          height: 26,
+                          padding: "0 10px",
+                          background: on ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                          border: "1px solid",
+                          borderColor: on ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                          borderRadius: 999,
+                          color: on ? "#fff" : "#d0d6e0",
+                          font: "510 11px/1 Inter,sans-serif",
+                          cursor: "pointer",
+                          transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                        }}
+                      >
+                        {on && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        )}
+                        {catLabels[c] ?? c}
+                      </button>
+                    );
+                  })}
+                  {catSel && (
+                    <button
+                      type="button"
+                      onClick={() => setLineCategoria((prev) => ({ ...prev, [i]: "" }))}
+                      style={{
+                        height: 26,
+                        padding: "0 8px",
+                        background: "transparent",
+                        border: "none",
+                        color: "#62666d",
+                        font: "510 11px/1 Inter,sans-serif",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      Ver todos
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+            <div>
+              <label style={{ font: "510 10px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 5 }}>Insumo</label>
+              <div style={{ position: "relative" }}>
                 <button
                   type="button"
-                  onClick={() => removeLine(i)}
-                  disabled={draft.lines.length <= 1}
-                  className="rounded px-2 py-0.5 text-lg leading-none text-text-tertiary hover:bg-border hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Eliminar línea"
+                  onClick={() => setOpenInsumoIdx(openInsumoIdx === i ? null : i)}
+                  style={{
+                    width: "100%",
+                    height: 34,
+                    padding: "0 10px",
+                    background: "rgba(0,0,0,0.30)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 7,
+                    color: line.insumoId ? "#f7f8f8" : "#62666d",
+                    font: "510 12px/1 Inter,sans-serif",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    cursor: "pointer",
+                  }}
                 >
-                  ×
+                  <span style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                    {line.insumoId ? disponibles.find((x) => x.id === line.insumoId)?.nombre ?? "Selecciona…" : "Selecciona…"}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0, color: "#8a8f98" }}>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
                 </button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end">
-                <div className="lg:col-span-3">
-                  <label className="text-xs font-medium text-text-secondary">Insumo *</label>
-                  <select
-                    value={line.insumoId}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const ins = disponibles.find((x) => x.id === v);
-                      setLine(i, { insumoId: v, unidad: ins ? ins.unidadBase : "" });
-                    }}
-                    required
-                    disabled={!draft.proveedorId}
-                    className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <option value="" disabled>
-                      {draft.proveedorId ? "Selecciona…" : "Elige proveedor primero"}
-                    </option>
-                    {disponibles.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="lg:col-span-2">
-                  <label className="text-xs font-medium text-text-secondary">Unidad *</label>
-                  <select
-                    value={line.unidad}
-                    onChange={(e) => setLine(i, { unidad: e.target.value })}
-                    required
-                    disabled={!insumoSel || unitOpts.length === 0}
-                    className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-60"
-                  >
-                    <option value="" disabled>
-                      {insumoSel ? "Selecciona…" : "—"}
-                    </option>
-                    {unitOpts.map((u) => (
-                      <option key={u.value} value={u.value}>
-                        {u.label}
-                      </option>
-                    ))}
-                  </select>
-                  {insumoSel ? <UnitHints unidadBase={insumoSel.unidadBase} /> : null}
-                </div>
-                <div className="lg:col-span-2">
-                  <label className="text-xs font-medium text-text-secondary">Cantidad *</label>
-                  <input
-                    inputMode="decimal"
-                    type="number"
-                    step="0.0001"
-                    min="0"
-                    value={line.cantidad}
-                    onChange={(e) => setLine(i, { cantidad: e.target.value })}
-                    required
-                    className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="lg:col-span-3">
-                  <label className="text-xs font-medium text-text-secondary">Total pagado *</label>
-                  <input
-                    inputMode="numeric"
-                    value={totalFmt}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/[^\d]/g, "");
-                      setLine(i, { totalPagadoDigits: digits });
-                    }}
-                    required
-                    className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-2 py-2 text-sm text-text-primary outline-none focus:border-accent"
-                    placeholder="Ej: 45000"
-                  />
-                </div>
-                <div className="lg:col-span-2 lg:flex lg:min-h-[72px] lg:flex-col lg:justify-end">
-                  <span className="text-xs font-medium text-text-tertiary">Precio unitario (calculado)</span>
-                  <p className="mt-1 text-sm leading-snug text-text-secondary">{precioUnitarioHint ?? "—"}</p>
-                </div>
+                {openInsumoIdx === i && (
+                  <>
+                    <div onClick={() => setOpenInsumoIdx(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        background: "#191a1b",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        borderRadius: 8,
+                        padding: 4,
+                        maxHeight: 200,
+                        overflowY: "auto",
+                        boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                      }}
+                    >
+                      {(() => {
+                        const catSel = lineCategoria[i] ?? "";
+                        const filtrados = catSel ? disponibles.filter((x) => x.categoria === catSel) : disponibles;
+                        return filtrados.length === 0 ? (
+                          <p style={{ padding: "10px 12px", font: "400 12px/1 Inter,sans-serif", color: "#62666d" }}>Sin insumos</p>
+                        ) : (
+                          filtrados.map((ins) => (
+                            <button
+                              key={ins.id}
+                              type="button"
+                              onClick={() => {
+                                setLine(i, { insumoId: ins.id, unidad: ins.unidadBase });
+                                setOpenInsumoIdx(null);
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                height: 34,
+                                padding: "0 10px",
+                                background: line.insumoId === ins.id ? "rgba(113,112,255,0.12)" : "transparent",
+                                border: "none",
+                                borderRadius: 6,
+                                color: line.insumoId === ins.id ? "#a4adff" : "#d0d6e0",
+                                font: "510 13px/1 Inter,sans-serif",
+                                cursor: "pointer",
+                                textAlign: "left",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (line.insumoId !== ins.id) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                              }}
+                              onMouseLeave={(e) => {
+                                if (line.insumoId !== ins.id) e.currentTarget.style.background = "transparent";
+                              }}
+                            >
+                              {ins.nombre}
+                            </button>
+                          ))
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        onClick={addLine}
-        disabled={draft.lines.length >= 20}
-        className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Agregar insumo
-      </button>
-      <div className="border-t border-border pt-3">
-        <span className="text-sm font-medium text-text-secondary">Total general</span>
-        <div className="mt-1 text-lg font-semibold text-text-primary">{totalGeneralFmt}</div>
-      </div>
+
+            <div>
+              <label style={{ font: "510 10px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 5 }}>Unidad</label>
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={() => setOpenUnidadIdx(openUnidadIdx === i ? null : i)}
+                  disabled={!insumoSel || unitOpts.length === 0}
+                  style={{
+                    width: "100%",
+                    height: 34,
+                    padding: "0 10px",
+                    background: "rgba(0,0,0,0.30)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 7,
+                    color: line.unidad ? "#f7f8f8" : "#62666d",
+                    font: "510 12px/1 Inter,sans-serif",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    cursor: !insumoSel ? "not-allowed" : "pointer",
+                    opacity: !insumoSel ? 0.4 : 1,
+                  }}
+                >
+                  <span>{line.unidad ? UNIT_OPTIONS.find((u) => u.value === line.unidad)?.label ?? line.unidad : "—"}</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0, color: "#8a8f98" }}>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {openUnidadIdx === i && insumoSel && (
+                  <>
+                    <div onClick={() => setOpenUnidadIdx(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        background: "#191a1b",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        borderRadius: 8,
+                        padding: 4,
+                        maxHeight: 200,
+                        overflowY: "auto",
+                        boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                      }}
+                    >
+                      {unitOpts.map((opt) =>
+                        opt ? (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              setLine(i, { unidad: opt.value });
+                              setOpenUnidadIdx(null);
+                            }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              height: 32,
+                              padding: "0 10px",
+                              background: line.unidad === opt.value ? "rgba(113,112,255,0.12)" : "transparent",
+                              border: "none",
+                              borderRadius: 6,
+                              color: line.unidad === opt.value ? "#a4adff" : "#d0d6e0",
+                              font: "510 13px/1 Inter,sans-serif",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (line.unidad !== opt.value) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                            }}
+                            onMouseLeave={(e) => {
+                              if (line.unidad !== opt.value) e.currentTarget.style.background = "transparent";
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        ) : null,
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label style={{ font: "510 10px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 5 }}>Cantidad</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.0001"
+                min="0"
+                value={line.cantidad}
+                onChange={(e) => setLine(i, { cantidad: e.target.value })}
+                placeholder="0"
+                style={{
+                  width: "100%",
+                  height: 34,
+                  padding: "0 10px",
+                  background: "rgba(0,0,0,0.30)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 7,
+                  color: "#f7f8f8",
+                  font: "510 12px/1 Inter,sans-serif",
+                  outline: "none",
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ font: "510 10px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 5 }}>Total pagado</label>
+              <div style={{ position: "relative" }}>
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 8,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#62666d",
+                    font: "510 11px/1 Inter,sans-serif",
+                    pointerEvents: "none",
+                  }}
+                >
+                  $
+                </span>
+                <input
+                  inputMode="numeric"
+                  value={formatCopFromDigits(line.totalPagadoDigits)}
+                  onChange={(e) => setLine(i, { totalPagadoDigits: e.target.value.replace(/[^\d]/g, "") })}
+                  placeholder="0"
+                  style={{
+                    width: "100%",
+                    height: 34,
+                    padding: "0 10px 0 20px",
+                    background: "rgba(0,0,0,0.30)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 7,
+                    color: "#f7f8f8",
+                    font: "510 12px/1 Inter,sans-serif",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => removeLine(i)}
+              disabled={draft.lines.length <= 1}
+              style={{
+                height: 28,
+                width: 28,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(224,82,82,0.14)",
+                border: "1px solid rgba(224,82,82,0.30)",
+                borderRadius: 7,
+                color: "#ff8585",
+                cursor: draft.lines.length <= 1 ? "not-allowed" : "pointer",
+                opacity: draft.lines.length <= 1 ? 0.4 : 1,
+                flexShrink: 0,
+                alignSelf: "flex-end",
+                marginBottom: 3,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
