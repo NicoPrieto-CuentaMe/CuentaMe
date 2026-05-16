@@ -7,7 +7,6 @@ import type { ActionState } from "@/app/(main)/configuracion/actions";
 import type { GastoFijoSerialized } from "@/app/actions/gastos";
 import { addGastoFijo, updateGastoFijo } from "@/app/actions/gastos";
 import { CATEGORIA_LABELS, METODO_PAGO_LABELS, PERIODICIDAD_LABELS } from "@/lib/gastos-constants";
-import { GastosHistorial } from "@/components/gastos/GastosHistorial";
 import { digitsToSalePriceString, formatCopFromDigits, precioVentaToDigits } from "@/app/(main)/configuracion/cop-price";
 import type { CategoriaGasto, MetodoPagoGasto, PeriodicidadGasto } from "@prisma/client";
 
@@ -33,34 +32,33 @@ function FieldError({ state, field }: { state: ActionState; field: string }) {
   return <p className="mt-1 text-xs text-danger">{state.message}</p>;
 }
 
-function GlobalFeedback({ state }: { state: ActionState }) {
-  if (!("ok" in state) || state.ok) return null;
-  if (state.field) return null;
-  return (
-    <div className="mt-3 rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger">
-      {state.message}
-    </div>
-  );
-}
-
-function SuccessFeedback({ state }: { state: ActionState }) {
-  if (!("ok" in state) || !state.ok || !state.message) return null;
-  return (
-    <div className="rounded-lg border border-accent/30 bg-accent-light px-3 py-2 text-sm text-accent">
-      {state.message}
-    </div>
-  );
-}
-
 function SubmitButton({ isEdit }: { isEdit: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:min-w-[200px]"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        height: 38,
+        padding: "0 20px",
+        background: pending ? "rgba(255,255,255,0.06)" : "linear-gradient(180deg,#6b78de,#5e6ad2)",
+        border: "1px solid",
+        borderColor: pending ? "rgba(255,255,255,0.08)" : "rgba(113,112,255,0.5)",
+        borderRadius: 10,
+        color: "#fff",
+        font: "590 13px/1 Inter,sans-serif",
+        cursor: pending ? "not-allowed" : "pointer",
+        boxShadow: pending ? "none" : "inset 0 1px 0 rgba(255,255,255,0.16), 0 4px 14px rgba(94,106,210,0.32)",
+        transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+      }}
     >
-      {pending ? (isEdit ? "Guardando…" : "Registrando…") : isEdit ? "Actualizar" : "Registrar gasto"}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="M5 12h14M12 5l7 7-7 7" />
+      </svg>
+      {pending ? (isEdit ? "Guardando…" : "Registrando…") : isEdit ? "Guardar cambios" : "Registrar gasto"}
     </button>
   );
 }
@@ -135,173 +133,255 @@ export function GastosForm({
   }, [state, isEdit, onSuccess, router]);
 
   return (
-    <form action={formAction} className="space-y-5">
-      {isEdit ? <input type="hidden" name="id" value={initialData!.id} /> : null}
-      <input type="hidden" name="fecha" value={fecha} />
+    <form action={formAction}>
+      {isEdit && <input type="hidden" name="id" value={initialData?.id} />}
       <input type="hidden" name="monto" value={montoHidden} />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* Categoría — chips */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", marginBottom: 10 }}>
+          ¿Qué tipo de gasto es? <span style={{ color: "#7170ff" }}>*</span>
+        </div>
+        <input type="hidden" name="categoria" value={categoria} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {CATEGORIA_KEYS.map((k) => {
+            const on = categoria === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setCategoria(k)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 32,
+                  padding: "0 13px",
+                  background: on ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                  border: "1px solid",
+                  borderColor: on ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                  borderRadius: 999,
+                  color: on ? "#fff" : "#d0d6e0",
+                  font: "510 13px/1 Inter,sans-serif",
+                  cursor: "pointer",
+                  transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                }}
+              >
+                {on && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+                {CATEGORIA_LABELS[k]}
+              </button>
+            );
+          })}
+        </div>
+        <FieldError state={state} field="categoria" />
+      </div>
+
+      {/* Monto — input gigante */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", marginBottom: 8 }}>
+          Monto <span style={{ color: "#7170ff" }}>*</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ font: "590 38px/1.15 Inter,sans-serif", color: "#62666d" }}>$</span>
+          <input
+            inputMode="numeric"
+            value={montoFmt}
+            onChange={(e) => setMontoDigits(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="0"
+            style={{
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "#f7f8f8",
+              font: "590 38px/1.15 Inter,sans-serif",
+              letterSpacing: "-1.2px",
+              width: "100%",
+              padding: "4px 0 10px",
+            }}
+          />
+        </div>
+        <div style={{ height: 2, background: "rgba(255,255,255,0.06)", borderRadius: 2 }} />
+        <FieldError state={state} field="monto" />
+      </div>
+
+      {/* Periodicidad — chips */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", marginBottom: 10 }}>
+          Periodicidad <span style={{ color: "#7170ff" }}>*</span>
+        </div>
+        <input type="hidden" name="periodicidad" value={periodicidad} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {PERIODICIDAD_KEYS.map((k) => {
+            const on = periodicidad === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setPeriodicidad(k)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 32,
+                  padding: "0 13px",
+                  background: on ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                  border: "1px solid",
+                  borderColor: on ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                  borderRadius: 999,
+                  color: on ? "#fff" : "#d0d6e0",
+                  font: "510 13px/1 Inter,sans-serif",
+                  cursor: "pointer",
+                  transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                }}
+              >
+                {on && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+                {PERIODICIDAD_LABELS[k]}
+              </button>
+            );
+          })}
+        </div>
+        <FieldError state={state} field="periodicidad" />
+      </div>
+
+      {/* Método de pago — chips */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", marginBottom: 10 }}>
+          Método de pago <span style={{ color: "#7170ff" }}>*</span>
+        </div>
+        <input type="hidden" name="metodoPago" value={metodoPago} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {METODO_KEYS.map((k) => {
+            const on = metodoPago === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setMetodoPago(k)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 32,
+                  padding: "0 13px",
+                  background: on ? "rgba(113,112,255,0.16)" : "rgba(255,255,255,0.03)",
+                  border: "1px solid",
+                  borderColor: on ? "rgba(113,112,255,0.45)" : "rgba(255,255,255,0.08)",
+                  borderRadius: 999,
+                  color: on ? "#fff" : "#d0d6e0",
+                  font: "510 13px/1 Inter,sans-serif",
+                  cursor: "pointer",
+                  transition: "all 150ms cubic-bezier(0.16,1,0.3,1)",
+                }}
+              >
+                {on && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+                {METODO_PAGO_LABELS[k]}
+              </button>
+            );
+          })}
+        </div>
+        <FieldError state={state} field="metodoPago" />
+      </div>
+
+      {/* Fecha + Notas */}
+      <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 12, marginBottom: 22 }}>
         <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-fecha">
+          <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 6 }}>
             Fecha *
           </label>
           <input
-            id="gasto-fecha"
             type="date"
+            name="fecha"
             value={fecha}
+            max={todayLocalISO()}
             onChange={(e) => setFecha(e.target.value)}
-            className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             required
+            style={{
+              width: "100%",
+              height: 38,
+              padding: "0 12px",
+              background: "rgba(0,0,0,0.30)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 8,
+              color: "#f7f8f8",
+              font: "510 13px/1 Inter,sans-serif",
+              outline: "none",
+            }}
           />
           <FieldError state={state} field="fecha" />
         </div>
-
         <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-monto">
-            Monto *
-          </label>
-          <div className="relative mt-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
-              $
-            </span>
-            <input
-              id="gasto-monto"
-              inputMode="numeric"
-              type="text"
-              value={montoFmt}
-              onChange={(e) => {
-                const digits = e.target.value.replace(/[^\d]/g, "");
-                setMontoDigits(digits);
-              }}
-              className="w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated py-2 pl-8 pr-3 text-sm text-text-primary outline-none focus:border-accent"
-              placeholder="0"
-              autoComplete="off"
-              required
-              aria-describedby="gasto-monto-hint"
-            />
-          </div>
-          <p id="gasto-monto-hint" className="mt-1 text-xs text-text-tertiary">
-            Ingresa el valor en pesos colombianos (COP).
-          </p>
-          <FieldError state={state} field="monto" />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-periodicidad">
-            Periodicidad *
-          </label>
-          <select
-            id="gasto-periodicidad"
-            name="periodicidad"
-            value={periodicidad}
-            onChange={(e) => setPeriodicidad(e.target.value as PeriodicidadGasto)}
-            className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            required
-          >
-            {PERIODICIDAD_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {PERIODICIDAD_LABELS[k]}
-              </option>
-            ))}
-          </select>
-          <FieldError state={state} field="periodicidad" />
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-metodo">
-            Método de pago *
-          </label>
-          <select
-            id="gasto-metodo"
-            name="metodoPago"
-            value={metodoPago}
-            onChange={(e) => setMetodoPago(e.target.value as MetodoPagoGasto)}
-            className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            required
-          >
-            {METODO_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {METODO_PAGO_LABELS[k]}
-              </option>
-            ))}
-          </select>
-          <FieldError state={state} field="metodoPago" />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-categoria">
-            Categoría *
-          </label>
-          <select
-            id="gasto-categoria"
-            name="categoria"
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value as CategoriaGasto)}
-            className="mt-1 w-full min-h-[44px] rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            required
-          >
-            {CATEGORIA_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {CATEGORIA_LABELS[k]}
-              </option>
-            ))}
-          </select>
-          <FieldError state={state} field="categoria" />
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary" htmlFor="gasto-notas">
+          <label style={{ font: "510 11px/1 Inter,sans-serif", color: "#8a8f98", display: "block", marginBottom: 6 }}>
             Notas
           </label>
-          <textarea
-            id="gasto-notas"
+          <input
+            type="text"
             name="notas"
             value={notas}
             onChange={(e) => setNotas(e.target.value)}
-            rows={3}
             maxLength={300}
-            className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            placeholder="Ej: Arriendo local principal, pago anticipado, etc."
+            placeholder="Ej: Arriendo local principal, pago anticipado..."
+            style={{
+              width: "100%",
+              height: 38,
+              padding: "0 12px",
+              background: "rgba(0,0,0,0.30)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 8,
+              color: "#f7f8f8",
+              font: "510 13px/1 Inter,sans-serif",
+              outline: "none",
+            }}
           />
           <FieldError state={state} field="notas" />
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-border pt-4">
-        <SuccessFeedback state={state} />
-        <GlobalFeedback state={state} />
-        <div className="flex justify-end">
+      {/* Footer */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingTop: 14,
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "400 12px/1 Inter,sans-serif", color: "#8a8f98" }}>
+          <span style={{ color: categoria ? "#a4adff" : "#4a4d54" }}>●</span>
+          <span style={{ color: montoDigits ? "#a4adff" : "#4a4d54" }}>●</span>
+          <span style={{ color: fecha ? "#a4adff" : "#4a4d54" }}>●</span>
+          <span style={{ marginLeft: 4 }}>
+            {!categoria
+              ? "Selecciona una categoría"
+              : !montoDigits
+                ? "Ingresa el monto"
+                : `${CATEGORIA_LABELS[categoria]} · ${montoFmt}`}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {state.ok === false && !state.field && (
+            <span style={{ font: "400 12px/1 Inter,sans-serif", color: "#f87171" }}>{state.message}</span>
+          )}
+          {state.ok && state.message && (
+            <span style={{ font: "400 12px/1 Inter,sans-serif", color: "#a4adff" }}>{state.message}</span>
+          )}
           <SubmitButton isEdit={isEdit} />
         </div>
       </div>
     </form>
-  );
-}
-
-export function GastosShell({ rows }: { rows: GastoFijoSerialized[] }) {
-  const router = useRouter();
-
-  return (
-    <div className="space-y-8">
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-text-primary">
-          Nuevo gasto fijo
-        </h2>
-        <GastosForm
-          onSuccess={() => {
-            router.refresh();
-          }}
-        />
-      </div>
-
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-text-primary">Historial de gastos</h2>
-        <GastosHistorial rows={rows} />
-      </div>
-    </div>
   );
 }
