@@ -347,197 +347,190 @@ export function ChatUI({
       void enviar();
     }
   };
-
   return (
-    <div className="flex h-full gap-0 -m-6 overflow-hidden">
-      {/* Sidebar de conversaciones */}
-      <div
-        className={`flex flex-col border-r border-border bg-surface transition-all duration-200 ${
-          sidebarOpen ? "w-64 min-w-[200px]" : "w-0 overflow-hidden"
-        }`}
-      >
-        <div className="flex items-center justify-between p-3 border-b border-border">
-          <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-            Conversaciones
-          </span>
-          <button
-            onClick={nuevaConversacion}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-accent hover:bg-accent/10 transition"
-            title="Nueva conversación"
-          >
-            <Plus className="h-3.5 w-3.5" />
+    <div style={{ 
+      display:"flex", 
+      height:"calc(100vh - 64px)",
+      overflow:"hidden", 
+      position:"fixed",
+      top: 64,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1,
+    }}>
+
+      {/* ── Sidebar conversaciones ── */}
+      <div style={{
+        width: sidebarOpen ? 240 : 0,
+        minWidth: sidebarOpen ? 240 : 0,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        background: "#0f1011",
+        borderRight: "1px solid rgba(255,255,255,0.05)",
+        transition: "width 220ms cubic-bezier(0.16,1,0.3,1), min-width 220ms cubic-bezier(0.16,1,0.3,1)",
+        flexShrink: 0,
+      }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 14px 12px", borderBottom:"1px solid rgba(255,255,255,0.05)", flexShrink:0, whiteSpace:"nowrap", overflow:"hidden" }}>
+          <span style={{ font:"510 11px/1 Inter,sans-serif", color:"#62666d", letterSpacing:"0.8px", textTransform:"uppercase" }}>Conversaciones</span>
+          <button onClick={nuevaConversacion}
+            style={{ display:"inline-flex", alignItems:"center", gap:4, height:26, padding:"0 8px", background:"rgba(113,112,255,0.10)", border:"1px solid rgba(113,112,255,0.20)", borderRadius:6, color:"#a4adff", font:"510 11px/1 Inter,sans-serif", cursor:"pointer" }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
             Nueva
           </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto">
+        <div style={{ flex:1, overflowY:"auto" }}>
           {conversaciones.length === 0 ? (
-            <p className="p-4 text-xs text-text-tertiary">No hay conversaciones aún.</p>
-          ) : (
-            conversaciones.map((c) => (
-                <div
-                  key={c.id}
-                  className={`relative group border-b border-border/50 ${
-                    c.id === conversacionId ? "bg-surface-elevated" : ""
-                  }`}
-                  onMouseEnter={() => setHoveredConvId(c.id)}
-                  onMouseLeave={() => setHoveredConvId(null)}
-                >
-                  <button
-                    onClick={() => void cargarConversacion(c.id)}
-                    className="w-full text-left px-3 py-2.5 hover:bg-surface-elevated transition pr-8"
-                  >
-                    <p className="text-xs text-text-primary truncate">
-                      {c.titulo ?? "Sin título"}
-                    </p>
-                    <p className="text-xs text-text-tertiary mt-0.5">
-                      {fmtFecha(c.updatedAt)}
-                    </p>
-                  </button>
-                  {hoveredConvId === c.id && (
-                    <button
-                      onClick={(e) => void eliminarConversacion(c.id, e)}
-                      disabled={eliminandoId === c.id}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-text-tertiary hover:text-danger hover:bg-danger/10 transition"
-                      title="Eliminar conversación"
-                    >
-                      {eliminandoId === c.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3 w-3" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              ))
-          )}
+            <p style={{ padding:"16px 14px", font:"400 12px/1.4 Inter,sans-serif", color:"#62666d" }}>No hay conversaciones aún.</p>
+          ) : conversaciones.map(c => (
+            <div key={c.id}
+              onMouseEnter={() => setHoveredConvId(c.id)}
+              onMouseLeave={() => setHoveredConvId(null)}
+              style={{ position:"relative", overflow:"hidden", borderBottom:"1px solid rgba(255,255,255,0.03)", background: c.id === conversacionId ? "rgba(94,106,210,0.10)" : "transparent" }}>
+              <button onClick={() => void cargarConversacion(c.id)}
+                style={{ width:"100%", textAlign:"left", padding:"10px 36px 10px 14px", background:"transparent", border:"none", cursor:"pointer", display:"block" }}>
+                <p style={{ font:"510 12px/1.3 Inter,sans-serif", color: c.id === conversacionId ? "#a4adff" : "#d0d6e0", margin:0, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis", maxWidth:"100%" }}>
+                  {c.titulo ?? "Sin título"}
+                </p>
+                <p style={{ font:"400 11px/1 Inter,sans-serif", color:"#62666d", margin:"4px 0 0" }}>{fmtFecha(c.updatedAt)}</p>
+              </button>
+              {hoveredConvId === c.id && (
+                <button onClick={e => void eliminarConversacion(c.id, e)} disabled={eliminandoId === c.id}
+                  style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(224,82,82,0.12)", border:"1px solid rgba(224,82,82,0.20)", borderRadius:5, color:"#ff8585", cursor:"pointer" }}>
+                  {eliminandoId === c.id
+                    ? <Loader2 style={{ width:10, height:10 }} className="animate-spin" />
+                    : <Trash2 style={{ width:10, height:10 }} />}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Área principal del chat */}
-      <div className="flex flex-1 flex-col min-w-0 bg-background">
-        {/* Header del chat */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-surface">
-          <button
-            onClick={() => setSidebarOpen((o) => !o)}
-            className="rounded-lg p-1.5 text-text-tertiary hover:text-text-primary hover:bg-surface-elevated transition"
-            title={sidebarOpen ? "Ocultar panel" : "Mostrar panel"}
-          >
-            <MessageSquare className="h-4 w-4" />
+      {/* ── Área principal ── */}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, background:"#08090a" }}>
+
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"0 16px", height:52, borderBottom:"1px solid rgba(255,255,255,0.05)", background:"#0f1011", flexShrink:0 }}>
+          <button onClick={() => setSidebarOpen(o => !o)}
+            title={sidebarOpen ? "Ocultar conversaciones" : "Mostrar conversaciones"}
+            style={{ width:30, height:30, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:7, color:"#8a8f98", cursor:"pointer", flexShrink:0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              {sidebarOpen
+                ? <><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></>
+                : <><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></>
+              }
+            </svg>
           </button>
+
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden style={{ flexShrink:0 }}>
+            <defs>
+              <linearGradient id="cm-header-grad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#818cf8" />
+                <stop offset="1" stopColor="#5e6ad2" />
+              </linearGradient>
+            </defs>
+            <path d="M9 3h14a6 6 0 0 1 6 6v11a6 6 0 0 1-6 6h-7.2l-5.4 4.4a1 1 0 0 1-1.6-.78V26H9a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6Z" fill="url(#cm-header-grad)" />
+            <path d="M9 19.5 13.5 15 17 17.5 23 11" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.95" />
+            <circle cx="9" cy="19.5" r="1.6" fill="white" />
+            <circle cx="13.5" cy="15" r="1.6" fill="white" />
+            <circle cx="17" cy="17.5" r="1.6" fill="white" />
+            <circle cx="23" cy="11" r="1.9" fill="white" />
+          </svg>
           <div>
-            <h1 className="text-sm font-semibold text-text-primary">CuentaMe IA</h1>
-            <p className="text-xs text-text-tertiary">Habla con tu negocio</p>
+            <p style={{ font:"590 14px/1 Inter,sans-serif", color:"#f7f8f8", margin:0, letterSpacing:"-0.2px" }}>CuentaMe IA</p>
+            <p style={{ font:"400 11px/1 Inter,sans-serif", color:"#62666d", margin:"3px 0 0" }}>Habla con tu negocio</p>
           </div>
         </div>
 
-        {/* Lista de mensajes */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {/* Mensajes */}
+        <div style={{ flex:1, overflowY:"auto", padding:"20px 16px", display:"flex", flexDirection:"column", gap:12 }}>
           {mensajes.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-3 py-16">
-              <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-                <MessageSquare className="h-6 w-6 text-accent" />
+            <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, padding:"40px 0", textAlign:"center" }}>
+              <div style={{ width:56, height:56, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="56" height="56" viewBox="0 0 32 32" fill="none" aria-hidden>
+                  <defs>
+                    <linearGradient id="cm-empty-grad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#818cf8" />
+                      <stop offset="1" stopColor="#5e6ad2" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M9 3h14a6 6 0 0 1 6 6v11a6 6 0 0 1-6 6h-7.2l-5.4 4.4a1 1 0 0 1-1.6-.78V26H9a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6Z" fill="url(#cm-empty-grad)" />
+                  <path d="M9 19.5 13.5 15 17 17.5 23 11" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.95" />
+                  <circle cx="9" cy="19.5" r="1.6" fill="white" />
+                  <circle cx="13.5" cy="15" r="1.6" fill="white" />
+                  <circle cx="17" cy="17.5" r="1.6" fill="white" />
+                  <circle cx="23" cy="11" r="1.9" fill="white" />
+                </svg>
               </div>
               <div>
-                <p className="text-sm font-medium text-text-primary">¿En qué te ayudo hoy?</p>
-                <p className="text-xs text-text-tertiary mt-1">
-                  Pregúntame por tus ventas, registra una compra o consulta el inventario.
-                </p>
+                <p style={{ font:"590 16px/1.2 Inter,sans-serif", color:"#f7f8f8", margin:0, letterSpacing:"-0.2px" }}>¿En qué te ayudo hoy?</p>
+                <p style={{ font:"400 13px/1.4 Inter,sans-serif", color:"#62666d", margin:"6px 0 0" }}>Pregúntame por tus ventas, registra una compra o consulta el inventario.</p>
               </div>
-              <div className="flex flex-wrap gap-2 justify-center mt-2">
-                {[
-                  "¿Cómo estuvieron las ventas hoy?",
-                  "¿Cuánto stock de pollo tengo?",
-                  "Registra una venta",
-                ].map((sugerencia) => (
-                  <button
-                    key={sugerencia}
-                    onClick={() => setInput(sugerencia)}
-                    className="rounded-full border border-border px-3 py-1.5 text-xs text-text-secondary hover:border-accent hover:text-accent transition"
-                  >
-                    {sugerencia}
+              <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
+                {["¿Cómo estuvieron las ventas hoy?","¿Cuánto stock de pollo tengo?","Registra una venta"].map(s => (
+                  <button key={s} onClick={() => setInput(s)}
+                    style={{ height:30, padding:"0 14px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:999, color:"#8a8f98", font:"510 12px/1 Inter,sans-serif", cursor:"pointer", transition:"all 150ms cubic-bezier(0.16,1,0.3,1)" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor="rgba(113,112,255,0.40)"; e.currentTarget.style.color="#a4adff"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(255,255,255,0.08)"; e.currentTarget.style.color="#8a8f98"; }}>
+                    {s}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {mensajes.map((m) => (
-            <div
-              key={m.id}
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                  m.role === "user"
-                    ? "bg-accent text-white rounded-br-sm"
-                    : "bg-surface border border-border text-text-primary rounded-bl-sm"
-                }`}
-              >
+          {mensajes.map(m => (
+            <div key={m.id} style={{ display:"flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{
+                maxWidth: "78%",
+                padding: "10px 14px",
+                borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                background: m.role === "user" ? "linear-gradient(135deg,#6b78de,#5e6ad2)" : "rgba(255,255,255,0.04)",
+                border: m.role === "user" ? "1px solid rgba(113,112,255,0.40)" : "1px solid rgba(255,255,255,0.07)",
+                font: "400 14px/1.6 Inter,sans-serif",
+                color: m.role === "user" ? "#fff" : "#d0d6e0",
+                boxShadow: m.role === "user" ? "0 2px 12px rgba(94,106,210,0.25)" : "none",
+              }}>
                 {m.content ? (
                   m.role === "assistant" ? (
-                    <div className="prose prose-sm prose-invert max-w-none leading-relaxed
-                      [&>p]:mb-2 [&>p:last-child]:mb-0
-                      [&>ul]:mb-2 [&>ul]:pl-4 [&>li]:mb-0.5
-                      [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:mb-1.5 [&>h3]:mt-2
-                      [&>table]:text-xs [&>table]:w-full [&>table]:border-collapse
-                      [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-border/50 [&>table>thead>tr>th]:px-2 [&>table>thead>tr>th]:py-1
-                      [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-border/50 [&>table>tbody>tr>td]:px-2 [&>table>tbody>tr>td]:py-1
-                      [&>strong]:font-semibold">
+                    <div className="prose prose-sm prose-invert max-w-none leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mb-2 [&>ul]:pl-4 [&>li]:mb-0.5 [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:mb-1.5 [&>h3]:mt-2 [&>table]:text-xs [&>table]:w-full [&>table]:border-collapse [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-white/10 [&>table>thead>tr>th]:px-2 [&>table>thead>tr>th]:py-1 [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-white/10 [&>table>tbody>tr>td]:px-2 [&>table>tbody>tr>td]:py-1">
                       <ReactMarkdown>{m.content}</ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                    <p style={{ margin:0, whiteSpace:"pre-wrap" }}>{m.content}</p>
                   )
                 ) : m.isStreaming ? (
-                  <span className="flex gap-1 items-center py-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:0ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:150ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:300ms]" />
-                  </span>
+                  <span style={{ opacity:0.5 }}>...</span>
                 ) : null}
+
                 {m.toolsUsed && m.toolsUsed.length > 0 && (
-                  <p className="mt-1.5 text-xs text-text-tertiary border-t border-border/50 pt-1.5">
-                    Consultó: {m.toolsUsed.map((t) => TOOL_LABELS[t]?.replace("...", "") ?? t).join(", ")}
+                  <p style={{ font:"400 11px/1 Inter,sans-serif", color:"rgba(255,255,255,0.4)", margin:"6px 0 0" }}>
+                    Herramientas: {m.toolsUsed.join(", ")}
                   </p>
                 )}
-                {/* Botones de confirmación inline — solo en el último mensaje del asistente */}
-                {m.role === "assistant" &&
-                  !m.isStreaming &&
-                  esperandoConfirmacion &&
-                  !isLoading &&
-                  mensajes[mensajes.length - 1]?.id === m.id && (
-                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/50">
-                      <button
-                        onClick={() => {
-                          setInput("Sí, confirma");
-                          setTimeout(() => void enviar(), 50);
-                        }}
-                        className="flex-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition"
-                      >
-                        ✓ Confirmar
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEsperandoConfirmacion(false);
-                          setInput("Cancela, no registres nada");
-                          setTimeout(() => void enviar(), 50);
-                        }}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:border-danger hover:text-danger transition"
-                      >
-                        ✕ Cancelar
-                      </button>
-                    </div>
-                  )}
+
+                {m.role === "assistant" && !m.isStreaming && esperandoConfirmacion && !isLoading && mensajes[mensajes.length - 1]?.id === m.id && (
+                  <div style={{ display:"flex", gap:8, marginTop:12, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.08)" }}>
+                    <button onClick={() => { setInput("Sí, confirma"); setTimeout(() => void enviar(), 50); }}
+                      style={{ flex:1, height:34, background:"linear-gradient(180deg,#6b78de,#5e6ad2)", border:"1px solid rgba(113,112,255,0.5)", borderRadius:8, color:"#fff", font:"590 12px/1 Inter,sans-serif", cursor:"pointer" }}>
+                      ✓ Confirmar
+                    </button>
+                    <button onClick={() => { setEsperandoConfirmacion(false); setInput("Cancela, no registres nada"); setTimeout(() => void enviar(), 50); }}
+                      style={{ height:34, padding:"0 12px", background:"rgba(224,82,82,0.10)", border:"1px solid rgba(224,82,82,0.25)", borderRadius:8, color:"#ff8585", font:"510 12px/1 Inter,sans-serif", cursor:"pointer" }}>
+                      ✕ Cancelar
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
-          {/* Indicador de tool activa */}
           {toolActiva && (
-            <div className="flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface border border-border px-4 py-2.5 text-xs text-text-tertiary">
-                <Loader2 className="h-3 w-3 animate-spin" />
+            <div style={{ display:"flex", justifyContent:"flex-start" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:"16px 16px 16px 4px", font:"400 13px/1 Inter,sans-serif", color:"#8a8f98" }}>
+                <Loader2 style={{ width:12, height:12 }} className="animate-spin" />
                 {toolActiva}
               </div>
             </div>
@@ -547,47 +540,32 @@ export function ChatUI({
         </div>
 
         {/* Input */}
-        <div className="border-t border-border bg-surface px-4 py-3">
-          <div className="flex items-end gap-2">
+        <div style={{ padding:"12px 16px 16px", borderTop:"1px solid rgba(255,255,255,0.05)", background:"#0f1011", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder="Escribe un mensaje... (Enter para enviar, Shift+Enter para nueva línea)"
               rows={1}
               disabled={isLoading}
-              className="flex-1 resize-none rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent disabled:opacity-50 transition"
+              style={{ flex:1, resize:"none", minHeight:42, maxHeight:160, padding:"10px 14px", background:"rgba(0,0,0,0.35)", border:"1px solid rgba(255,255,255,0.10)", borderRadius:12, color:"#f7f8f8", font:"400 14px/1.5 Inter,sans-serif", outline:"none", opacity: isLoading ? 0.5 : 1, transition:"border-color 150ms" }}
+              onFocus={e => { e.currentTarget.style.borderColor="rgba(113,112,255,0.40)"; }}
+              onBlur={e => { e.currentTarget.style.borderColor="rgba(255,255,255,0.10)"; }}
             />
-            <button
-              onClick={toggleMic}
-              disabled={isLoading}
-              title={isListening ? "Detener grabación" : "Hablar"}
-              className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition ${
-                isListening
-                  ? "border-danger bg-danger/10 text-danger animate-pulse"
-                  : "border-border bg-surface text-text-tertiary hover:text-text-primary hover:border-accent"
-              } disabled:opacity-40`}
-            >
-              {isListening ? (
-                <MicOff className="h-4 w-4" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
+            <button onClick={toggleMic} disabled={isLoading} title={isListening ? "Detener" : "Hablar"}
+              style={{ width:42, height:42, display:"flex", alignItems:"center", justifyContent:"center", background: isListening ? "rgba(224,82,82,0.15)" : "rgba(255,255,255,0.04)", border:"1px solid", borderColor: isListening ? "rgba(224,82,82,0.35)" : "rgba(255,255,255,0.08)", borderRadius:10, color: isListening ? "#ff8585" : "#8a8f98", cursor:"pointer", flexShrink:0 }}>
+              <Mic style={{ width:16, height:16 }} />
             </button>
-            <button
-              onClick={() => void enviar()}
-              disabled={isLoading || !input.trim()}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white hover:bg-accent-hover disabled:opacity-40 transition"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
+            <button onClick={() => void enviar()} disabled={isLoading || !input.trim()}
+              style={{ height:42, padding:"0 16px", display:"flex", alignItems:"center", gap:6, background: isLoading || !input.trim() ? "rgba(255,255,255,0.04)" : "linear-gradient(180deg,#6b78de,#5e6ad2)", border:"1px solid", borderColor: isLoading || !input.trim() ? "rgba(255,255,255,0.06)" : "rgba(113,112,255,0.5)", borderRadius:10, color: isLoading || !input.trim() ? "#62666d" : "#fff", font:"590 13px/1 Inter,sans-serif", cursor: isLoading || !input.trim() ? "not-allowed" : "pointer", flexShrink:0, boxShadow: isLoading || !input.trim() ? "none" : "0 2px 12px rgba(94,106,210,0.35)", transition:"all 150ms cubic-bezier(0.16,1,0.3,1)", whiteSpace:"nowrap" }}>
+              {isLoading
+                ? <><Loader2 style={{ width:14, height:14 }} className="animate-spin" /> Enviando</>
+                : <><Send style={{ width:14, height:14 }} /> Enviar</>}
             </button>
           </div>
-          <p className="mt-1.5 text-xs text-text-tertiary text-center">
+          <p style={{ font:"400 11px/1 Inter,sans-serif", color:"#4a4d54", margin:"8px 0 0", textAlign:"center" }}>
             CuentaMe IA puede cometer errores. Verifica información importante.
           </p>
         </div>
