@@ -37,7 +37,7 @@ export default async function ComprasPage() {
   ]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "0 0 40px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "24px 24px 40px" }}>
       <div>
         <h1 style={{ font: "590 22px/1.15 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-0.5px", margin: 0 }}>Compras</h1>
         <p style={{ font: "400 13px/1.45 Inter,sans-serif", color: "#62666d", margin: "5px 0 0" }}>Registra compras a proveedores y consulta el historial reciente.</p>
@@ -56,9 +56,6 @@ export default async function ComprasPage() {
           boxShadow: "0 24px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
-        <h1 style={{ font: "590 32px/1.15 Inter,sans-serif", color: "#f7f8f8", letterSpacing: "-1px", margin: 0 }}>
-          Nueva compra
-        </h1>
         <ComprasForm proveedores={proveedores} insumos={insumos} />
       </section>
 
