@@ -22,8 +22,7 @@ setup("autenticar usuario de prueba", async ({ page }) => {
   await page.getByRole("button", { name: /ingresar/i }).click();
 
   // Esperar redirección al chat (página principal)
-  await page.waitForURL("**/dashboard", { timeout: 30000 });
-  await expect(page).toHaveURL(/.*dashboard/);
+  await page.waitForURL(/\/(chat|dashboard)/, { timeout: 30000 });
 
   // Guardar estado de sesión para reutilizar en todas las pruebas
   await page.context().storageState({ path: authFile });

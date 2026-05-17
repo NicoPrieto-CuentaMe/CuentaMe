@@ -95,6 +95,12 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
   const [addCategoria, setAddCategoria] = useState<string | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
+  const colTestId: Partial<Record<string, string>> = {
+    fecha: "col-fecha",
+    total: "col-total",
+    metodoPago: "col-metodo",
+  };
+
   const cols = [
     { id: "fecha", label: "Fecha", flex: "0 0 96px", align: "left" as const },
     { id: "hora", label: "Hora", flex: "0 0 68px", align: "left" as const },
@@ -333,6 +339,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
             ) : (
               <button
                 type="button"
+                data-testid={colTestId[c.id]}
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpenMenu(openMenu === c.id ? null : c.id);
@@ -486,6 +493,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
             return (
               <div
                 key={v.id}
+                data-testid={`fila-venta-${v.id}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -746,6 +754,7 @@ export function VentasHistorial({ rows }: { rows: Row[] }) {
               </div>
               <button
                 type="button"
+                data-testid="cerrar-edicion"
                 onClick={cancelEdit}
                 style={{
                   display: "inline-flex",

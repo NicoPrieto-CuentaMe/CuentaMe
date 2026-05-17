@@ -588,6 +588,7 @@ export function VentasForm({
 
               <button
                 type="button"
+                data-testid="historial-toggle"
                 onClick={() => setHistorialOpen((o) => !o)}
                 style={{
                   display: "inline-flex",
@@ -758,6 +759,7 @@ export function VentasForm({
                 <button
                   key={p.id}
                   type="button"
+                  data-testid="plato-card"
                   style={{
                     ...platoCardBase,
                     ...(isPulse
@@ -890,7 +892,7 @@ export function VentasForm({
                 PEDIDO ACTUAL
               </span>
               {tieneLineas ? (
-                <span style={{ font: "400 12px/1 Inter,sans-serif", color: "#62666d" }}>· {itemsLabel}</span>
+                <span data-testid="items-label" style={{ font: "400 12px/1 Inter,sans-serif", color: "#62666d" }}>· {itemsLabel}</span>
               ) : null}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -923,6 +925,7 @@ export function VentasForm({
               <div style={{ position: "relative" }}>
                 <button
                   type="button"
+                  data-testid="metodo-pago-btn"
                   onClick={() => {
                     setMetodoPagoOpen((o) => !o);
                     setCanalOpen(false);
@@ -1298,6 +1301,7 @@ export function VentasForm({
             >
               <span style={{ font: "510 13px/1 Inter,sans-serif", color: "#8a8f98" }}>Total</span>
               <span
+                data-testid="total-pedido"
                 style={{
                   font: "510 28px/1 Inter,sans-serif",
                   color: "#f7f8f8",
